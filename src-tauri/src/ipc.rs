@@ -634,6 +634,16 @@ pub async fn ipc_invoke(
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
         }
 
+        // ---- benchmarks ------------------------------------------------------------------
+        "bench:run" => {
+            let binary = state
+                .sidecar_binary
+                .clone()
+                .ok_or_else(|| "Built-in omp not found".to_owned())?;
+            Ok(state.bench.run(&binary, &payload).await)
+        }
+        "bench:abort" => Ok(json!(state.bench.abort())),
+
         // ---- stats dashboard -------------------------------------------------------------
         "stats:url" => match state.stats.port() {
             Some(port) => Ok(json!({ "url": format!("http://127.0.0.1:{port}/") })),

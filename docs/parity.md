@@ -179,6 +179,7 @@
 | Models 路由（模型维度 token/cost/速度） | should | reuse | done（数据面）：`/api/stats/models` 返回 `workbuddy/step-5-preview`、`group/never-stuck`，与 `stats.db` 的 `select distinct model` 完全一致 |
 | 统计服务托管：`omp stats --host 127.0.0.1 --port 0 --no-open`、ANSI 剥壳取端口、指数退避重启 | should | rust | done：`crates/omp-stats`——**setup 时后台启动**（蓝图要求 app start 就起，不是首次 fetch），15s 等端口，ANSI 剥壳解析，`RestartBudget` 成功即清零（连签失败才耗尽），`ensure_running` 每次校验子进程存活。实测：启动日志 `stats dashboard ready port=62574`；`Stop-Process` 杀掉 stats 子进程后再次 `stats:fetch` **329ms 内换端口 62670 自愈**，新子进程 pid 16448；非法路径本地拒绝；8 个单测 |
 | 其余 8 条路由：costs / errors / requests / providers / tools / frustration / gain / projects | could | reuse | wip：转发层已通（`/api/stats/requests` 返回分页对象 `{rows,total,nextCursor}`），逐路由渲染未验 |
+| Benchmark：`omp bench --json` 子进程、1–8 模型、profile/runs/par ≤ 20/8、15 分钟超时、abort 即取消 | could | rust | done：`src-tauri/src/bench.rs`（argv 校验逐条对齐 `benchmark-runner.ts`，stdout/stderr 各 8 MiB 上限，100ms 轮询 + 超时自杀，abort 清空子进程句柄让在跑的那次返回 `Benchmark aborted`）；4 个单测。CDP 实测：空模型 → `Select between 1 and 8 models`、`--evil` → `Invalid model selector`、无运行中时 `bench:abort` → `false`。未跑真实 benchmark（会消耗模型额度） |
 
 ### system
 

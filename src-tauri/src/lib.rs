@@ -1,5 +1,6 @@
 //! Application shell: state, sidecar wiring, and the single `ipc_invoke` bridge command.
 
+pub mod bench;
 pub mod builtin_providers;
 pub mod editor;
 pub mod ipc;
@@ -66,6 +67,8 @@ pub struct AppState {
     /// The bundled `omp stats` dashboard, started on the first read.
     pub stats: omp_stats::StatsServer,
     pub stats_client: Mutex<Option<Arc<omp_stats::StatsClient>>>,
+    /// One `omp bench --json` run at a time; `bench:abort` kills it.
+    pub bench: crate::bench::BenchRunner,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -544,6 +547,7 @@ pub fn run() {
                     stats_binary.clone(),
                 ),
                 stats_client: Mutex::new(None),
+                bench: crate::bench::BenchRunner::new(),
                 next_tab: AtomicU64::new(2),
                 cwd: cwd.clone(),
             };
