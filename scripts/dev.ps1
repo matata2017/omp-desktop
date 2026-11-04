@@ -26,6 +26,9 @@ $env:INCLUDE = @(
   (Join-Path $sdkRoot "Include\$($sdk.Name)\winrt")
 ) -join ";"
 if (-not $env:OMP_SIDECAR) { $env:OMP_SIDECAR = "D:\ompgui\resources\omp.exe" }
+if (-not $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) {
+  $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
+}
 $running = Get-Process romp-desktop -ErrorAction SilentlyContinue
 if ($running) {
   throw "romp-desktop is already running (pid $($running.Id -join ',')). Stop it before tauri dev."

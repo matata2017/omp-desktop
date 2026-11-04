@@ -18,8 +18,8 @@
 |---|---|---|
 | 0 | 工具链与镜像 | **完成**：Rust 1.99.1 + MSVC 14.44.35207 + Win11 SDK 26100 + bun 依赖；`scripts/dev.ps1` 可起窗 |
 | 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
-| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 59 项 Rust 测试 + 6 条协议探针全通过） |
-| 2 | Tauri 外壳 + `window.omp` shim | **窗口就绪**（Romp 起窗、状态 ready、Inspector/字典可渲染）；sidebar `sessions:list` 与完整对话烟测待补 |
+| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 60 项 Rust 测试 + 6 条协议探针全通过） |
+| 2 | Tauri 外壳 + `window.omp` shim | **完成**：Romp 起窗、状态 ready、会话列表、Inspector、一次完整 prompt→流式→工具卡→agent_end；多 tab spawn/close 已通 |
 | 3–9 | 会话/多标签、对话面、模型设置、统计、定时任务、终端与浏览器、打包 | 未开始 |
 | R | replica 侦察 | **完成** |
 
@@ -34,7 +34,8 @@ cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
   terminal_list / get_jobs / get_context_report → 全 success=true
-bunx tauri dev                                   → Romp 窗口 ready；侧栏会话列表已由 `sessions:list` 提供
+bunx tauri dev                                   → Romp ready；prompt "list files in crates" → 流式回复 + 4 步工具卡 + agent_end
+node scripts/cdp-eval.mjs                        → CDP eval/输入辅助（9222）
 ```
 
 本机验证的关键启动修复：
@@ -134,12 +135,9 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| Phase 2 对话烟测 | 窗口已 ready，但还没发出第一条 prompt（模型未选择） | 中 |
-| `sessions:list` | sidebar 显示 `unknown channel: sessions:list` | **高**：会话列表为空 |
-| `tab:spawn` / `tab:close` | 未实现；新建/关闭 tab 会报 unknown channel | **高**：多标签不可用 |
-| `rpc:command-for-tab` | 仍落到单一全局 client，未按 tabId 路由 | 中（多 tab 时） |
-| 事件批的 tab 归属 | `batch_tab` 是全局单值，多 tab 时要改成 per-tab batcher | 中 |
-| 未实现通道 | 除 rpc/tab/prefs/fs/system/updater 外一律 `Err("unknown channel")`，渲染层按 try/catch 降级 | 低（可见但会缺功能） |
+| 多 tab 剩余 | `tab:spawn/close`、per-tab client/batcher、prompt 烟测已通；session 归属、并发上限、布局持久化、多窗口未做 | 中 |
+| 会话操作 | 重命名/删除/归档/内容搜索/树/branch/fork 未接 | 中 |
+| 未实现通道 | 除 rpc/tab/sessions/prefs/fs/system/updater 外一律 `Err("unknown channel")`，渲染层按 try/catch 降级 | 低（可见但会缺功能） |
 | 浏览器/终端 | Phase 6 前不可用 | 低 |
 | `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除：它 import main 进程的 `toAbsolutePath` | 低 |
 | 打包 | `bundle.resources` 映射到 `omp.exe`；`Romp.exe` 不再撞名；NSIS 未构建 | 低 |

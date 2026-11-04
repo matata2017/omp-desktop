@@ -3,11 +3,13 @@
 //! contract and `src/bridge/omp-api.ts` needs no per-method mapping.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
-use crate::{AppState, ensure_tab_started};
+use crate::{AppState, ensure_tab_started, start_tab};
+use omp_agent::argv::{LaunchOptions, TabKind};
 use omp_core::{TabId, WindowId};
 
 const FS_READ_CAP: u64 = 8 * 1024 * 1024;
@@ -45,7 +47,6 @@ pub async fn ipc_invoke(
                 .map_err(|e| e.to_string())
         }
         "rpc:command-for-tab" => {
-            // Phase 2 has one sidecar per window; Phase 3 routes by `tabId`.
             let command = payload
                 .get("command")
                 .cloned()
@@ -54,7 +55,12 @@ pub async fn ipc_invoke(
                 .get("timeoutMs")
                 .and_then(Value::as_u64)
                 .map(std::time::Duration::from_millis);
-            let client = state.rpc()?;
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .map(TabId::new)
+                .unwrap_or_else(|| state.active_tab());
+            let client = state.rpc_for(&tab)?;
             let mut cmd = command;
             client
                 .command(&mut cmd, timeout)
@@ -67,24 +73,83 @@ pub async fn ipc_invoke(
             let active = state.active_tab();
             ensure_tab_started(&app, &state, &active)?;
             let ready = state.ready_tabs.lock();
+            let cwds = state.tab_cwds.lock();
+            let kinds = state.tab_kinds.lock();
             let tabs: Vec<Value> = state
                 .pool
                 .tabs()
                 .into_iter()
                 .map(|tab| {
                     let status = if ready.contains(&tab) { "ready" } else { "starting" };
+                    let cwd = cwds
+                        .get(&tab)
+                        .map(|p| p.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| state.cwd.to_string_lossy().into_owned());
+                    let kind = match kinds.get(&tab).copied().unwrap_or(TabKind::Agent) {
+                        TabKind::Chat => "chat",
+                        TabKind::Agent => "agent",
+                    };
                     json!({
                         "tabId": tab,
-                        "cwd": state.cwd.to_string_lossy(),
+                        "cwd": cwd,
                         "status": status,
                         "active": tab == active,
                         "visible": tab == active,
-                        "kind": "agent",
+                        "kind": kind,
                     })
                 })
                 .collect();
             Ok(json!(tabs))
         }
+        "tab:spawn" => {
+            let cwd = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| state.cwd.clone());
+            let kind = match payload.get("kind").and_then(Value::as_str) {
+                Some("chat") => TabKind::Chat,
+                _ => TabKind::Agent,
+            };
+            let session_path = payload
+                .get("sessionPath")
+                .and_then(Value::as_str)
+                .map(PathBuf::from);
+            if let Some(path) = &session_path {
+                if let Some(owner) = state.pool.session_owner(path) {
+                    return Ok(json!({ "tabId": null, "ownerTabId": owner, "refusal": "owned" }));
+                }
+            }
+            let number = state.next_tab.fetch_add(1, Ordering::SeqCst);
+            let tab = TabId::new(format!("tab-{number}"));
+            state.tab_cwds.lock().insert(tab.clone(), cwd.clone());
+            state.tab_kinds.lock().insert(tab.clone(), kind);
+            let launch = LaunchOptions {
+                cwd: cwd.clone(),
+                kind,
+                resume_session: session_path.clone(),
+                fresh_launch: session_path.is_none(),
+                ..LaunchOptions::default()
+            };
+            start_tab(&app, tab.clone(), launch)?;
+            if let Some(path) = session_path {
+                let _ = state.pool.claim_session(&tab, &path);
+            }
+            Ok(json!({ "tabId": tab, "cwd": cwd.to_string_lossy() }))
+        }
+        "tab:close" => {
+            let Some(tab) = payload.get("tabId").and_then(Value::as_str).map(TabId::new) else {
+                return Ok(json!(false));
+            };
+            let existed = state.pool.close(&tab);
+            state.clients.lock().remove(&tab);
+            state.batchers.lock().remove(&tab);
+            state.tab_cwds.lock().remove(&tab);
+            state.tab_kinds.lock().remove(&tab);
+            state.ready_tabs.lock().remove(&tab);
+            Ok(json!(existed))
+        }
+        "tab:set-order" => Ok(json!(true)),
         "tab:set-active" => {
             let Some(tab) = payload.get("tabId").and_then(Value::as_str).map(TabId::new) else {
                 return Ok(json!(false));
@@ -134,16 +199,22 @@ pub async fn ipc_invoke(
         "sidecar:status-get" => {
             let active = state.active_tab();
             let ready = state.ready_tabs.lock().contains(&active);
+            let cwd = state
+                .tab_cwds
+                .lock()
+                .get(&active)
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| state.cwd.to_string_lossy().into_owned());
             Ok(json!({
                 "status": if ready { "ready" } else { "starting" },
-                "cwd": state.cwd.to_string_lossy(),
+                "cwd": cwd,
             }))
         }
         "sidecar:restart" => {
-            let active = state.active_tab();
-            state.ready_tabs.lock().remove(&active);
-            let client = state.rpc()?;
-            client.reject_all("sidecar restarting");
+            for client in state.clients.lock().values() {
+                client.reject_all("sidecar restarting");
+            }
+            state.ready_tabs.lock().clear();
             Ok(json!({ "ok": true }))
         }
 
