@@ -387,6 +387,17 @@ pub async fn ipc_invoke(
             Ok(Value::Null)
         }
         "app:quit" => {
+            // Same teardown as a window close: kill the agents and the dashboard first, then
+            // leave; a bare exit(0) orphans every child process.
+            state.bench.abort();
+            for tab in state.pool.tabs() {
+                state.pool.close(&tab);
+            }
+            state.clients.lock().clear();
+            let stats = &state.stats;
+            tauri::async_runtime::block_on(async {
+                stats.stop().await;
+            });
             app.exit(0);
             Ok(Value::Null)
         }

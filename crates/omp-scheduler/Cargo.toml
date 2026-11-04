@@ -1,0 +1,13 @@
+[package]
+name = "omp-scheduler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+omp-core = { path = "../omp-core" }
+serde_json = { workspace = true }
+parking_lot = { workspace = true }
+rusqlite = { workspace = true }
+chrono = { workspace = true }

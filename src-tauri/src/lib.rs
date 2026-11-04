@@ -674,6 +674,23 @@ pub fn run() {
             // tab:set-view), so the ready event cannot race the renderer's subscription.
             Ok(())
         })
+        // Graceful teardown: the agent sidecars, the dashboard and the bench child are real
+        // processes. Without this a window close (or `app:quit`) leaves 244 MB agents behind.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                let app = window.app_handle();
+                let state = app.state::<AppState>();
+                state.bench.abort();
+                for tab in state.pool.tabs() {
+                    state.pool.close(&tab);
+                }
+                state.clients.lock().clear();
+                let stats = &state.stats;
+                tauri::async_runtime::block_on(async {
+                    stats.stop().await;
+                });
+            }
+        })
         .invoke_handler(tauri::generate_handler![ipc::ipc_invoke])
         .run(tauri::generate_context!())
         .expect("error while running Romp");

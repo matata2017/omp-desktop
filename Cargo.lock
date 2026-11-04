@@ -2686,6 +2686,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "omp-scheduler"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "omp-core",
+ "parking_lot 0.13.0",
+ "rusqlite",
+ "serde_json",
+]
+
+[[package]]
 name = "omp-session"
 version = "0.1.0"
 dependencies = [
