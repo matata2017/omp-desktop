@@ -150,7 +150,7 @@
 |---|---|---|---|
 | 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | wip（`crates/omp-session` 改为 32 KiB 头 + 32 KiB 尾窗口解析、标题/头行/首条用户消息/尾计数与状态、按 (size,mtime) 缓存 4096 条；侧栏列表明细实测 ~90ms） |
 | 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | wip（workspace 分组、family 折叠已通：`SessionInfo.parentSessionPath` 已从 header `parentSession` 解析；pinned/archived 未接） |
-| 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | wip（同 workspace 空闲 tab 现在原地 `switch_session`，不再新开进程；owner 去重、流式/草稿/审批守卫已测；跨 workspace 仍新开 tab；首屏 hydrate 速度待优化） |
+| 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | wip（同 workspace 空闲 tab 原地 `switch_session`，不再新开进程；只有 `success && cancelled:false` 才更新归属，`cancelled:true` 是 hook veto/跨 workspace；流式/草稿/审批/队列守卫已测；首屏 `get_transcript_page` 在会话加载后约 10ms，主要成本是 switch 的 session 加载） |
 | 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | wip（delete/rename 已 CDP 实测：删除清文件+子目录、越界路径被拒；重命名改写标题槽 `source:user`；archive/batch/运行中跳过未做） |
 | 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | wip（多 token 命中已通；改为按 (size,mtime) 缓存搜索文本、单文件 8 MiB 上限、总 64 MiB 预算） |
 | 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | todo |

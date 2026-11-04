@@ -546,12 +546,13 @@ fn sync_switch_binding(state: &AppState, tab: &TabId, command: &Value, response:
     if response.get("success").and_then(Value::as_bool) != Some(true) {
         return;
     }
-    if response
+    // `cancelled` must be explicitly false: an absent field means the sidecar did
+    // not confirm the switch, and claiming the path would poison ownership.
+    let cancelled = response
         .get("data")
         .and_then(|data| data.get("cancelled"))
-        .and_then(Value::as_bool)
-        == Some(true)
-    {
+        .and_then(Value::as_bool);
+    if cancelled != Some(false) {
         return;
     }
     let Some(path) = command
