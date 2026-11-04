@@ -95,12 +95,37 @@ pub fn parse_port(line: &str) -> Option<u16> {
     digits.parse().ok()
 }
 
+/// Consecutive-failure budget. A successful start resets it, so a long session cannot run out
+/// of restarts just because it respawned once on each of three separate days.
+#[derive(Debug, Default)]
+pub struct RestartBudget {
+    attempts: std::sync::atomic::AtomicU32,
+}
+
+impl RestartBudget {
+    /// Reserve one attempt; `false` once the budget is spent.
+    pub fn try_acquire(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        let used = self.attempts.fetch_add(1, Ordering::Relaxed);
+        used < MAX_RESTART_ATTEMPTS
+    }
+
+    /// A healthy start clears the failure streak.
+    pub fn on_success(&self) {
+        self.attempts.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn consecutive_failures(&self) -> u32 {
+        self.attempts.load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
 /// One server process plus the port it announced.
 pub struct StatsServer {
     binary: PathBuf,
     child: Mutex<Option<Child>>,
     port: Arc<Mutex<Option<u16>>>,
-    attempts: Mutex<u32>,
+    budget: RestartBudget,
 }
 
 impl StatsServer {
@@ -109,7 +134,7 @@ impl StatsServer {
             binary: binary.into(),
             child: Mutex::new(None),
             port: Arc::new(Mutex::new(None)),
-            attempts: Mutex::new(0),
+            budget: RestartBudget::default(),
         }
     }
 
@@ -117,17 +142,33 @@ impl StatsServer {
         *self.port.lock()
     }
 
-    /// Spawn the server unless one is already running. Returns the port once announced.
+    /// Whether the child we spawned is still alive.
+    fn child_alive(&self) -> bool {
+        let mut slot = self.child.lock();
+        match slot.as_mut() {
+            Some(child) => matches!(child.try_wait(), Ok(None)),
+            None => false,
+        }
+    }
+
+    /// Forget the port and the child so the next call spawns again.
+    fn forget_dead_child(&self) {
+        *self.port.lock() = None;
+        *self.child.lock() = None;
+    }
+
+    /// Spawn the server unless one is already running and healthy. Returns the port once
+    /// announced. A crashed child is noticed here, so a dead dashboard heals on the next read
+    /// instead of answering with a stale port until the app restarts.
     pub async fn ensure_running(&self) -> Result<u16> {
         if let Some(port) = self.port() {
-            return Ok(port);
-        }
-        {
-            let mut attempts = self.attempts.lock();
-            if *attempts >= MAX_RESTART_ATTEMPTS {
-                return Err(Error::msg("stats server restart budget exhausted"));
+            if self.child_alive() {
+                return Ok(port);
             }
-            *attempts += 1;
+            self.forget_dead_child();
+        }
+        if !self.budget.try_acquire() {
+            return Err(Error::msg("stats server restart budget exhausted"));
         }
 
         let mut child = Command::new(&self.binary)
@@ -169,7 +210,10 @@ impl StatsServer {
 
         *self.child.lock() = Some(child);
         match tokio::time::timeout(Duration::from_secs(15), rx).await {
-            Ok(Ok(port)) => Ok(port),
+            Ok(Ok(port)) => {
+                self.budget.on_success();
+                Ok(port)
+            }
             Ok(Err(_)) => Err(Error::msg("stats server exited before announcing a port")),
             Err(_) => Err(Error::msg("stats server did not announce a port in 15s")),
         }
@@ -288,6 +332,19 @@ mod tests {
     fn ansi_stripping_leaves_plain_text() {
         assert_eq!(strip_ansi("\u{1b}[1;32mok\u{1b}[0m done"), "ok done");
         assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    #[test]
+    fn budget_spends_consecutive_failures_and_resets_on_success() {
+        let budget = RestartBudget::default();
+        assert!(budget.try_acquire());
+        assert!(budget.try_acquire());
+        assert!(budget.try_acquire());
+        assert!(!budget.try_acquire());
+        assert_eq!(budget.consecutive_failures(), 4);
+        budget.on_success();
+        assert_eq!(budget.consecutive_failures(), 0);
+        assert!(budget.try_acquire(), "a healthy start restores the budget");
     }
 
     #[tokio::test]

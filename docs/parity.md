@@ -175,9 +175,9 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | 统计仪表盘外壳：10 个路由、1h/24h/7d/30d/90d/all、手动 sync、打开时静默同步 | should | reuse | done（后端）：`stats:url` 在服务起来后返回 `http://127.0.0.1:61209/`，`stats:fetch` 转发到白名单路由；路由/切换时间窗的 UI 未逐项点 |
-| Overview 路由 | should | reuse | wip：`/api/stats/overview` 返回 `{byAgentType, overall, timeSeries}`，实测 `totalRequests=57`、窗口 `2026-11-03T13:56Z–14:19Z`；与 `~/.omp/stats.db` 的 1302 行**不是同一个口径**（仪表盘自带时间窗），未做逐窗口对账 |
+| Overview 路由 | should | reuse | done（数据面，逐窗口对账通过）：`/api/stats/overview` 的 `overall` 与 `stats.db` 在**同一窗口**（`firstTimestamp..lastTimestamp`）完全一致——`totalRequests=32` vs `messages` 32 行，`totalInputTokens=2782801`、`totalOutputTokens=40291` 三项逐字节相同。注意 `message_rollup.bucket` 是**小时桶**，无法用于亚小时窗口对账，必须用 `messages`。渲染层的时间窗切换未逐项点 |
 | Models 路由（模型维度 token/cost/速度） | should | reuse | done（数据面）：`/api/stats/models` 返回 `workbuddy/step-5-preview`、`group/never-stuck`，与 `stats.db` 的 `select distinct model` 完全一致 |
-| 统计服务托管：`omp stats --host 127.0.0.1 --port 0 --no-open`、ANSI 剥壳取端口、指数退避重启 | should | rust | done：`crates/omp-stats`（懒启动 + 15s 等端口 + 3 次预算 + ANSI 剥壳 + 17 路径白名单 + `/api/request/:id` 动态路由）。实测进程 `"D:\\rust-omp\\resources\\omp.exe" stats --host 127.0.0.1 --port 0 --no-open`，`/api/status` 200 且带 `x-omp-stats-dashboard: 3`；非法路径 `invalid stats path: /etc/passwd` 被本地拒绝；5 个单测 |
+| 统计服务托管：`omp stats --host 127.0.0.1 --port 0 --no-open`、ANSI 剥壳取端口、指数退避重启 | should | rust | done：`crates/omp-stats`——**setup 时后台启动**（蓝图要求 app start 就起，不是首次 fetch），15s 等端口，ANSI 剥壳解析，`RestartBudget` 成功即清零（连签失败才耗尽），`ensure_running` 每次校验子进程存活。实测：启动日志 `stats dashboard ready port=62574`；`Stop-Process` 杀掉 stats 子进程后再次 `stats:fetch` **329ms 内换端口 62670 自愈**，新子进程 pid 16448；非法路径本地拒绝；8 个单测 |
 | 其余 8 条路由：costs / errors / requests / providers / tools / frustration / gain / projects | could | reuse | wip：转发层已通（`/api/stats/requests` 返回分页对象 `{rows,total,nextCursor}`），逐路由渲染未验 |
 
 ### system

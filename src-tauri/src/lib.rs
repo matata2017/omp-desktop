@@ -548,6 +548,18 @@ pub fn run() {
                 cwd: cwd.clone(),
             };
             app.manage(state);
+            // The dashboard is spawned on app start and killed on quit (blueprint:
+            // stats-server.ts), so opening the stats panel never races a cold start.
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let state = handle.state::<AppState>();
+                    match state.stats.ensure_running().await {
+                        Ok(port) => tracing::info!(port, "stats dashboard ready"),
+                        Err(err) => tracing::warn!("stats dashboard unavailable: {err}"),
+                    }
+                });
+            }
             app.state::<AppState>().pool.register_deferred(first_tab);
             // Warm spare stays disabled: the sidecar cannot switch across workspaces,
             // and same-workspace switches happen in place on the existing sidecar.
