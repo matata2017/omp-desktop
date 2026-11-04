@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use crate::{AppState, ensure_tab_started, start_tab};
 use omp_agent::argv::{LaunchOptions, TabKind};
@@ -783,7 +783,7 @@ pub async fn ipc_invoke(
                 .args(&args)
                 .current_dir(&run_cwd)
                 .stdin(std::process::Stdio::piped())
-                .stdout(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .env("PI_NOTIFICATIONS", "off");
             #[cfg(windows)]
@@ -808,11 +808,48 @@ pub async fn ipc_invoke(
                     "sessionPath": session_dir.to_string_lossy(),
                 }))
                 .map_err(|e| e.to_string())?;
+            let cancel_flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+            let stdout = child.stdout.take();
             state.scheduler_runs.track(crate::scheduler::LiveRun {
                 run_id: run_id.clone(),
                 task_id: task_id.to_owned(),
                 child,
                 started_at,
+                cancel_requested: cancel_flag.clone(),
+            });
+
+            // Supervise the run to a terminal state. Without this the record would sit at
+            // `running` forever: no endedAt, no report, and nothing to cancel.
+            let supervisor = app.clone();
+            let store_for_run = store.clone();
+            let task_id_for_run = task_id.to_owned();
+            let run_id_for_run = run_id.clone();
+            let timeout_ms = task
+                .get("timeoutMs")
+                .and_then(Value::as_u64)
+                .unwrap_or(900_000);
+            tauri::async_runtime::spawn(async move {
+                let (status, report, done) =
+                    crate::scheduler::supervise_run(stdout, timeout_ms, cancel_flag).await;
+                let ended_at = chrono::Utc::now().timestamp_millis();
+                let state = supervisor.state::<AppState>();
+                state.scheduler_runs.forget(&run_id_for_run);
+                let report_json = report.as_ref().map(|text| json!({ "text": text }));
+                let _ = store_for_run.finish_run(
+                    &run_id_for_run,
+                    status,
+                    report_json.as_ref(),
+                    None,
+                    None,
+                    None,
+                    ended_at,
+                );
+                let _ = supervisor.emit(
+                    crate::events::SCHEDULER_PROGRESS,
+                    json!({ "runId": run_id_for_run, "progress": { "status": status, "endedAt": ended_at } }),
+                );
+                tracing::info!(run = %run_id_for_run, task = %task_id_for_run, status, "scheduled run finished");
+                let _ = done;
             });
             Ok(json!({
                 "id": run_id,

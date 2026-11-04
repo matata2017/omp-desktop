@@ -150,8 +150,8 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | 定时任务 CRUD：once/cron/interval 编辑器、深度与工具策略、草稿校验、修订历史 | should | rust | wip：`crates/omp-scheduler` 四表 schema + user_version 迁移、CRUD 与修订链、5 段 cron（vixie day OR、DST、拒绝 6 段）、23 单测；`scheduler:get-snapshot/create/update/set-enabled/archive/delete/task-runs/revisions/set-paused` 已接。经 bridge 实测建任务→列表 1 条(tools=read_only,rev=1)→update rev=2 且标题生效。validate 仍返回空 problems |
-| 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | should | rust | wip：运行 argv 由 `src-tauri/src/scheduler.rs` 代码控制——审批模式跟随工具策略（read_only→always-ask+六个只读工具、workspace→write、full→yolo），并从用户 flag 中剥掉 `--approval-mode/--yolo/--auto-approve/--plan-yolo/--tools/--no-tools/--model/--continue`（单测：yolo profile 塞不进去）；run-now 起独立 sidecar + 独立 session-dir + 发 prompt。**未跑真实运行**（耗额度）；超时/worktree/报告采集未接 |
-| 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | wip：`scheduler:task-runs`/`get-run` 从库读记录；UI 未逐项验 |
+| 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | should | rust | wip：argv 由代码控制（审批模式跟随工具策略，`--approval-mode/--yolo/--tools/--model/...` 从用户 flag 剥离，有单测）；`run-now` 起独立 sidecar + 独立 session-dir + 发 prompt；**监督循环已接**：读 stdout 到 `agent_end`/EOF/超时 → `finish_run(status, report, endedAt)`，report 取 `agent_end.messages` 里最后一条 assistant 文本（单测）。实测：runNow → cancelRun → 记录变成 `status=cancelled` + `endedAt`（不再永远 running）。**未跑过真实完成**（耗额度）；worktree 策略与 verify 未接 |
+| 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | wip：`scheduler:task-runs`/`get-run` 从库读记录，status/endedAt/report 落库已验证（cancel 路径）；UI 未逐项验 |
 | Review 队列：accept / reject + note | should | reuse | todo |
 
 ### sessions

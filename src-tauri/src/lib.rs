@@ -47,6 +47,8 @@ pub mod events {
     pub const BTW_FRAME: &str = "btw:frame";
     pub const MENU_ACTION: &str = "menu:action";
     pub const DEEP_LINK: &str = "deep-link";
+    pub const SCHEDULER_PROGRESS: &str = "scheduler:progress";
+    pub const SCHEDULER_SNAPSHOT: &str = "scheduler:snapshot";
 }
 
 pub struct AppState {

@@ -93,6 +93,9 @@ pub struct LiveRun {
     pub task_id: String,
     pub child: Child,
     pub started_at: i64,
+    /// Set by `cancel`, read by the supervisor so the run ends as `cancelled` rather than
+    /// `failed` when the user stopped it.
+    pub cancel_requested: Arc<AtomicBool>,
 }
 
 #[derive(Default)]
@@ -139,11 +142,17 @@ impl SchedulerService {
         self.live.lock().insert(run.run_id.clone(), run);
     }
 
+    /// Drop the registry entry without killing: the supervisor calls this once the child is gone.
+    pub fn forget(&self, run_id: &str) {
+        self.live.lock().remove(run_id);
+    }
+
     /// Kill one run. `true` when it was live.
     pub fn cancel(&self, run_id: &str) -> bool {
         let mut live = self.live.lock();
         match live.remove(run_id) {
             Some(mut run) => {
+                run.cancel_requested.store(true, Ordering::Relaxed);
                 let _ = run.child.start_kill();
                 true
             }
@@ -168,6 +177,35 @@ impl SchedulerService {
         }
         finished
     }
+}
+
+/// The report a finished run carries: the last non-empty assistant message body.
+///
+/// `agent_end` frames carry the whole message list, so no delta accumulation is needed.
+pub fn last_assistant_text(messages: &[Value]) -> Option<String> {
+    for message in messages.iter().rev() {
+        if message.get("role").and_then(Value::as_str) != Some("assistant") {
+            continue;
+        }
+        let text = match message.get("content") {
+            Some(Value::String(text)) => text.clone(),
+            Some(Value::Array(parts)) => parts
+                .iter()
+                .filter_map(|part| part.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join(""),
+            _ => String::new(),
+        };
+        if !text.trim().is_empty() {
+            return Some(text);
+        }
+    }
+    None
+}
+
+/// Terminal states a scheduled run can record.
+pub fn cancel_reason(cancelled: bool) -> Option<&'static str> {
+    cancelled.then_some("user")
 }
 
 /// Session directory for one run: isolated per task, under the app's data folder.
@@ -211,6 +249,71 @@ pub fn next_fire_or_null(paused: bool, computed: Option<i64>) -> Value {
 
 /// Thin wrapper so callers do not need to know the store type.
 pub type Store = Arc<omp_scheduler::TaskStore>;
+
+
+/// Read the run's stdout to EOF (which cancel and a crash both produce), stop at `agent_end`,
+/// and report how the run ended. Returns the status the store should record.
+pub async fn supervise_run(
+    stdout: Option<tokio::process::ChildStdout>,
+    timeout_ms: u64,
+    cancel_requested: Arc<AtomicBool>,
+) -> (&'static str, Option<String>, bool) {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+
+    let Some(stdout) = stdout else {
+        return ("failed", None, false);
+    };
+    let mut lines = BufReader::new(stdout).lines();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms.max(1));
+    let mut report: Option<String> = None;
+
+    loop {
+        let read = tokio::time::timeout_at(deadline, lines.next_line()).await;
+        match read {
+            Err(_) => {
+                // Timed out: the caller's child is killed by cancel; report the timeout.
+                return ("timeout", report, true);
+            }
+            Ok(Ok(None)) => {
+                // EOF: either the agent exited or the run was cancelled.
+                return (
+                    if cancel_requested.load(Ordering::Relaxed) {
+                        "cancelled"
+                    } else if report.is_some() {
+                        "ok"
+                    } else {
+                        "failed"
+                    },
+                    report,
+                    true,
+                );
+            }
+            Ok(Ok(Some(line))) => {
+                let Ok(frame) = serde_json::from_str::<Value>(line.trim()) else {
+                    continue;
+                };
+                match frame.get("type").and_then(Value::as_str) {
+                    Some("agent_end") => {
+                        if let Some(messages) = frame.get("messages").and_then(Value::as_array) {
+                            report = last_assistant_text(messages).or(report);
+                        }
+                        return ("ok", report, true);
+                    }
+                    Some("message_update") => {
+                        if let Some(message) = frame.get("message")
+                            && message.get("role").and_then(Value::as_str) == Some("assistant")
+                            && let Some(text) = last_assistant_text(std::slice::from_ref(message))
+                        {
+                            report = Some(text);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Ok(Err(_)) => return ("failed", report, true),
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -313,6 +416,31 @@ mod tests {
         assert_eq!(next_fire_or_null(true, Some(1234)), Value::Null);
         assert_eq!(next_fire_or_null(false, Some(1234)), json!(1234));
         assert_eq!(next_fire_or_null(false, None), Value::Null);
+    }
+
+    #[test]
+    fn report_comes_from_the_agent_end_message_list() {
+        let messages = json!([
+            { "role": "user", "content": "do it" },
+            { "role": "assistant", "content": [{ "text": "working" }] },
+            { "role": "assistant", "content": [{ "text": "final answer" }] }
+        ]);
+        assert_eq!(
+            last_assistant_text(messages.as_array().unwrap()).as_deref(),
+            Some("final answer")
+        );
+        // A string body works too, and empty tails are skipped.
+        let messages = json!([
+            { "role": "assistant", "content": "plain" },
+            { "role": "assistant", "content": "   " }
+        ]);
+        assert_eq!(
+            last_assistant_text(messages.as_array().unwrap()).as_deref(),
+            Some("plain")
+        );
+        assert_eq!(last_assistant_text(&[]), None);
+        assert_eq!(cancel_reason(true), Some("user"));
+        assert_eq!(cancel_reason(false), None);
     }
 
     #[test]
