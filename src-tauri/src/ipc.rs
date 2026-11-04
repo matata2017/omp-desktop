@@ -7,8 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
-use tauri::{AppHandle, State};
-
+use tauri::{AppHandle, Emitter, State};
 use crate::{AppState, ensure_tab_started, start_tab};
 use omp_agent::argv::{LaunchOptions, TabKind};
 use omp_core::{TabId, WindowId};
@@ -121,6 +120,12 @@ pub async fn ipc_invoke(
             Ok(json!(tabs))
         }
         "tab:spawn" => {
+            // Bound the number of live sidecars: each one costs a full agent process.
+            // Evict the least-recently-active idle tab first; only answer null when no
+            // tab can be released.
+            if state.clients.lock().len() >= max_sidecars() && !evict_idle_sidecar(&app, &state) {
+                return Ok(Value::Null);
+            }
             let cwd = payload
                 .get("cwd")
                 .and_then(Value::as_str)
@@ -143,6 +148,9 @@ pub async fn ipc_invoke(
             let tab = TabId::new(format!("tab-{number}"));
             state.tab_cwds.lock().insert(tab.clone(), cwd.clone());
             state.tab_kinds.lock().insert(tab.clone(), kind);
+            if let Some(path) = &session_path {
+                state.tab_sessions.lock().insert(tab.clone(), path.clone());
+            }
             let launch = LaunchOptions {
                 cwd: cwd.clone(),
                 kind,
@@ -170,6 +178,8 @@ pub async fn ipc_invoke(
             }
             state.tab_cwds.lock().remove(&tab);
             state.tab_kinds.lock().remove(&tab);
+            state.tab_sessions.lock().remove(&tab);
+            state.tab_activity.lock().remove(&tab);
             state.ready_tabs.lock().remove(&tab);
             Ok(json!(existed))
         }
@@ -180,6 +190,7 @@ pub async fn ipc_invoke(
             };
             *state.active_tab.lock() = tab.clone();
             ensure_tab_started(&app, &state, &tab)?;
+            replay_ready(&app, &state, &tab);
             Ok(json!(true))
         }
         "tab:set-view" => {
@@ -207,6 +218,7 @@ pub async fn ipc_invoke(
                 .map_err(|e| e.to_string())?;
             for tab in &visible {
                 ensure_tab_started(&app, &state, tab)?;
+                replay_ready(&app, &state, tab);
             }
             Ok(json!(true))
         }
@@ -509,9 +521,76 @@ pub async fn ipc_invoke(
 }
 
 /// Workspace root of a tab, falling back to the window's cwd.
+/// Re-emit the cached ready state when a tab becomes active: the original push may
+/// have arrived while the renderer was still focused on another tab.
+fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
+    if state.ready_tabs.lock().contains(tab) {
+        let _ = app.emit(
+            crate::events::SIDECAR_STATUS,
+            json!({ "tabId": tab, "payload": { "status": "ready" } }),
+        );
+    }
+}
+
 fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
     tab.and_then(|id| state.tab_cwds.lock().get(id).cloned())
         .unwrap_or_else(|| state.cwd.clone())
+}
+
+/// Upper bound on live sidecars; every one of them is a full agent process.
+pub(crate) fn max_sidecars() -> usize {
+    std::env::var("ROMP_MAX_SIDECARS")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(6)
+}
+
+/// Release the least-recently-active sidecar that is safe to stop: not the active tab,
+/// not streaming a turn, and bound to a session file it can resume later.
+pub(crate) fn evict_idle_sidecar(app: &AppHandle, state: &AppState) -> bool {
+    let active = state.active_tab();
+    let mut victim: Option<(u64, TabId)> = None;
+    {
+        let activity = state.tab_activity.lock();
+        let sessions = state.tab_sessions.lock();
+        let clients = state.clients.lock();
+        for tab in state.pool.tabs() {
+            if tab == active || !clients.contains_key(&tab) || !sessions.contains_key(&tab) {
+                continue;
+            }
+            // A tab with no frames yet is still booting and safe to release.
+            let (last_frame_ms, streaming) = activity
+                .get(&tab)
+                .map(|info| (info.last_frame_ms, info.streaming))
+                .unwrap_or((0, false));
+            if streaming {
+                continue;
+            }
+            let candidate = (last_frame_ms, tab.clone());
+            if victim
+                .as_ref()
+                .map(|(oldest, _)| candidate.0 < *oldest)
+                .unwrap_or(true)
+            {
+                victim = Some(candidate);
+            }
+        }
+    }
+    let Some((_, tab)) = victim else {
+        return false;
+    };
+    state.pool.release_process(&tab);
+    state.clients.lock().remove(&tab);
+    if let Some(batcher) = state.batchers.lock().remove(&tab) {
+        batcher.dispose();
+    }
+    state.ready_tabs.lock().remove(&tab);
+    let _ = app.emit(
+        crate::events::SIDECAR_STATUS,
+        json!({ "tabId": tab, "payload": { "status": "starting" } }),
+    );
+    tracing::info!(tab = %tab, "released idle sidecar");
+    true
 }
 
 /// Open a path with the OS file manager; `reveal` selects it inside its folder.

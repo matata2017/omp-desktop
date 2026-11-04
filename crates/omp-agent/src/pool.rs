@@ -151,6 +151,23 @@ impl<H: SidecarHandle> SidecarPool<H> {
         false
     }
 
+    /// Drop a tab's process but keep the tab registered, so it can start again later.
+    pub fn release_process(&self, tab: &TabId) -> bool {
+        let handle = {
+            let mut slots = self.slots.lock();
+            let Some(slot) = slots.get_mut(tab) else {
+                return false;
+            };
+            let Some(handle) = slot.handle.take() else {
+                return false;
+            };
+            slot.started = false;
+            handle
+        };
+        handle.dispose();
+        true
+    }
+
     /// Atomically set the focused tab and the one or two full-stream tabs for a window.
     pub fn set_view(&self, window: &omp_core::WindowId, focused: TabId, visible: &[TabId]) -> Result<()> {
         let view = ViewState::validate(focused, visible)?;

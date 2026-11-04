@@ -39,6 +39,10 @@ pub struct SessionInfo {
     pub size: u64,
     pub status: String,
     pub first_message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_session_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
 }
 
 struct ParseCache {
@@ -153,6 +157,11 @@ pub fn list(scope: &str, cwd: &Path) -> Vec<SessionInfo> {
                 continue;
             };
             if scope == "local" && !same_path(Path::new(&info.cwd), cwd) {
+                continue;
+            }
+            // Upstream drops empty sessions (no messages, no title, tiny file) so
+            // scratch files never clutter the sidebar.
+            if info.message_count == 0 && info.title.is_none() && info.size <= TAIL_BYTES as u64 {
                 continue;
             }
             out.push(info);
@@ -273,6 +282,10 @@ fn parse_session(path: &Path, size: u64) -> Option<SessionInfo> {
         .get("kind")
         .and_then(Value::as_str)
         .map(str::to_owned);
+    let parent_session_path = header
+        .get("parentSession")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
 
     let first_message = first_user_message(&head_text);
 
@@ -294,7 +307,7 @@ fn parse_session(path: &Path, size: u64) -> Option<SessionInfo> {
         })
         .unwrap_or_default();
 
-    let mut info = SessionInfo {
+    Some(SessionInfo {
         path: path.to_string_lossy().into_owned(),
         id,
         title,
@@ -305,11 +318,9 @@ fn parse_session(path: &Path, size: u64) -> Option<SessionInfo> {
         size,
         status,
         first_message,
-    };
-    if kind.as_deref() == Some("chat") {
-        info.title = info.title.take().or(Some("chat".to_owned()));
-    }
-    Some(info)
+        parent_session_path,
+        kind,
+    })
 }
 
 fn read_header(file: &mut File, head_text: &str, size: u64) -> Option<Value> {

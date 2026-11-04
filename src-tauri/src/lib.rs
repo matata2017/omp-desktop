@@ -52,9 +52,41 @@ pub struct AppState {
     pub tab_cwds: Mutex<HashMap<TabId, PathBuf>>,
     pub tab_kinds: Mutex<HashMap<TabId, TabKind>>,
     pub ready_tabs: Mutex<HashSet<TabId>>,
+    /// Session file each tab is bound to, so a released tab can resume it.
+    pub tab_sessions: Mutex<HashMap<TabId, PathBuf>>,
+    /// Last frame time and streaming flag per tab.
+    pub tab_activity: Mutex<HashMap<TabId, TabActivity>>,
+    /// One idle, already-booted sidecar that new tabs can adopt.
+    pub spare: Mutex<Option<SpareSidecar>>,
     pub active_tab: Mutex<TabId>,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
+}
+
+/// A booted sidecar kept warm for the next tab, so opening a session does not pay
+/// the process start cost. Its frames are routed under `route_tab`, which is re-keyed
+/// to the adopting tab.
+pub struct SpareSidecar {
+    pub sidecar: Sidecar,
+    pub client: Arc<RpcClient>,
+    pub route_tab: Arc<Mutex<TabId>>,
+    /// Set once the spare emitted `ready`; adoption must not use a booting process.
+    pub ready: Arc<std::sync::atomic::AtomicBool>,
+}
+
+/// Per-tab sidecar activity, used to pick a victim when the sidecar cap is reached.
+#[derive(Debug, Clone, Default)]
+pub struct TabActivity {
+    pub last_frame_ms: u64,
+    /// A turn is streaming; such a tab must never be released.
+    pub streaming: bool,
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 impl AppState {
@@ -142,6 +174,18 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
+    {
+        let mut activity = state.tab_activity.lock();
+        let entry = activity.entry(tab.clone()).or_default();
+        entry.last_frame_ms = now_ms();
+        match frame_type.as_str() {
+            "agent_start" | "turn_start" | "message_start" | "tool_execution_start" => {
+                entry.streaming = true;
+            }
+            "agent_end" | "turn_end" => entry.streaming = false,
+            _ => {}
+        }
+    }
     if frame_type == "response" {
         if let Some(client) = state.clients.lock().get(tab).cloned() {
             client.on_response(&frame);
@@ -223,6 +267,57 @@ pub(crate) fn start_tab(app: &AppHandle, tab: TabId, launch: LaunchOptions) -> R
     Ok(())
 }
 
+/// Boot a warm spare after a short delay when there is room for another process.
+#[allow(dead_code)] // kept for the next warm-spare iteration; boot is disabled for now
+pub(crate) fn spawn_spare(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let state = app.state::<AppState>();
+        if state.spare.lock().is_some() {
+            return;
+        }
+        if state.clients.lock().len() + 1 > crate::ipc::max_sidecars() {
+            return;
+        }
+        let Some(binary) = state.sidecar_binary.clone() else {
+            return;
+        };
+        let caps = state.caps.clone();
+        let launch = LaunchOptions {
+            cwd: state.cwd.clone(),
+            kind: TabKind::Agent,
+            fresh_launch: true,
+            ..LaunchOptions::default()
+        };
+        let route_tab = Arc::new(Mutex::new(TabId::new("spare")));
+        let ready = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let app_for_frames = app.clone();
+        let tab_for_frames = route_tab.clone();
+        let ready_for_frames = ready.clone();
+        let on_frame: omp_agent::sidecar::FrameHandler = Arc::new(move |frame: Value| {
+            if frame.get("type").and_then(Value::as_str) == Some("ready") {
+                ready_for_frames.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            let tab = tab_for_frames.lock().clone();
+            route_frame(&app_for_frames, &tab, frame);
+        });
+        match Sidecar::spawn(&SidecarOptions { binary, launch, caps }, on_frame) {
+            Ok(sidecar) => {
+                let client = Arc::new(RpcClient::new(sidecar.frame_sink()));
+                *state.spare.lock() = Some(SpareSidecar {
+                    sidecar,
+                    client,
+                    route_tab,
+                    ready,
+                });
+                tracing::info!("warm spare booted");
+            }
+            Err(error) => tracing::warn!(%error, "warm spare failed"),
+        }
+    });
+}
+
 /// Start a tab's sidecar if it is not running yet, emitting the same status events the
 /// renderer expects. Called from `tab:set-active` / `tab:set-view`, never from setup.
 pub(crate) fn ensure_tab_started(
@@ -246,6 +341,11 @@ pub(crate) fn ensure_tab_started(
         .get(tab)
         .copied()
         .unwrap_or(TabKind::Agent);
+    if state.clients.lock().len() >= crate::ipc::max_sidecars()
+        && !crate::ipc::evict_idle_sidecar(app, state)
+    {
+        return Err("sidecar limit reached".to_owned());
+    }
     state.ready_tabs.lock().remove(tab);
     let _ = app.emit(
         events::SIDECAR_STATUS,
@@ -254,10 +354,12 @@ pub(crate) fn ensure_tab_started(
             "payload": { "status": "starting", "cwd": cwd.to_string_lossy() }
         }),
     );
+    let resume = state.tab_sessions.lock().get(tab).cloned();
     let launch = LaunchOptions {
         cwd: cwd.clone(),
         kind,
-        fresh_launch: true,
+        resume_session: resume.clone(),
+        fresh_launch: resume.is_none(),
         ..LaunchOptions::default()
     };
     start_tab(app, tab.clone(), launch).map_err(|err| {
@@ -351,12 +453,16 @@ pub fn run() {
                 tab_cwds: Mutex::new(HashMap::from([(first_tab.clone(), cwd.clone())])),
                 tab_kinds: Mutex::new(HashMap::from([(first_tab.clone(), TabKind::Agent)])),
                 ready_tabs: Mutex::new(HashSet::new()),
+                tab_sessions: Mutex::new(HashMap::new()),
+                tab_activity: Mutex::new(HashMap::new()),
+                spare: Mutex::new(None),
                 active_tab: Mutex::new(first_tab.clone()),
                 next_tab: AtomicU64::new(2),
                 cwd: cwd.clone(),
             };
             app.manage(state);
             app.state::<AppState>().pool.register_deferred(first_tab);
+            // Warm spare is implemented but disabled until adoption is verified end to end.
             // The sidecar starts when the renderer activates tab-1 (tab:set-active /
             // tab:set-view), so the ready event cannot race the renderer's subscription.
             Ok(())

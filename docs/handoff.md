@@ -135,7 +135,8 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| 多 tab 剩余 | `tab:spawn/close`、per-tab client/batcher、prompt 烟测已通；F-OWN 重复 spawn 已实测返回 owner；并发上限、布局持久化、多窗口未做 | 中 |
+| 多 tab 剩余 | spawn/close、per-tab client/batcher、warm spare、上限 3 + LRU 回收已落地；布局持久化/多窗口/会话归属未做 | 中 |
+| warm spare | 常驻 1 个空闲 sidecar（约 250MB）换 spawn 即时；正式的空闲释放/租约矩阵未做 | 中 |
 | 模型指示器 | composer 仍显示“选择模型”而 sidecar 实际有模型（`get_state.model` 有值）；renderer model store 未被灌入 | 中 |
 | 会话操作 | 重命名/删除/搜索已实测；归档、批量、运行中跳过、会话树/branch/fork 未接 | 中 |
 | 未实现通道 | 仍缺：browser:*、terminal:*、scheduler:*、models:*、bench:*、system 对话框/剪贴板/通知、editor:open-external、conversations:search、updater:* | 低（可见但会缺功能） |
