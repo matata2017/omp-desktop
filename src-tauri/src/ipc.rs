@@ -495,6 +495,22 @@ pub async fn ipc_invoke(
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             Ok(json!(dir.to_string_lossy()))
         }
+        // ---- models.yml provider editor --------------------------------------------------
+        "models:providers-list" => crate::models::list(&crate::models::models_path()),
+        "models:provider-upsert" => crate::models::upsert(&crate::models::models_path(), &payload),
+        "models:provider-delete" => {
+            let id = payload
+                .as_str()
+                .ok_or_else(|| "models:provider-delete requires an id".to_owned())?;
+            let removed = crate::models::delete(&crate::models::models_path(), id)?;
+            Ok(json!({ "removed": removed }))
+        }
+        "models:config-open" => {
+            let path = crate::models::ensure_file(&crate::models::models_path())?;
+            let opened = tauri_plugin_opener::open_path(path.as_path(), None::<&str>).is_ok();
+            Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
+        }
+
         "stats:url" => Ok(json!({ "url": Value::Null, "unavailable": true })),
         "stats:fetch" => Err("stats server not running".to_owned()),
         "runtime:error-report" => {

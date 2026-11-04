@@ -1,6 +1,8 @@
 //! Application shell: state, sidecar wiring, and the single `ipc_invoke` bridge command.
 
+pub mod builtin_providers;
 pub mod ipc;
+pub mod models;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;

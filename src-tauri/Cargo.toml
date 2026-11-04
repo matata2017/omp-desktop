@@ -20,6 +20,7 @@ omp-rpc = { path = "../crates/omp-rpc" }
 omp-agent = { path = "../crates/omp-agent" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 tokio = { workspace = true }
 parking_lot = { workspace = true }
 tracing = { workspace = true }
