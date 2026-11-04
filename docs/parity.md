@@ -164,10 +164,10 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | todo |
+| Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | done：`get_settings_schema` 返回 242 KB schema，设置窗口按它渲染出 8 组（外观与使用/模型与账号/任务与上下文/工具与执行/扩展与资源/权限与安全/记忆/系统与高级）+ 开关与“选择 GUI 主题”（截图在 `.probe/romp-settings.png`）；`set_setting` 走通用 RPC，未逐项点 |
 | GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | should | hybrid | wip（`prefs:get/set` + `prefs:update-launch-profile` 已通，落 `prefs.json`；其余偏好项未接） |
 | 审批模式：always-ask / always-ask-cached / write / yolo，随 spawn argv 生效 | should | hybrid | todo |
-| 运行时开关：steering / follow-up / interrupt 模式、auto-compaction、auto-retry | should | reuse | todo |
+| 运行时开关：steering / follow-up / interrupt 模式、auto-compaction、auto-retry | should | reuse | wip：`get_state` 回传这些字段（`steeringMode`/`followUpMode`/`interruptMode`/`autoCompactionEnabled`/`autoRetryEnabled`），RPC 通用转发已通；未逐项切换验证 |
 | 管理页：Security 扫描、Skills 启用/编辑、SSH host 增删改测、Updates 版本与检查 | could | reuse | todo |
 
 ### stats
@@ -190,7 +190,7 @@
 | 窗口几何持久化：多显示器可达性修正、多窗口级联、最大化状态 | should | rust | todo |
 | 退出守卫：有运行中会话/定时任务时确认；`app:quit` 是唯一退出路径 | should | rust | todo |
 | 系统集成：桌面通知、打开/保存对话框、剪贴板读取、openExternal、录制文件落盘 | must | plugin | wip（4/5 已验证）：`system:notify` / `system:clipboard-read` / `system:open-external` / `recorder:save` 已接并实测（CDP：clipboardRead 260 字符、notify ok、recorderSave 写入 `[1,2,3,250]` 校验通过，字节数组与 base64 两种载荷都有单测）；`system:save-dialog` / `system:open-dialog` 已接（blocking 变体跑在 spawn_blocking，取消返回 null），但需要人工点一次原生选择器才能确认 |
-| 命令面板：⌘K 搜索、分类、子菜单、prompt 透传、TUI-only 标记不可用 | should | reuse | todo |
+| 命令面板：⌘K 搜索、分类、子菜单、prompt 透传、TUI-only 标记不可用 | should | reuse | done：`get_available_commands` 返回 87 KB 命令表并经 `commands:update` 推到渲染层；实测点开命令面板列出真实条目（工作区/添加目录、Git 仓库变更、移动会话、提供商登录/登出…） |
 | 自动更新：4h 轮询、manual/automatic 两模式、下载/应用、GitHub releases 源 | could | plugin | todo |
 
 ### tabs
