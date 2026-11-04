@@ -177,6 +177,43 @@ fn message_text(message: Option<&Value>) -> Option<String> {
     None
 }
 
+/// Full-content search over saved sessions. All whitespace-separated tokens must match.
+pub fn search(query: &str, scope: &str, cwd: &Path) -> Vec<String> {
+    let tokens: Vec<String> = query
+        .split_whitespace()
+        .map(|token| token.to_lowercase())
+        .collect();
+    if tokens.is_empty() {
+        return Vec::new();
+    }
+    list(scope, cwd)
+        .into_iter()
+        .filter(|info| {
+            fs::read_to_string(&info.path)
+                .map(|text| matches_all(&text, &tokens))
+                .unwrap_or(false)
+        })
+        .map(|info| info.path)
+        .collect()
+}
+
+fn matches_all(text: &str, tokens: &[String]) -> bool {
+    let lower = text.to_lowercase();
+    tokens.iter().all(|token| lower.contains(token))
+}
+
+#[cfg(test)]
+mod search_tests {
+    use super::*;
+
+    #[test]
+    fn requires_every_token() {
+        let tokens = vec!["list".to_owned(), "crates".to_owned()];
+        assert!(matches_all("please LIST files in CRATES", &tokens));
+        assert!(!matches_all("list files in src", &tokens));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

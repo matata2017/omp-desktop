@@ -224,6 +224,11 @@ pub async fn ipc_invoke(
             let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
             serde_json::to_value(omp_session::list(scope, &state.cwd)).map_err(|e| e.to_string())
         }
+        "sessions:search" => {
+            let query = payload.get("query").and_then(Value::as_str).unwrap_or("");
+            let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
+            Ok(json!(omp_session::search(query, scope, &state.cwd)))
+        }
         "sessions:delete" => {
             let Some(path) = payload.get("sessionPath").and_then(Value::as_str) else {
                 return Err("sessions:delete requires sessionPath".to_owned());
