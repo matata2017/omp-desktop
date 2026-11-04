@@ -147,6 +147,12 @@ pub async fn ipc_invoke(
             Ok(json!({ "ok": true }))
         }
 
+        // ---- Sessions -------------------------------------------------------------------
+        "sessions:list" => {
+            let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
+            serde_json::to_value(omp_session::list(scope, &state.cwd)).map_err(|e| e.to_string())
+        }
+
         // ---- Prefs ----------------------------------------------------------------------
         "prefs:get" => Ok(read_json_or(&state.data_dir.join("prefs.json"), json!({}))),
         "prefs:set" => {

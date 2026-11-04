@@ -15,6 +15,7 @@ tauri-build = { workspace = true }
 
 [dependencies]
 omp-core = { path = "../crates/omp-core" }
+omp-session = { path = "../crates/omp-session" }
 omp-rpc = { path = "../crates/omp-rpc" }
 omp-agent = { path = "../crates/omp-agent" }
 serde = { workspace = true }

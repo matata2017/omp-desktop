@@ -146,8 +146,8 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | todo |
-| 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | todo |
+| 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | wip（`crates/omp-session` 全文件扫描；标题/session/首条用户消息/计数/mtime 已实现，头尾解析与 LRU 未做） |
+| 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | wip（侧栏已按 workspace 分组并显示计数；pinned/archived/family 未接） |
 | 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | todo |
 | 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | todo |
 | 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | todo |
