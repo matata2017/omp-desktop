@@ -18,9 +18,9 @@
 |---|---|---|
 | 0 | 工具链与镜像 | **完成**：Rust 1.99.1 + MSVC 14.44.35207 + Win11 SDK 26100 + bun 依赖；`scripts/dev.ps1` 可起窗 |
 | 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
-| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 60 项 Rust 测试 + 6 条协议探针全通过） |
+| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 63 项 Rust 测试 + 6 条协议探针全通过） |
 | 2 | Tauri 外壳 + `window.omp` shim | **完成**：Romp 起窗、状态 ready、会话列表、Inspector、一次完整 prompt→流式→工具卡→agent_end；多 tab spawn/close 已通 |
-| 3–9 | 会话/多标签、对话面、模型设置、统计、定时任务、终端与浏览器、打包 | 未开始 |
+| 3–9 | 会话/多标签、对话面、模型设置、统计、定时任务、终端与浏览器、打包 | 进行中：tabs/sessions 已起步（spawn/close、F-OWN、list/delete/rename/search），其余未开始 |
 | R | replica 侦察 | **完成** |
 
 ### 已验证的事实（不是推断）
@@ -29,7 +29,7 @@
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
 bun run test                                     → 186 files / 1566 passed
-cargo test --workspace                           → 60 passed（11 suites）
+cargo test --workspace                           → 63 passed（11 suites）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
@@ -135,8 +135,9 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| 多 tab 剩余 | `tab:spawn/close`、per-tab client/batcher、prompt 烟测已通；session 归属、并发上限、布局持久化、多窗口未做 | 中 |
-| 会话操作 | 重命名/删除/归档/内容搜索/树/branch/fork 未接 | 中 |
+| 多 tab 剩余 | `tab:spawn/close`、per-tab client/batcher、prompt 烟测已通；F-OWN 重复 spawn 已实测返回 owner；并发上限、布局持久化、多窗口未做 | 中 |
+| 模型指示器 | composer 仍显示“选择模型”而 sidecar 实际有模型（`get_state.model` 有值）；renderer model store 未被灌入 | 中 |
+| 会话操作 | 重命名/删除/搜索已实测；归档、批量、运行中跳过、会话树/branch/fork 未接 | 中 |
 | 未实现通道 | 除 rpc/tab/sessions/prefs/fs/system/updater 外一律 `Err("unknown channel")`，渲染层按 try/catch 降级 | 低（可见但会缺功能） |
 | 浏览器/终端 | Phase 6 前不可用 | 低 |
 | `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除：它 import main 进程的 `toAbsolutePath` | 低 |

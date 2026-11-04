@@ -32,6 +32,7 @@ socket.addEventListener("open", async () => {
     returnByValue: true,
     replMode: true,
   });
-  console.log(JSON.stringify(response.result ?? response.error, null, 1));
+  const payload = response.exceptionDetails ? response : (response.result ?? response.error);
+  console.log(JSON.stringify(payload, null, 1));
   socket.close();
 });

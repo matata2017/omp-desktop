@@ -118,7 +118,7 @@ pub async fn ipc_invoke(
                 .map(PathBuf::from);
             if let Some(path) = &session_path {
                 if let Some(owner) = state.pool.session_owner(path) {
-                    return Ok(json!({ "tabId": null, "ownerTabId": owner, "refusal": "owned" }));
+                    return Ok(json!({ "tabId": null, "ownerTabId": owner, "ownerWinId": 1, "refusal": "owned" }));
                 }
             }
             let number = state.next_tab.fetch_add(1, Ordering::SeqCst);
@@ -144,7 +144,9 @@ pub async fn ipc_invoke(
             };
             let existed = state.pool.close(&tab);
             state.clients.lock().remove(&tab);
-            state.batchers.lock().remove(&tab);
+            if let Some(batcher) = state.batchers.lock().remove(&tab) {
+                batcher.dispose();
+            }
             state.tab_cwds.lock().remove(&tab);
             state.tab_kinds.lock().remove(&tab);
             state.ready_tabs.lock().remove(&tab);
@@ -502,5 +504,31 @@ mod tests {
         assert!(entries.iter().any(|e| e["path"] == "keep/a.txt"));
         assert!(!entries.iter().any(|e| e["name"] == "node_modules"));
         std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn delete_session_file_rejects_outside_root() {
+        let path = std::env::temp_dir().join(format!("romp-outside-{}.jsonl", std::process::id()));
+        std::fs::write(&path, "{}").unwrap();
+        let error = delete_session_file(&path).unwrap_err();
+        assert!(error.contains("Invalid session path"));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn delete_session_file_removes_file_and_sidecar_dir() {
+        let root = omp_session::sessions_root();
+        std::fs::create_dir_all(&root).unwrap();
+        let dir = root.join(format!("--romp-test-{}--", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("case.jsonl");
+        std::fs::write(&file, "{}").unwrap();
+        let sidecar_dir = dir.join("case");
+        std::fs::create_dir_all(&sidecar_dir).unwrap();
+        std::fs::write(sidecar_dir.join("__advisor.jsonl"), "{}").unwrap();
+        delete_session_file(&file).unwrap();
+        assert!(!file.exists());
+        assert!(!sidecar_dir.exists());
+        std::fs::remove_dir_all(dir).ok();
     }
 }
