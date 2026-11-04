@@ -2,6 +2,7 @@
 //! the channel string unchanged from `IPC_COMMANDS`, so `src/shared/ipc-types.ts` stays the only
 //! contract and `src/bridge/omp-api.ts` needs no per-method mapping.
 
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
@@ -223,6 +224,79 @@ pub async fn ipc_invoke(
             let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
             serde_json::to_value(omp_session::list(scope, &state.cwd)).map_err(|e| e.to_string())
         }
+        "sessions:delete" => {
+            let Some(path) = payload.get("sessionPath").and_then(Value::as_str) else {
+                return Err("sessions:delete requires sessionPath".to_owned());
+            };
+            if !path.ends_with(".jsonl") {
+                return Err("Invalid session path".to_owned());
+            }
+            let path = PathBuf::from(path);
+            if let Some(owner) = state.pool.session_owner(&path) {
+                let client = state.rpc_for(&owner)?;
+                let mut command = json!({ "type": "drop_session", "sessionPath": path });
+                let response = client
+                    .command(&mut command, None)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if response.get("success").and_then(Value::as_bool) != Some(true) {
+                    return Err(response
+                        .get("error")
+                        .and_then(Value::as_str)
+                        .unwrap_or("drop_session failed")
+                        .to_owned());
+                }
+                if response
+                    .get("data")
+                    .and_then(|data| data.get("cancelled"))
+                    .and_then(Value::as_bool)
+                    == Some(true)
+                {
+                    return Err("Session deletion was cancelled".to_owned());
+                }
+                return Ok(Value::Null);
+            }
+            delete_session_file(&path)?;
+            Ok(Value::Null)
+        }
+        "sessions:rename" => {
+            let Some(path) = payload.get("sessionPath").and_then(Value::as_str) else {
+                return Err("sessions:rename requires sessionPath".to_owned());
+            };
+            if !path.ends_with(".jsonl") {
+                return Err("Invalid session path".to_owned());
+            }
+            let name = payload
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .unwrap_or("");
+            if name.is_empty() {
+                return Err("Session name cannot be empty".to_owned());
+            }
+            let tab = state
+                .pool
+                .session_owner(Path::new(path))
+                .unwrap_or_else(|| state.active_tab());
+            let client = state.rpc_for(&tab)?;
+            let mut command = json!({
+                "type": "set_session_name",
+                "name": name,
+                "sessionPath": path,
+            });
+            let response = client
+                .command(&mut command, None)
+                .await
+                .map_err(|e| e.to_string())?;
+            if response.get("success").and_then(Value::as_bool) != Some(true) {
+                return Err(response
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("set_session_name failed")
+                    .to_owned());
+            }
+            Ok(Value::Null)
+        }
 
         // ---- Prefs ----------------------------------------------------------------------
         "prefs:get" => Ok(read_json_or(&state.data_dir.join("prefs.json"), json!({}))),
@@ -374,6 +448,22 @@ fn list_tree(cwd: PathBuf, payload: Value) -> Result<Value, String> {
         }
     }
     Ok(json!({ "ok": true, "entries": entries, "truncated": truncated }))
+}
+
+fn delete_session_file(path: &Path) -> Result<(), String> {
+    let root = omp_session::sessions_root()
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    let path = path.canonicalize().map_err(|e| e.to_string())?;
+    if !path.starts_with(&root) {
+        return Err("Invalid session path".to_owned());
+    }
+    fs::remove_file(&path).map_err(|e| e.to_string())?;
+    let sidecar_dir = path.with_extension("");
+    if sidecar_dir.is_dir() {
+        fs::remove_dir_all(&sidecar_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
