@@ -32,14 +32,27 @@ fn providers_of(doc: &Yaml) -> Option<&Mapping> {
     doc.get("providers").and_then(Yaml::as_mapping)
 }
 
+/// Write through a unique temp file and rename over the target.
+///
+/// The agent watches this path and hot-reloads it, so a partially written file would be read as
+/// the user's configuration; rename keeps the swap atomic. The temp name carries pid + counter
+/// so two writers can never collide, and a failed write removes its own temp file.
 fn write_document(path: &Path, doc: &Yaml) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let text = serde_yaml::to_string(doc).map_err(|e| e.to_string())?;
-    let tmp = path.with_extension("yml.tmp");
+    let nonce = COUNTER.fetch_add(1, Ordering::Relaxed);
+    let tmp = path.with_extension(format!("yml.tmp-{}-{nonce}", std::process::id()));
     std::fs::write(&tmp, text).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, path).map_err(|e| e.to_string())
+    if let Err(err) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(err.to_string());
+    }
+    Ok(())
 }
 
 fn as_str(value: Option<&Yaml>) -> Option<String> {
@@ -180,6 +193,11 @@ pub fn upsert(path: &Path, input: &Value) -> Result<Value, String> {
         .and_then(Value::as_str)
         .ok_or_else(|| "provider requires an id".to_owned())?
         .to_owned();
+    if builtin_providers::is_builtin(&id) {
+        return Err(format!(
+            "\"{id}\" is a built-in provider id; choose a distinct custom id."
+        ));
+    }
     let models = input
         .get("models")
         .and_then(Value::as_array)
@@ -286,6 +304,11 @@ pub fn upsert(path: &Path, input: &Value) -> Result<Value, String> {
 
 /// Remove one provider; `false` when it was not configured.
 pub fn delete(path: &Path, id: &str) -> Result<bool, String> {
+    if builtin_providers::is_builtin(id) {
+        return Err(format!(
+            "\"{id}\" is a built-in provider and cannot be removed from the GUI."
+        ));
+    }
     let mut doc = read_document(path)?;
     let Some(providers) = doc.get_mut("providers").and_then(Yaml::as_mapping_mut) else {
         return Ok(false);
@@ -390,6 +413,33 @@ mod tests {
             &json!({ "id": "mine", "auth": "none", "models": [{ "id": "m1" }] }),
         )
         .unwrap();
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn builtin_ids_cannot_be_upserted_or_deleted() {
+        let dir = temp_dir("builtin");
+        let path = dir.join("models.yml");
+        let err = upsert(&path, &json!({ "id": "anthropic", "models": [] })).unwrap_err();
+        assert!(err.contains("is a built-in provider id"), "{err}");
+        std::fs::write(&path, "providers:\n  anthropic:\n    apiKey: sk-1\n").unwrap();
+        let err = delete(&path, "anthropic").unwrap_err();
+        assert!(err.contains("cannot be removed from the GUI"), "{err}");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn writes_leave_no_temp_files() {
+        let dir = temp_dir("temp");
+        let path = dir.join("models.yml");
+        upsert(&path, &json!({ "id": "mine", "auth": "none", "models": [] })).unwrap();
+        let leftovers: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.contains(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
         std::fs::remove_dir_all(dir).ok();
     }
 

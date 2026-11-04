@@ -496,6 +496,19 @@ pub async fn ipc_invoke(
             Ok(json!(dir.to_string_lossy()))
         }
         // ---- models.yml provider editor --------------------------------------------------
+        // ---- External editor round trip -----------------------------------------------
+        "editor:open-external" => {
+            let content = payload
+                .get("content")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            // The editor is a blocking GUI process; keep it off the async runtime.
+            tauri::async_runtime::spawn_blocking(move || crate::editor::open_external(&content))
+                .await
+                .map_err(|e| e.to_string())
+        }
+
         "models:providers-list" => crate::models::list(&crate::models::models_path()),
         "models:provider-upsert" => crate::models::upsert(&crate::models::models_path(), &payload),
         "models:provider-delete" => {

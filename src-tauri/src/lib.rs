@@ -1,6 +1,7 @@
 //! Application shell: state, sidecar wiring, and the single `ipc_invoke` bridge command.
 
 pub mod builtin_providers;
+pub mod editor;
 pub mod ipc;
 pub mod models;
 
@@ -286,7 +287,18 @@ pub(crate) fn start_tab(app: &AppHandle, tab: TabId, launch: LaunchOptions) -> R
     let kind = launch.kind;
     let caps = state.caps.clone();
     let argv = omp_agent::argv::build(&caps, &launch);
-    tracing::info!(tab = %tab, binary = %binary.display(), ?argv, "spawning sidecar");
+    // Phantom-tab investigation: `tab:spawn` reaches this path directly, so the trace must carry
+    // the full launch shape, not just the argv.
+    tracing::info!(
+        tab = %tab,
+        binary = %binary.display(),
+        cwd = %launch.cwd.display(),
+        kind = ?launch.kind,
+        resume = ?launch.resume_session.as_ref().map(|p| p.display().to_string()),
+        fresh = launch.fresh_launch,
+        ?argv,
+        "spawning sidecar"
+    );
     let tab_for_frames = tab.clone();
     let app_for_frames = app.clone();
     let on_frame: omp_agent::sidecar::FrameHandler = Arc::new(move |frame: Value| {

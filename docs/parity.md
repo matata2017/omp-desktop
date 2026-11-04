@@ -45,6 +45,8 @@
 | `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
 | 内置浏览器 | Phase 8 前一律返回 `unknown channel: browser:*` | 子 webview + CDP 未实现 | Browser 面板在 UI 上会退化为错误提示 |
+| `models.yml` 写入 | Rust 侧用 `serde_yaml` 全量重写，**用户手写的注释与键序不保留** | 上游用 `parseDocument`/`setIn` 做文档级合并；Rust 侧没有等价的注释保留 YAML 编辑器 | GUI 一旦保存 provider，文件里的注释会消失；键序仍稳定（映射插入序）。字段级未知键已保留（有单测） |
+| `editor:open-external` | 用 Rust 进程跑 `$VISUAL`/`$EDITOR`（Windows 回退 `notepad`），非零退出返回 `text:null` | 上游 `src/main/editor.ts` 同流程，但其 `resolveEditorCommand` 还会读登录 shell 的 rc 文件 | GUI 进程 env 里没有 `$EDITOR` 时一律走 notepad；登录 shell 里的编辑器设置不生效 |
 
 ## 逐条清单
 
@@ -109,10 +111,10 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 模型选择器：按 provider 分组、搜索、目录增量刷新 | must | reuse | todo |
+| 模型选择器：按 provider 分组、搜索、目录增量刷新 | must | reuse | wip：`get_providers`(89)/`get_available_models`(8) 与模型指示器已通（CDP 实测 composer 显示 `group/never-stuck · 超高 · 快速`），分组/搜索 UI 未逐项验 |
 | 模型与推理控制：`set_model` / `cycle_model`（⌃P 前后）/ thinking level / fast / slow | must | reuse | todo |
 | Provider 管理：认证状态、OAuth / API key 登录登出、多账号选择 | must | reuse | todo |
-| 自定义 provider：`models.yml` 保序原子读写、模型编辑器（context/limits/cost/thinking）、删除 | should | hybrid | todo |
+| 自定义 provider：`models.yml` 保序原子读写、模型编辑器（context/limits/cost/thinking）、删除 | should | hybrid | done：`src-tauri/src/models.rs`（list/upsert/delete/ensure，apiKey 掩码尾 4 位、未知字段保留、内置 id 拒改、tmp+rename 原子写、7 单测）。CDP 实测 `models.listProviders()` 返回 1 条、首启阻塞弹窗与“无法读取自定义模型文件”黄条同时消失（`cad8df1`）；注释保留见已知偏差 |
 | 模型角色分配：role → model + thinking，按 metadata 校验 | should | reuse | todo |
 | Provider 用量窗口：配额窗口条 + 本地 token/cost 统计 + reset credit | should | reuse | todo |
 
