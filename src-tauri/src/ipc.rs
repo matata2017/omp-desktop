@@ -175,13 +175,14 @@ pub async fn ipc_invoke(
                 ..LaunchOptions::default()
             };
             start_tab(&app, tab.clone(), launch)?;
-            crate::persist_layout(&state);
             // The renderer switches to a spawned tab right away; keep main's active view
             // in sync so a reconcile does not snap back to the previous tab.
             *state.active_tab.lock() = tab.clone();
             if let Some(path) = session_path {
                 let _ = state.pool.claim_session(&tab, &path);
             }
+            // Persist last: the saved activeIndex must point at the tab the renderer just opened.
+            crate::persist_layout(&state);
             Ok(json!({ "tabId": tab, "cwd": cwd.to_string_lossy() }))
         }
         "tab:close" => {
@@ -394,10 +395,9 @@ pub async fn ipc_invoke(
                 state.pool.close(&tab);
             }
             state.clients.lock().clear();
-            let stats = &state.stats;
-            tauri::async_runtime::block_on(async {
-                stats.stop().await;
-            });
+            // `ipc_invoke` already runs on the async runtime: block_on here would panic with
+            // "cannot block the current thread from within a runtime".
+            state.stats.terminate_now();
             app.exit(0);
             Ok(Value::Null)
         }

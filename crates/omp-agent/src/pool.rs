@@ -69,6 +69,14 @@ pub struct SidecarPool<H: SidecarHandle> {
     requests: Mutex<HashMap<String, TabId>>,
 }
 
+fn tab_order(id: &TabId) -> u64 {
+    id.as_str()
+        .rsplit('-')
+        .next()
+        .and_then(|suffix| suffix.parse().ok())
+        .unwrap_or(u64::MAX)
+}
+
 impl<H: SidecarHandle> Default for SidecarPool<H> {
     fn default() -> Self {
         Self::new()
@@ -130,8 +138,12 @@ impl<H: SidecarHandle> SidecarPool<H> {
         self.slots.lock().len()
     }
 
+    /// Tabs in acquisition order. `HashMap` iteration is unordered and the IPC contract promises
+    /// the order the tabs were opened, so sort by the numeric id suffix (`tab-2` before `tab-10`).
     pub fn tabs(&self) -> Vec<TabId> {
-        self.slots.lock().keys().cloned().collect()
+        let mut tabs: Vec<TabId> = self.slots.lock().keys().cloned().collect();
+        tabs.sort_by_key(|tab| tab_order(tab));
+        tabs
     }
 
     /// Drop a tab, disposing its process handle. Returns whether the tab existed.
@@ -299,6 +311,20 @@ mod tests {
 
     fn tab(name: &str) -> TabId {
         TabId::new(name)
+    }
+
+    #[test]
+    fn tabs_are_listed_in_acquisition_order() {
+        let pool: SidecarPool<FakeHandle> = SidecarPool::new();
+        for name in ["tab-10", "tab-2", "tab-1", "tab-3"] {
+            let (handle, _, _) = fake();
+            pool.attach(tab(name), handle);
+        }
+        // Numeric order, not lexicographic: tab-10 belongs after tab-3.
+        assert_eq!(
+            pool.tabs(),
+            vec![tab("tab-1"), tab("tab-2"), tab("tab-3"), tab("tab-10")]
+        );
     }
 
     #[test]

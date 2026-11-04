@@ -691,10 +691,7 @@ pub fn run() {
                     state.pool.close(&tab);
                 }
                 state.clients.lock().clear();
-                let stats = &state.stats;
-                tauri::async_runtime::block_on(async {
-                    stats.stop().await;
-                });
+                state.stats.terminate_now();
             }
         })
         .invoke_handler(tauri::generate_handler![ipc::ipc_invoke])

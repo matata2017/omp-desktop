@@ -71,8 +71,20 @@ HMR 客户端）。它只能用来比较「有 sidecar / 没 sidecar」「1 tab 
 3. **原地会话切换**：同 workspace 点会话用 `switch_session`，不新起 244 MB 进程。
 4. **LRU 回收**：超过 `ROMP_MAX_SIDECARS`（默认 3）时回收最久未活动的空闲 tab，可 resume。
 
+## 口径说明
+
+- 足迹按**进程树**统计（从 `romp-desktop` 的 pid 递归 `ParentProcessId`），不是按进程名全局匹配——
+  后者会把用户自己那套 omp 的 sidecar / WebView2 一起算进来。
+- WebView2 那一行是**多个 helper 进程之和**（browser / gpu / renderer / utility），不是单个进程。
+- `WorkingSet64` 是工作集，不是提交量；OS 在内存压力下会 trim，所以同一状态多次采样会出现
+  348–973 MB 这种区间。
+- 全部数字来自 **dev 构建 + Vite dev server**（未压缩、带 sourcemap、HMR 客户端常驻），只能做
+  相对比较；发布版必须用 `cargo tauri build` 的产物重跑本脚本。
+
 ## 已知问题
 
+- **正常退出已闭环（实测）**：`window.omp.app.quit()` → 应用退出、`D:\rust-omp` 孤儿进程 **0 个**、
+  runtime.log 无 panic（此前 `app:quit` 在 async 命令里 `block_on` 会 panic，已改同步 `terminate_now()`）。
 - **强制终止会留下孤儿子进程**：`Stop-Process` 杀掉主进程时，`kill_on_drop` 不生效，sidecar 与
   stats 会存活（实测一次测量跑出 5 个 `omp stats` 残留）。正常关窗 / `app:quit` 现在会先
   `bench.abort()`、关闭全部 tab、`stats.stop()` 再退出（本轮补上）；要覆盖强杀需要 Windows Job Object。

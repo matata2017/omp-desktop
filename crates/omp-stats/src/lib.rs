@@ -219,6 +219,16 @@ impl StatsServer {
         }
     }
 
+    /// Kill the server without awaiting the exit. Used from synchronous teardown paths (window
+    /// close, `app:quit`) where blocking on a runtime would deadlock or panic.
+    pub fn terminate_now(&self) {
+        let child = self.child.lock().take();
+        *self.port.lock() = None;
+        if let Some(mut child) = child {
+            let _ = child.start_kill();
+        }
+    }
+
     /// Stop the server; the app calls this on quit.
     pub async fn stop(&self) {
         let child = self.child.lock().take();

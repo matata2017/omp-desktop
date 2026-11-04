@@ -172,7 +172,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | done：`get_settings_schema` 返回 242 KB schema，设置窗口按它渲染出 8 组（外观与使用/模型与账号/任务与上下文/工具与执行/扩展与资源/权限与安全/记忆/系统与高级）+ 开关与“选择 GUI 主题”（截图在 `.probe/romp-settings.png`）；`set_setting` 走通用 RPC，未逐项点 |
+| Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | done：`get_settings_schema` 返回 242 KB schema，设置窗口按它渲染出 8 组（外观与使用/模型与账号/任务与上下文/工具与执行/扩展与资源/权限与安全/记忆/系统与高级）+ 开关与“选择 GUI 主题”（截图在 `.probe/romp-settings.png`）；`set_setting` 写路径已验：挑 `autoResume` 原值写回 → `success:true` 且值未变（用户零感知），schema 的 `entries`/`tabs` 与 `get_settings.values` 两半都通 |
 | GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | should | hybrid | wip（`prefs:get/set` + `prefs:update-launch-profile` 已通，落 `prefs.json`；其余偏好项未接） |
 | 审批模式：always-ask / always-ask-cached / write / yolo，随 spawn argv 生效 | should | hybrid | todo |
 | 运行时开关：steering / follow-up / interrupt 模式、auto-compaction、auto-retry | should | reuse | wip：`get_state` 回传这些字段（`steeringMode`/`followUpMode`/`interruptMode`/`autoCompactionEnabled`/`autoRetryEnabled`），RPC 通用转发已通；未逐项切换验证 |
@@ -209,7 +209,7 @@
 | Tab 类型 agent / chat：chat 无工具、历史与项目组分离 | should | hybrid | wip（`tab:spawn` 传 kind，chat 走 `--chat`；历史分离未验证） |
 | Tab 条：拖拽排序、状态 chip、运行中关闭内联确认、右键菜单、⌘1–9 / ⌃Tab | should | reuse | wip（renderer 原样；`setOrder` 仅回 true，未持久化） |
 | 双栏拆分：左右/上下、拖拽 ratio、键盘调整、拖 tab 到边缘成对 | should | reuse | wip（`setView` 已接 pool；groups/ratio 持久化未做） |
-| Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | done：`src-tauri/src/tab_layout.rs` 落 `<app_data>/tab-layout.json`（原子写；加载丢弃 workspace 已不存在或 session 已删的 tab，activeIndex 越界归零）；`tab:spawn/close/set-active/set-view/set-order` 后持久化；启动按布局注册全部 tab、只启 active 的。实测开 2 个 tab 重启后仍 2 个、activeIndex 一致。注意 sidecar 退出会删除无消息的空会话，这类 tab 恢复成同 workspace 的新会话；groups 分屏比例未存 |
+| Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | done：`src-tauri/src/tab_layout.rs` 落 `<app_data>/tab-layout.json`（原子写；加载丢弃 workspace 已不存在或 session 已删的 tab，activeIndex 越界归零）；`tab:spawn/close/set-active/set-view/set-order` 后持久化；启动按布局注册全部 tab、只启 active 的。实测开 2 个 tab 重启后仍 2 个、activeIndex 一致；`tab:spawn` 的持久化已挪到 active 切换之后（否则存的是旧 active），`pool.tabs()` 改为按数字后缀排序（此前是 HashMap 随机序，`tab:get-all` 吐给渲染层的顺序不稳）。注意 sidecar 退出会删除无消息的空会话，这类 tab 恢复成同 workspace 的新会话；groups 分屏比例未存 |
 | 多窗口：每窗口独立 tabs，会话可"在新窗口打开"，重复打开聚焦 owner | should | rust | todo |
 | Worktree tab：创建/删除 worktree、tab cwd 绑定 worktree、关闭时提示 | could | hybrid | todo |
 
