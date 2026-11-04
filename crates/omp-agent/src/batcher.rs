@@ -35,6 +35,12 @@ impl EventBatcher {
     }
 
     pub fn with_interval(flush: Flush, interval: Duration) -> Self {
+        Self::with_handle(flush, interval, tokio::runtime::Handle::current())
+    }
+
+    /// Construct outside the runtime (Tauri's synchronous `setup` hook, tests that drive the
+    /// flusher themselves) by supplying the runtime the timer should run on.
+    pub fn with_handle(flush: Flush, interval: Duration, handle: tokio::runtime::Handle) -> Self {
         EventBatcher {
             state: Arc::new(Mutex::new(State {
                 pending: Vec::new(),
@@ -43,7 +49,7 @@ impl EventBatcher {
             })),
             flush,
             interval,
-            handle: tokio::runtime::Handle::current(),
+            handle,
         }
     }
 

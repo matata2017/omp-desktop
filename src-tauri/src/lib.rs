@@ -246,15 +246,6 @@ pub fn run() {
                 .map(probe_capabilities)
                 .unwrap_or_default();
 
-            let app_handle = app.handle().clone();
-            let batcher = EventBatcher::new(Arc::new(move |batch: Vec<Value>| {
-                let tab = app_handle.state::<AppState>().batch_tab.lock().clone();
-                let _ = app_handle.emit(
-                    events::EVENTS_BATCH,
-                    json!({ "tabId": tab, "payload": batch }),
-                );
-            }));
-
             let cwd = std::env::current_dir().unwrap_or_else(|_| omp_core::home_dir());
             let state = AppState {
                 caps,
@@ -263,23 +254,36 @@ pub fn run() {
                 pool: SidecarPool::new(),
                 client: Mutex::new(None),
                 active_tab: Mutex::new(TabId::new("tab-1")),
-                batcher: Mutex::new(Some(batcher)),
+                batcher: Mutex::new(None),
                 batch_tab: Mutex::new(TabId::new("tab-1")),
                 cwd: cwd.clone(),
             };
             app.manage(state);
 
+            // The synchronous `setup` hook runs outside Tauri's async runtime, and both the
+            // batcher's timer and the sidecar's stdout pump need to be spawned on it.
+            let app_handle = app.handle().clone();
             let first_tab = TabId::new("tab-1");
-            app.state::<AppState>()
-                .pool
-                .register_deferred(first_tab.clone());
-            if let Err(err) = start_tab(app.handle(), first_tab, cwd) {
-                tracing::error!("sidecar start failed: {err}");
-                let _ = app.emit(
-                    events::SIDECAR_STATUS,
-                    json!({ "status": "error", "message": err }),
-                );
-            }
+            app.state::<AppState>().pool.register_deferred(first_tab.clone());
+            tauri::async_runtime::spawn(async move {
+                let emitter = app_handle.clone();
+                let batcher = EventBatcher::new(Arc::new(move |batch: Vec<Value>| {
+                    let tab = emitter.state::<AppState>().batch_tab.lock().clone();
+                    let _ = emitter.emit(
+                        events::EVENTS_BATCH,
+                        json!({ "tabId": tab, "payload": batch }),
+                    );
+                }));
+                *app_handle.state::<AppState>().batcher.lock() = Some(batcher);
+
+                if let Err(err) = start_tab(&app_handle, first_tab, cwd) {
+                    tracing::error!("sidecar start failed: {err}");
+                    let _ = app_handle.emit(
+                        events::SIDECAR_STATUS,
+                        json!({ "tabId": "tab-1", "payload": { "status": "error", "message": err } }),
+                    );
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![ipc::ipc_invoke])
