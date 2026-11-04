@@ -137,17 +137,26 @@ fn event_payload(shape: PayloadShape, frame_type: &str, tab: &TabId, frame: Valu
 /// Route one sidecar frame: responses wake their waiter, everything else reaches the renderer.
 fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
     let state = app.state::<AppState>();
-    if frame.get("id").is_some() {
-        if let Some(client) = state.clients.lock().get(tab).cloned() {
-            client.on_response(&frame);
-        }
-        return;
-    }
     let frame_type = frame
         .get("type")
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_owned();
+    if frame_type == "response" {
+        if let Some(client) = state.clients.lock().get(tab).cloned() {
+            client.on_response(&frame);
+        }
+        return;
+    }
+    // Requests raised by a sidecar keep their origin tab so the reply goes back there.
+    if matches!(
+        frame_type.as_str(),
+        "extension_ui_request" | "host_tool_call" | "host_uri_request"
+    ) {
+        if let Some(id) = frame.get("id").and_then(Value::as_str) {
+            state.pool.register_request(id, tab);
+        }
+    }
 
     if frame_type == "ready" {
         state.ready_tabs.lock().insert(tab.clone());

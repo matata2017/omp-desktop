@@ -75,7 +75,7 @@
 | 代码块：highlight.js 懒加载、字符上限、行号、复制 | must | reuse | todo |
 | 工具调用卡：实时 running 卡、结果回填、过程分组折叠 | must | reuse | todo |
 | 虚拟化 transcript：稳定行 key、贴底跟随、滚动位置恢复、游标分页 | must | reuse | todo |
-| 扩展 UI 与工具审批对话框：select/confirm/input/editor/open_url、超时倒计时、审批样式 | must | reuse | todo |
+| 扩展 UI 与工具审批对话框：select/confirm/input/editor/open_url、超时倒计时、审批样式 | must | reuse | wip（sidecar 请求帧不再被当响应丢弃；回复按来源 tab 回送 `extension-ui:respond`/`host-tool:*`/`host-uri:result`；需扩展实测） |
 | 思考块：折叠、实时时长、level 标注 | should | reuse | todo |
 | Markdown 增强：KaTeX 公式（`$…$` / `$$…$$`、美元价格守卫）与 Mermaid 图（懒加载、主题、SVG 消毒、失败回退源码） | should | reuse | todo |
 | 图片附件：粘贴/拖拽图片转 ImageContent 并在 composer 预览 | should | reuse | todo |
@@ -92,7 +92,7 @@
 |---|---|---|---|
 | 工作区文件树：`fs:list` 深度默认 8（上限 16）、总文件数 2000（上限 20000）、跳过 `.git`/`node_modules` 等 | should | rust | todo |
 | 文件预览与 @mention 插入：markdown/代码渲染、默认 200 KB 截断（上限 2 MB）、按行定位、图片 data URL | should | hybrid | todo |
-| 打开/在文件管理器中显示/系统编辑器，路径右键菜单 | should | plugin | todo |
+| 打开/在文件管理器中显示/系统编辑器，路径右键菜单 | should | plugin | wip（`system:open-path`/`reveal-path`/`resolve-paths` 已通；系统编辑器与右键菜单未做） |
 | Git 变更视图：仓库状态、逐文件 diff、working tree 自动刷新 | should | hybrid | todo |
 | 多根工作区目录：列/加/删目录并重置会话工作区 | should | rust | todo |
 
@@ -161,7 +161,7 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | todo |
-| GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | should | hybrid | todo |
+| GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | should | hybrid | wip（`prefs:get/set` + `prefs:update-launch-profile` 已通，落 `prefs.json`；其余偏好项未接） |
 | 审批模式：always-ask / always-ask-cached / write / yolo，随 spawn argv 生效 | should | hybrid | todo |
 | 运行时开关：steering / follow-up / interrupt 模式、auto-compaction、auto-retry | should | reuse | todo |
 | 管理页：Security 扫描、Skills 启用/编辑、SSH host 增删改测、Updates 版本与检查 | could | reuse | todo |
@@ -170,7 +170,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 统计仪表盘外壳：10 个路由、1h/24h/7d/30d/90d/all、手动 sync、打开时静默同步 | should | reuse | todo |
+| 统计仪表盘外壳：10 个路由、1h/24h/7d/30d/90d/all、手动 sync、打开时静默同步 | should | reuse | wip（`stats:url` 返回 unavailable、`stats:fetch` 未接；统计服务未实现） |
 | Overview 路由 | should | reuse | todo |
 | Models 路由（模型维度 token/cost/速度） | should | reuse | todo |
 | 统计服务托管：`omp stats --host 127.0.0.1 --port 0 --no-open`、ANSI 剥壳取端口、指数退避重启 | should | rust | todo |
@@ -214,7 +214,7 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | 内置主题：12 套命名主题 + system 跟随系统，119 个 `--omp-*` token 全量写入 | should | reuse | todo |
-| 自定义主题目录：`~/.omp/gui/themes/*.json`，extends/tokens 校验、热更新、错误提示 | could | hybrid | todo |
+| 自定义主题目录：`~/.omp/gui/themes/*.json`，extends/tokens 校验、热更新、错误提示 | could | hybrid | wip（`themes:list`/`themes:open-folder` 已通，含解析错误字段；热更新事件未做） |
 | Agent/插件主题叠加与首帧引导：follow agent theme、终端调色板、插件 token overlay、pre-paint | could | reuse | todo |
 
 ### tools

@@ -236,6 +236,11 @@ impl<H: SidecarHandle> SidecarPool<H> {
         self.requests.lock().remove(request_id)
     }
 
+    /// Look up the tab a request belongs to without consuming the route.
+    pub fn request_owner(&self, request_id: &str) -> Option<TabId> {
+        self.requests.lock().get(request_id).cloned()
+    }
+
     pub fn pending_request_count(&self) -> usize {
         self.requests.lock().len()
     }

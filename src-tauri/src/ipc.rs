@@ -69,6 +69,24 @@ pub async fn ipc_invoke(
                 .map_err(|e| e.to_string())
         }
 
+        // ---- Side-channel replies (extension UI / host tool / host URI) ------------------
+        "extension-ui:respond" => {
+            route_side_channel(&state, &payload, "response", true)?;
+            Ok(Value::Null)
+        }
+        "host-tool:result" => {
+            route_side_channel(&state, &payload, "result", true)?;
+            Ok(Value::Null)
+        }
+        "host-tool:update" => {
+            route_side_channel(&state, &payload, "update", false)?;
+            Ok(Value::Null)
+        }
+        "host-uri:result" => {
+            route_side_channel(&state, &payload, "result", true)?;
+            Ok(Value::Null)
+        }
+
         // ---- Tabs -----------------------------------------------------------------------
         "tab:get-all" => {
             let active = state.active_tab();
@@ -347,8 +365,222 @@ pub async fn ipc_invoke(
         "runtime:log-path" => Ok(json!(state.data_dir.join("runtime.log").to_string_lossy())),
         "log:snapshot" => Ok(json!({ "lines": [] })),
 
+        // ---- Paths, themes, preferences, workspace ---------------------------------------
+        "system:open-path" => open_path_in_os(&state, &payload, false),
+        "system:reveal-path" => open_path_in_os(&state, &payload, true),
+        "system:resolve-paths" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
+            let cwd = tab_cwd(&state, tab.as_ref());
+            let paths = payload
+                .get("paths")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let resolved: Vec<Value> = paths
+                .iter()
+                .filter_map(|entry| {
+                    let raw = entry.as_str()?;
+                    let candidate = if Path::new(raw).is_absolute() {
+                        PathBuf::from(raw)
+                    } else {
+                        cwd.join(raw)
+                    };
+                    let meta = fs::metadata(&candidate).ok()?;
+                    let kind = if meta.is_dir() { "directory" } else { "file" };
+                    let mut item = json!({
+                        "absolutePath": candidate.to_string_lossy(),
+                        "kind": kind,
+                    });
+                    if let Ok(relative) = candidate.strip_prefix(&cwd) {
+                        item["relativePath"] = json!(relative.to_string_lossy());
+                    }
+                    Some(item)
+                })
+                .collect();
+            Ok(json!(resolved))
+        }
+        "themes:list" => {
+            let dir = omp_core::home_dir().join(".omp").join("gui").join("themes");
+            let mut files = Vec::new();
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+                        continue;
+                    }
+                    let file_name = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    let id = path
+                        .file_stem()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .into_owned();
+                    let (data, error) = match fs::read_to_string(&path) {
+                        Ok(text) => match serde_json::from_str::<Value>(&text) {
+                            Ok(value) => (Some(value), None),
+                            Err(err) => (None, Some(err.to_string())),
+                        },
+                        Err(err) => (None, Some(err.to_string())),
+                    };
+                    files.push(json!({
+                        "id": id,
+                        "fileName": file_name,
+                        "data": data,
+                        "error": error,
+                    }));
+                }
+            }
+            Ok(json!({ "dir": dir.to_string_lossy(), "files": files }))
+        }
+        "themes:open-folder" => {
+            let dir = omp_core::home_dir().join(".omp").join("gui").join("themes");
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            open_in_os(&dir, false)?;
+            Ok(json!({ "ok": true, "resolvedPath": dir.to_string_lossy() }))
+        }
+        "prefs:update-launch-profile" => {
+            let cwd = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let patch = payload.get("patch").cloned().unwrap_or_else(|| json!({}));
+            let path = state.data_dir.join("prefs.json");
+            let mut prefs = read_json_or(&path, json!({}));
+            let mut profiles = prefs
+                .get("launchProfiles")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let profile = profiles.get(&cwd).cloned().unwrap_or_else(|| json!({}));
+            let profile = merge_json(profile, patch);
+            profiles[&cwd] = profile.clone();
+            prefs["launchProfiles"] = profiles;
+            write_json(&path, &prefs)?;
+            Ok(profile)
+        }
+        "sidecar:default-workspace" => {
+            let dir = omp_core::home_dir().join(".omp").join("work");
+            fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            Ok(json!(dir.to_string_lossy()))
+        }
+        "stats:url" => Ok(json!({ "url": Value::Null, "unavailable": true })),
+        "stats:fetch" => Err("stats server not running".to_owned()),
+        "runtime:error-report" => {
+            append_log(
+                &state.data_dir.join("runtime.log"),
+                &format!("renderer error: {payload}\n"),
+            );
+            Ok(Value::Null)
+        }
+        "runtime:log-tail" => {
+            let max = payload
+                .get("maxLines")
+                .and_then(Value::as_u64)
+                .unwrap_or(200) as usize;
+            let text = fs::read_to_string(state.data_dir.join("runtime.log")).unwrap_or_default();
+            let mut lines: Vec<String> = text
+                .lines()
+                .rev()
+                .take(max)
+                .map(str::to_owned)
+                .collect();
+            lines.reverse();
+            Ok(json!(lines))
+        }
+        "tray:state-push" => {
+            let path = state.data_dir.join("prefs.json");
+            let mut prefs = read_json_or(&path, json!({}));
+            prefs["trayState"] = payload.clone();
+            write_json(&path, &prefs)?;
+            Ok(Value::Null)
+        }
+        "progress:set" => Ok(Value::Null),
+        "session:consume-pending" => Ok(Value::Null),
+        "session:open-new-window" => Ok(json!(false)),
+
         other => Err(format!("unknown channel: {other}")),
     }
+}
+
+/// Workspace root of a tab, falling back to the window's cwd.
+fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
+    tab.and_then(|id| state.tab_cwds.lock().get(id).cloned())
+        .unwrap_or_else(|| state.cwd.clone())
+}
+
+/// Open a path with the OS file manager; `reveal` selects it inside its folder.
+fn open_in_os(path: &Path, reveal: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = std::process::Command::new("explorer.exe");
+        if reveal {
+            command.arg(format!("/select,{}", path.display()));
+        } else {
+            command.arg(path);
+        }
+        command.spawn().map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+fn open_path_in_os(state: &AppState, payload: &Value, reveal: bool) -> Result<Value, String> {
+    let Some(raw) = payload.get("path").and_then(Value::as_str) else {
+        return Err("path is required".to_owned());
+    };
+    let candidate = if Path::new(raw).is_absolute() {
+        PathBuf::from(raw)
+    } else {
+        state.cwd.join(raw)
+    };
+    if !candidate.exists() {
+        return Ok(json!({ "ok": false, "error": "path does not exist" }));
+    }
+    open_in_os(&candidate, reveal)?;
+    Ok(json!({ "ok": true, "resolvedPath": candidate.to_string_lossy() }))
+}
+
+fn append_log(path: &Path, line: &str) {
+    if let Ok(mut file) = fs::OpenOptions::new().create(true).append(true).open(path) {
+        use std::io::Write;
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
+/// Send a side-channel reply back to the sidecar that raised the request.
+fn route_side_channel(
+    state: &AppState,
+    payload: &Value,
+    key: &str,
+    unregister: bool,
+) -> Result<(), String> {
+    let Some(frame) = payload.get(key) else {
+        return Err(format!("missing {key}"));
+    };
+    let request_id = frame.get("id").and_then(Value::as_str).unwrap_or("");
+    let owner = if unregister {
+        state.pool.take_request(request_id)
+    } else {
+        state.pool.request_owner(request_id)
+    };
+    let tab = owner.unwrap_or_else(|| state.active_tab());
+    state.pool.dispatch(&tab, frame).map_err(|e| e.to_string())
 }
 
 fn read_json_or(path: &Path, fallback: Value) -> Value {
