@@ -3407,9 +3407,11 @@ name = "romp-desktop"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "chrono",
  "omp-agent",
  "omp-core",
  "omp-rpc",
+ "omp-scheduler",
  "omp-session",
  "omp-stats",
  "parking_lot 0.13.0",

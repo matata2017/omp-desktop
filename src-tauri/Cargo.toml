@@ -19,9 +19,11 @@ omp-session = { path = "../crates/omp-session" }
 omp-rpc = { path = "../crates/omp-rpc" }
 omp-agent = { path = "../crates/omp-agent" }
 omp-stats = { path = "../crates/omp-stats" }
+omp-scheduler = { path = "../crates/omp-scheduler" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
+chrono = { workspace = true }
 base64 = { workspace = true }
 tokio = { workspace = true }
 parking_lot = { workspace = true }

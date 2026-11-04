@@ -5,6 +5,7 @@ pub mod builtin_providers;
 pub mod editor;
 pub mod ipc;
 pub mod models;
+pub mod scheduler;
 pub mod tab_layout;
 
 use std::collections::{HashMap, HashSet};
@@ -72,6 +73,9 @@ pub struct AppState {
     pub bench: crate::bench::BenchRunner,
     /// Lazily-opened FTS index over what was said in sessions (`conversations:search`).
     pub conversations: Mutex<Option<Arc<omp_session::conversation::ConversationIndex>>>,
+    /// Scheduled tasks: store opened lazily on first use, plus the live-run registry.
+    pub scheduler: Mutex<Option<Arc<omp_scheduler::TaskStore>>>,
+    pub scheduler_runs: crate::scheduler::SchedulerService,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -649,6 +653,8 @@ pub fn run() {
                 stats_client: Mutex::new(None),
                 bench: crate::bench::BenchRunner::new(),
                 conversations: Mutex::new(None),
+                scheduler: Mutex::new(None),
+                scheduler_runs: crate::scheduler::SchedulerService::new(),
                 next_tab: AtomicU64::new(tab_count + 1),
                 cwd: cwd.clone(),
             };

@@ -652,6 +652,176 @@ pub async fn ipc_invoke(
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
         }
 
+        // ---- scheduled tasks ------------------------------------------------------------
+        "scheduler:get-snapshot" => {
+            let store = scheduler_store(&state)?;
+            let tasks = store.list(true).map_err(|e| e.to_string())?;
+            let mut runs: Vec<Value> = Vec::new();
+            for task in &tasks {
+                let task_id = task.get("id").and_then(Value::as_str).unwrap_or_default();
+                if let Ok(mut task_runs) = store.runs(task_id, 10) {
+                    runs.append(&mut task_runs);
+                }
+            }
+            runs.truncate(50);
+            let review_count = runs
+                .iter()
+                .filter(|run| run.get("status").and_then(Value::as_str) == Some("review"))
+                .count();
+            Ok(json!({
+                "tasks": tasks,
+                "runs": runs,
+                "paused": state.scheduler_runs.is_paused(),
+                "health": { "state": "ok", "heartbeatAt": chrono::Utc::now().timestamp_millis(), "nextFireAt": Value::Null },
+                "limits": { "maxConcurrent": 2, "maxPerDay": 100, "maxRuntimeMs": 900_000 },
+                "reviewCount": review_count,
+                "live": state.scheduler_runs.running(),
+            }))
+        }
+        "scheduler:create" => {
+            let draft = payload.get("draft").cloned().unwrap_or(payload.clone());
+            let store = scheduler_store(&state)?;
+            let id = store.create(&draft).map_err(|e| e.to_string())?;
+            Ok(json!({ "id": id, "problems": [] }))
+        }
+        "scheduler:update" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "update requires a taskId".to_owned())?;
+            let patch = payload.get("config").cloned().unwrap_or_else(|| json!({}));
+            let store = scheduler_store(&state)?;
+            let revision = store.update(id, &patch).map_err(|e| e.to_string())?;
+            Ok(json!({ "revision": revision, "problems": [] }))
+        }
+        "scheduler:set-enabled" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "set-enabled requires a taskId".to_owned())?;
+            let enabled = payload.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+            scheduler_store(&state)?.set_enabled(id, enabled).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
+        "scheduler:archive" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "archive requires a taskId".to_owned())?;
+            scheduler_store(&state)?.archive(id).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
+        "scheduler:delete" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "delete requires a taskId".to_owned())?;
+            scheduler_store(&state)?.delete(id).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
+        "scheduler:task-runs" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "task-runs requires taskId".to_owned())?;
+            let limit = payload.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+            Ok(json!(scheduler_store(&state)?.runs(id, limit).map_err(|e| e.to_string())?))
+        }
+        "scheduler:revisions" => {
+            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "revisions requires taskId".to_owned())?;
+            Ok(json!(scheduler_store(&state)?.revisions(id).map_err(|e| e.to_string())?))
+        }
+        "scheduler:set-paused" => {
+            let paused = payload.get("paused").and_then(Value::as_bool).unwrap_or(false);
+            state.scheduler_runs.set_paused(paused);
+            Ok(Value::Null)
+        }
+        "scheduler:cancel-run" => {
+            let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
+            Ok(json!(state.scheduler_runs.cancel(run_id)))
+        }
+        "scheduler:insights" => Ok(json!({
+            "successRate": Value::Null,
+            "runs": 0,
+            "failures": 0,
+            "averageCost": Value::Null,
+        })),
+        "scheduler:get-notices" => Ok(json!([])),
+        "scheduler:mark-notices-read" => Ok(Value::Null),
+        "scheduler:get-run" => {
+            let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
+            let store = scheduler_store(&state)?;
+            let tasks = store.list(true).map_err(|e| e.to_string())?;
+            for task in tasks {
+                let task_id = task.get("id").and_then(Value::as_str).unwrap_or_default();
+                if let Ok(runs) = store.runs(task_id, 200)
+                    && let Some(run) = runs
+                        .into_iter()
+                        .find(|r| r.get("id").and_then(Value::as_str) == Some(run_id))
+                {
+                    return Ok(run);
+                }
+            }
+            Ok(Value::Null)
+        }
+        "scheduler:run-now" => {
+            let task_id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "run-now requires taskId".to_owned())?;
+            let store = scheduler_store(&state)?;
+            let tasks = store.list(true).map_err(|e| e.to_string())?;
+            let task = tasks
+                .into_iter()
+                .find(|t| t.get("id").and_then(Value::as_str) == Some(task_id))
+                .ok_or_else(|| format!("unknown task: {task_id}"))?;
+            let policy = task.get("tools").and_then(Value::as_str).unwrap_or("read_only");
+            let model = task.get("model").and_then(Value::as_str);
+            let prompt = task.get("prompt").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let run_cwd = task
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+                .unwrap_or_else(|| state.cwd.clone());
+            let binary = state
+                .sidecar_binary
+                .clone()
+                .ok_or_else(|| "Built-in omp not found".to_owned())?;
+            let run_id = state.scheduler_runs.next_run_id();
+            let session_dir = crate::scheduler::run_session_dir(&state.data_dir, task_id, &run_id);
+            std::fs::create_dir_all(&session_dir).map_err(|e| e.to_string())?;
+            let user_flags: Vec<String> = Vec::new();
+            let args = crate::scheduler::run_argv(policy, model, &session_dir, &user_flags)
+                .map_err(|e| e.to_string())?;
+            let mut command = tokio::process::Command::new(&binary);
+            command
+                .args(&args)
+                .current_dir(&run_cwd)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .env("PI_NOTIFICATIONS", "off");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                command.as_std_mut().creation_flags(0x0800_0000);
+            }
+            let mut child = command.spawn().map_err(|e| e.to_string())?;
+            if let Some(stdin) = child.stdin.as_mut() {
+                use tokio::io::AsyncWriteExt;
+                let frame = json!({ "type": "prompt", "message": prompt }).to_string() + "\n";
+                let _ = stdin.write_all(frame.as_bytes()).await;
+                let _ = stdin.flush().await;
+            }
+            let started_at = chrono::Utc::now().timestamp_millis();
+            store
+                .record_run(&json!({
+                    "id": run_id,
+                    "taskId": task_id,
+                    "status": "running",
+                    "startedAt": started_at,
+                    "sessionPath": session_dir.to_string_lossy(),
+                }))
+                .map_err(|e| e.to_string())?;
+            state.scheduler_runs.track(crate::scheduler::LiveRun {
+                run_id: run_id.clone(),
+                task_id: task_id.to_owned(),
+                child,
+                started_at,
+            });
+            Ok(json!({
+                "id": run_id,
+                "taskId": task_id,
+                "status": "running",
+                "startedAt": started_at,
+            }))
+        }
+
         // ---- conversation search ---------------------------------------------------------
         "conversations:search" => {
             let query = payload
@@ -1023,6 +1193,18 @@ fn dialog_filters(payload: &Value) -> Vec<(String, Vec<String>)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Open the scheduler database on first use; an unreadable one disables the feature rather than
+/// blocking the whole app.
+fn scheduler_store(state: &AppState) -> Result<Arc<omp_scheduler::TaskStore>, String> {
+    if let Some(store) = state.scheduler.lock().clone() {
+        return Ok(store);
+    }
+    let path = state.data_dir.join("scheduler.db");
+    let store = Arc::new(omp_scheduler::TaskStore::open(&path).map_err(|e| e.to_string())?);
+    *state.scheduler.lock() = Some(store.clone());
+    Ok(store)
 }
 
 fn read_json_or(path: &Path, fallback: Value) -> Value {
