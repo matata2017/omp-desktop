@@ -496,6 +496,24 @@ pub async fn ipc_invoke(
             fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             Ok(json!(dir.to_string_lossy()))
         }
+        // ---- Window recording ------------------------------------------------------------
+        "recorder:save" => {
+            let path = payload
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "recorder:save requires a path".to_owned())?;
+            let data = payload
+                .get("data")
+                .ok_or_else(|| "recorder:save requires data".to_owned())?;
+            match decode_bytes(data) {
+                Ok(bytes) => match std::fs::write(path, bytes) {
+                    Ok(()) => Ok(json!({ "ok": true })),
+                    Err(err) => Ok(json!({ "ok": false, "error": err.to_string() })),
+                },
+                Err(err) => Ok(json!({ "ok": false, "error": err })),
+            }
+        }
+
         // ---- models.yml provider editor --------------------------------------------------
         // ---- Native dialogs, clipboard, notifications ------------------------------------
         "system:save-dialog" => {
@@ -551,7 +569,13 @@ pub async fn ipc_invoke(
             })
             .await
             .map_err(|e| e.to_string())
-            .map(|paths| json!(paths))
+            .map(|paths: Vec<String>| {
+                if paths.is_empty() {
+                    Value::Null
+                } else {
+                    json!(paths)
+                }
+            })
         }
         "system:clipboard-read" => {
             use tauri_plugin_clipboard_manager::ClipboardExt;
@@ -849,6 +873,29 @@ fn route_side_channel(
     state.pool.dispatch(&tab, frame).map_err(|e| e.to_string())
 }
 
+/// Bytes crossing the bridge arrive either as a JSON number array (what `ArrayBuffer` becomes
+/// after `invoke` serialisation) or as base64. Accept both; anything else is a hard error.
+fn decode_bytes(value: &Value) -> Result<Vec<u8>, String> {
+    if let Some(text) = value.as_str() {
+        use base64::Engine as _;
+        return base64::engine::general_purpose::STANDARD
+            .decode(text)
+            .map_err(|e| format!("invalid base64 payload: {e}"));
+    }
+    let Some(items) = value.as_array() else {
+        return Err("recorder:save data must be a byte array or a base64 string".to_owned());
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for item in items {
+        let byte = item
+            .as_u64()
+            .filter(|b| *b <= 255)
+            .ok_or_else(|| "recorder:save data contains a non-byte value".to_owned())?;
+        out.push(byte as u8);
+    }
+    Ok(out)
+}
+
 /// `[{ name, extensions: string[] }]` as the dialog plugin wants it.
 fn dialog_filters(payload: &Value) -> Vec<(String, Vec<String>)> {
     payload
@@ -1015,6 +1062,23 @@ mod tests {
         assert_eq!(resolve_in(&cwd, "a/b.txt"), PathBuf::from("D:/w").join("a/b.txt"));
         let absolute = resolve_in(&cwd, "C:/x/y.txt");
         assert!(absolute.is_absolute());
+    }
+
+    #[test]
+    fn decode_bytes_accepts_arrays_and_base64() {
+        assert_eq!(
+            decode_bytes(&json!([0, 1, 255])).unwrap(),
+            vec![0u8, 1, 255]
+        );
+        assert_eq!(decode_bytes(&json!("AQID")).unwrap(), vec![1u8, 2, 3]);
+    }
+
+    #[test]
+    fn decode_bytes_rejects_other_shapes() {
+        assert!(decode_bytes(&json!([256])).is_err());
+        assert!(decode_bytes(&json!([-1])).is_err());
+        assert!(decode_bytes(&json!({ "length": 2 })).is_err());
+        assert!(decode_bytes(&json!("not base64!!")).is_err());
     }
 
     #[test]

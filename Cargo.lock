@@ -3164,6 +3164,7 @@ dependencies = [
 name = "romp-desktop"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "omp-agent",
  "omp-core",
  "omp-rpc",

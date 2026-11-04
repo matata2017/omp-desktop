@@ -188,7 +188,7 @@
 | `omp://` 深链 + 单实例锁：`new-session` / `switch-session` | should | plugin | todo |
 | 窗口几何持久化：多显示器可达性修正、多窗口级联、最大化状态 | should | rust | todo |
 | 退出守卫：有运行中会话/定时任务时确认；`app:quit` 是唯一退出路径 | should | rust | todo |
-| 系统集成：桌面通知、打开/保存对话框、剪贴板读取、openExternal、录制文件落盘 | must | plugin | wip：`system:notify` / `system:clipboard-read` / `system:save-dialog` / `system:open-dialog` / `system:open-external` 已接（clipboard-manager + notification 插件，capabilities 已加）。CDP 实测 clipboardRead 返回 260 字符、notify 返回 ok、system.info=windows/x86_64；两个对话框只做了编译期接线，未人工点过（会阻塞等用户选择）；`recorder:save` 未做 |
+| 系统集成：桌面通知、打开/保存对话框、剪贴板读取、openExternal、录制文件落盘 | must | plugin | wip（4/5 已验证）：`system:notify` / `system:clipboard-read` / `system:open-external` / `recorder:save` 已接并实测（CDP：clipboardRead 260 字符、notify ok、recorderSave 写入 `[1,2,3,250]` 校验通过，字节数组与 base64 两种载荷都有单测）；`system:save-dialog` / `system:open-dialog` 已接（blocking 变体跑在 spawn_blocking，取消返回 null），但需要人工点一次原生选择器才能确认 |
 | 命令面板：⌘K 搜索、分类、子菜单、prompt 透传、TUI-only 标记不可用 | should | reuse | todo |
 | 自动更新：4h 轮询、manual/automatic 两模式、下载/应用、GitHub releases 源 | could | plugin | todo |
 
