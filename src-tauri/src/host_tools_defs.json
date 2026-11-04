@@ -1,0 +1,157 @@
+[
+  {
+    "name": "schedule_task",
+    "label": "Schedule task",
+    "description": "Schedule a task: work omp should repeat on a schedule (or do once, later) without the user starting it, such as \"every weekday at 9, check the CI dashboard and summarize failures\". Use it only when the user asks for recurring or later work. The task is created as soon as you call this; the result tells you when it first runs, or what to fix.\r\n\r\nWrite `prompt` as complete instructions for a fresh session with no memory of this conversation: say what to look at, what to do, and what a good result is. Pick exactly one schedule:\r\n\r\n- `scheduleKind: \"cron\"` with a five-field `cron` expression (`minute hour day month weekday`) in the user's local time, e.g. `0 9 * * 1-5`.\r\n- `scheduleKind: \"interval\"` with `everyMinutes` (at least 5).\r\n- `scheduleKind: \"once\"` with `at` as an ISO 8601 date-time.\r\n\r\nPick how far each run goes with `depth`; a run judges for itself, round by round, when it has gone far enough:\r\n\r\n- `goal`: the task has an outcome to reach (fix, update, write, get something done). Each run keeps working until the outcome is reached and checked, instead of stopping at a plan or a list of next steps.\r\n- `research`: the task is to find out, compare or investigate. Each run works in `rounds` rounds (0 means 3; up to 6 for broad questions), each digging deeper than the last.\r\n- `check`: one pass covers it, such as watching a dashboard or summarizing what changed.\r\n\r\nFill the fields the other kinds use with an empty string or 0. Leave `model` empty to run on the workspace's default model; set it to a `provider/id` only when the user names a model. Runs are read-only. Each call creates a new task, so never call it again to change one you already scheduled: use manage_scheduled_tasks.",
+    "loadMode": "essential",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Short name for the task, under 60 characters."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "Complete instructions for each run."
+        },
+        "scheduleKind": {
+          "type": "string",
+          "enum": [
+            "cron",
+            "interval",
+            "once"
+          ]
+        },
+        "cron": {
+          "type": "string",
+          "description": "Five-field cron in the user's local time, or empty."
+        },
+        "everyMinutes": {
+          "type": "number",
+          "description": "Interval in minutes (at least 5), or 0."
+        },
+        "at": {
+          "type": "string",
+          "description": "ISO 8601 date-time for a one-off run, or empty."
+        },
+        "model": {
+          "type": "string",
+          "description": "provider/id the user asked for, or empty for the default."
+        },
+        "depth": {
+          "type": "string",
+          "enum": [
+            "check",
+            "goal",
+            "research"
+          ],
+          "description": "How far each run goes: check (one pass), goal (work until done), research (several rounds, each deeper)."
+        },
+        "rounds": {
+          "type": "number",
+          "description": "Research rounds per run, 2 to 6, or 0 for 3; ignored for other depths."
+        }
+      },
+      "required": [
+        "title",
+        "prompt",
+        "scheduleKind",
+        "cron",
+        "everyMinutes",
+        "at",
+        "model",
+        "depth",
+        "rounds"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "manage_scheduled_tasks",
+    "label": "Manage scheduled tasks",
+    "description": "List, change, pause, resume or delete the scheduled tasks in this workspace when the user asks. Call `action: \"list\"` first for task ids; times are on the user's clock.\r\n\r\n- `update`: set the fields to change and leave the rest empty (`everyMinutes` 0). A new schedule takes `scheduleKind` with its `cron`, `everyMinutes` or `at`, as in schedule_task. `model` takes a `provider/id`, or `default` for the workspace default. `depth` (with `rounds` for research) changes how far each run goes; use it when the user finds runs too shallow or too long.\r\n- `pause` stops a task from running until `resume`.\r\n- `delete` stops it for good; its past runs stay in Scheduled Tasks.\r\n\r\nYou cannot change what a run may do: a read-only task stays read-only. Tell the user they can allow edits in Scheduled Tasks.",
+    "loadMode": "essential",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "list",
+            "update",
+            "pause",
+            "resume",
+            "delete"
+          ]
+        },
+        "taskId": {
+          "type": "string",
+          "description": "The task's id from list, or empty for list."
+        },
+        "title": {
+          "type": "string",
+          "description": "New title, or empty to keep it."
+        },
+        "prompt": {
+          "type": "string",
+          "description": "New instructions for each run, or empty to keep them."
+        },
+        "scheduleKind": {
+          "type": "string",
+          "enum": [
+            "",
+            "cron",
+            "interval",
+            "once"
+          ],
+          "description": "New schedule kind, or empty to keep the schedule."
+        },
+        "cron": {
+          "type": "string",
+          "description": "Five-field cron in the user's local time, or empty."
+        },
+        "everyMinutes": {
+          "type": "number",
+          "description": "Interval in minutes (at least 5), or 0."
+        },
+        "at": {
+          "type": "string",
+          "description": "ISO 8601 date-time for a one-off run, or empty."
+        },
+        "model": {
+          "type": "string",
+          "description": "provider/id, default for the workspace default, or empty to keep it."
+        },
+        "depth": {
+          "type": "string",
+          "enum": [
+            "",
+            "check",
+            "goal",
+            "research"
+          ],
+          "description": "How far each run goes, as in schedule_task, or empty to keep it."
+        },
+        "rounds": {
+          "type": "number",
+          "description": "Research rounds per run, 2 to 6, or 0 for 3; ignored for other depths."
+        }
+      },
+      "required": [
+        "action",
+        "taskId",
+        "title",
+        "prompt",
+        "scheduleKind",
+        "cron",
+        "everyMinutes",
+        "at",
+        "model",
+        "depth",
+        "rounds"
+      ],
+      "additionalProperties": false
+    }
+  }
+]

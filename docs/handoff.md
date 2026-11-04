@@ -1,6 +1,6 @@
 # 交接文档（handoff）
 
-最后更新：2026-11-04。目标：把 `nornzach/oh-my-pi-gui`（Electron 35 + React 19，v0.9.35，MIT）
+最后更新：2026-11-05。目标：把 `nornzach/oh-my-pi-gui`（Electron 35 + React 19，v0.9.35，MIT）
 的功能复刻成 Rust/Tauri 2 桌面应用 `Romp`（内部 crate 仍用 `omp-*` 指代上游协议），常驻内存与冷启优于 Electron 版。
 
 权威输入有四份，冲突时按此顺序：
@@ -18,10 +18,15 @@
 |---|---|---|
 | 0 | 工具链与镜像 | **完成**：Rust 1.99.1 + MSVC 14.44.35207 + Win11 SDK 26100 + bun 依赖；`scripts/dev.ps1` 可起窗 |
 | 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
-| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 65 项 Rust 测试 + 6 条协议探针全通过） |
-| 2 | Tauri 外壳 + `window.omp` shim | **完成**：Romp 起窗、状态 ready、会话列表、Inspector、完整 prompt→流式→工具卡→agent_end；终端帧已路由并实测 |
-| 3 | 会话 / 多标签 | **进行中**：原地 `switch_session`（Codex 式）、sessions:list/delete/rename/search、family 折叠、per-tab client/batcher、LRU 回收 |
-| 4–9 | 对话面、模型设置、统计、定时任务、终端面板 UI、浏览器、打包 | 未开始（浏览器是 GUI 内置 webview，不是接线活） |
+| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（6 条协议探针全 success，证明是 fork 版） |
+| 2 | Tauri 外壳 + `window.omp` shim | **完成**：起窗、ready、会话列表、完整 prompt→流式→工具卡→agent_end；终端帧路由实测 |
+| 3 | 会话 / 多标签 | **2/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、LRU 回收、**布局持久化 + 重启恢复**已完成；剩 phantom tab 定位、租约矩阵、归档/树/branch-fork |
+| 4 | 对话面与系统通道 | **4/5**：模型指示器、system 对话框/剪贴板/通知、`editor:open-external`、**会话搜索（FTS5）**已完成；剩会话树/分支/导出 |
+| 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
+| 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
+| 7 | 定时任务 | **3/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；剩通知/insights |
+| 8 | 终端与浏览器 | 0/4：终端面板视觉未确认；**browser webview host 未实现**（最大的剩余块） |
+| 9 | 打包 / 深链 / 托盘 / 性能 | 1/3：性能已实测写进 `docs/perf.md`；NSIS 未构建，深链/托盘未接 |
 | R | replica 侦察 | **完成** |
 
 ### 已验证的事实（不是推断）
@@ -30,7 +35,7 @@
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
 bun run test                                     → 186 files / 1571 passed
-cargo test --workspace                           → 65 passed（11 suites）
+cargo test --workspace                           → 142 passed（16 suites，0 failed）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
@@ -43,6 +48,16 @@ terminal_open 实测                                 → terminalId/pid 返回�
 fresh tab argv                                     → --mode rpc-ui --no-auto-resume（fork 已探针验证）
 switch_session 同 workspace                         → cancelled:false 且 sessionId 真的切换；跨 workspace 为 cancelled:true
 sessions:list / delete / rename / search             → CDP 实测通过；索引改为 32 KiB 头尾窗口 + (size,mtime) 缓存
+conversations:search                              → indexed:5；中文查询返回 3 会话；snippet 含 U+0001/U+0002 标记（CDP 验证，<mark> 高亮前提）
+models:*                                          → 首启阻塞弹窗与“无法读取自定义模型文件”消失；listProviders 返回配置项
+stats:url / stats:fetch                           → 服务 setup 即起（port=62574）；杀掉子进程后 329ms 自愈换端口
+stats 对账                                         → 同窗口 requests=32 / in=2,782,801 / out=40,291 与 stats.db 完全一致
+scheduler:*                                       → 建任务→列表(tools=read_only,rev=1)→update rev=2 且标题生效
+scheduler run 终态                                 → runNow→cancelRun→记录 status=cancelled + endedAt（不再永远 running）
+set_host_tools                                    → 用 parameters 字段返回 success:true（inputSchema 会被拒）
+tab 布局恢复                                       → 开 2 tab 重启后仍 2 tab、activeIndex 一致；tabs 按数字后缀排序
+app:quit                                          → 应用退出、D:\rust-omp 孤儿进程 0 个、runtime.log 无 panic
+性能（dev 构建）                                    → 冷启 137–321ms；1 tab 883–894MB；4 tab 1273MB；每 tab ≈235MB
 ```
 
 本机验证的关键启动修复：
@@ -62,7 +77,26 @@ sessions:list / delete / rename / search             → CDP 实测通过；索�
 
 ---
 
-## 2. 目录结构
+## 2. 本轮（2026-11-05）新增能力一览
+
+| 面 | 实现位置 | 验证方式 |
+|---|---|---|
+| 统计仪表盘 | `crates/omp-stats` + `stats:url`/`stats:fetch` | HTTP `/api/status` 200；与 `stats.db` 同窗口三项对账 |
+| Benchmark | `src-tauri/src/bench.rs` + `bench:run`/`bench:abort` | 四条拒绝路径 + abort 语义（**未跑真实 bench**） |
+| 定时任务存储 | `crates/omp-scheduler`（23 测试） | create→update rev 链→list 顺序、cron 边界 |
+| 定时任务运行 | `src-tauri/src/scheduler.rs` + `scheduler:*` | runNow→cancelRun→`cancelled`+`endedAt` |
+| 定时任务 host tools | `src-tauri/src/host_tools.rs` + `host_tools_defs.json` | `set_host_tools` 返回 `success:true` |
+| 跨会话搜索 | `crates/omp-session/src/conversation.rs` | `indexed:5`，中文查询 3 会话，分隔符穿过 IPC |
+| Tab 布局 | `src-tauri/src/tab_layout.rs` | 2 tab 重启恢复，activeIndex 一致 |
+| models.yml 编辑 | `src-tauri/src/models.rs` | 首启阻塞弹窗消失；内置 id 拒改；原子写无残留 |
+| 外部编辑器 | `src-tauri/src/editor.rs` | 3 单测（命令拆分、换行剥离、缺编辑器） |
+| system 通道 | `ipc.rs`（dialog/clipboard/notification/recorder） | clipboard 260 字符、notify ok、recorderSave 字节一致 |
+| argv 契约门 | `crates/omp-agent/tests/argv_caps.rs` | 5 条：三组能力矩阵 + 不可覆盖 + scheduled denylist |
+| 性能采样 | `scripts/measure-perf.ps1` + `docs/perf.md` | 冷启 137–321 ms；1 tab 883–894 MB；4 tab 1273 MB |
+
+---
+
+## 3. 目录结构
 
 ```
 crates/
@@ -72,22 +106,33 @@ crates/
                 pool.rs（tab→进程、deferStart、F-OWN 归属、F-UI-ORIGIN 回包路由）
   omp-rpc/examples/probe.rs    协议探针（Phase 1 验收）
   omp-session/  会话索引：32 KiB 头/尾窗口解析、标题/首条消息/计数/状态、(size,mtime) 缓存
+                conversation.rs：FTS5 trigram 跨会话搜索（追加式增量 + 64B 尾部校验）
+  omp-stats/    统计服务托管（`omp stats` 子进程 + ANSI 剥壳取端口 + RestartBudget + 存活校验）
+                与白名单客户端（17 路径 + `/api/request/:id`，`/api/sync` 只 POST）
+  omp-scheduler/ 定时任务存储：tasks/runs/revisions/meta 四表 + user_version 迁移 + 修订链
+                cron.rs：5 段 cron 解析（vixie day OR、DST、拒绝 6 段）
 scripts/         dev.ps1（注入 MSVC/PATH/OMP_SIDECAR + CDP 端口）、with-msvc.cmd、install-msvc.ps1
                  cdp-eval.mjs / cdp-cmd.mjs / measure-click.mjs（WebView2 9222 驱动）、capture-window.ps1
+                 measure-perf.ps1（进程树 RSS 按角色拆分）、extract-host-tools.mjs（从上游 TS 生成工具 schema）
 vitest.config.ts + scripts/test-locale.ts（上游缺，导致 268 个 locale 测试失败，已补）
-src-tauri/      lib.rs（状态/事件路由）ipc.rs（唯一命令 ipc_invoke）capabilities/ tauri.conf.json
+src-tauri/      lib.rs（状态/事件路由/优雅退出）ipc.rs（唯一命令 ipc_invoke，全通道 match）
+                models.rs（models.yml 读写）editor.rs（外部编辑器往返）bench.rs（`omp bench --json`）
+                scheduler.rs（运行 argv 策略 + 监督循环）host_tools.rs + host_tools_defs.json（agent 的定时任务工具）
+                tab_layout.rs（布局持久化）builtin_providers.rs（88 个内置 provider，生成）
 src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx、index.html、ChatStream.tsx（加载门）、use-session-switch.ts（原地切换）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
-docs/parity.md  复刻对照账本
+docs/parity.md  复刻对照账本（10 done / 24 wip / 101 todo）
+docs/perf.md    性能实测与口径（dev 构建，进程树口径）
+docs/architecture.md  架构决策
 .trellis/       Trellis 任务台账（01-tauri-shell 为本阶段任务）
 resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
 ```
 
 ---
 
-## 3. 关键设计决策
+## 4. 关键设计决策
 
 1. **Rust 只做传输**。命令与帧一律 `serde_json::Value`；2,600 行 wire 类型不重写，命令构造与响应
    解码留在 TS（`src/shared/rpc-client.ts` 原样复用）。Rust 只在必须解释载荷处持有小结构
@@ -116,10 +161,27 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
    ownership；`get_state` 返回的 `sessionFile` 用来记录 fresh tab 自己的会话，避免被回收后恢复成新会话。
 10. **事件形状有三种**（不是两种）：`{tabId,payload}`、`{request,tabId}`、终端的 `{tabId,frame}`。
     `src-tauri/src/lib.rs` 的 `event_payload()` 与单测锁住这三种。
+11. **定时任务的运行 argv 由代码控制**，不受用户 launch profile 影响：审批模式跟随任务的工具策略
+    （`read_only` → `--approval-mode always-ask --tools read,glob,grep,lsp,web_search,todo`、`workspace` → `write`、
+    `full` → `yolo`），并且 `--approval-mode/--yolo/--auto-approve/--plan-yolo/--tools/--no-tools/--model/--continue`
+    会从用户 flag 里剥掉。每个 run 有自己的 `--session-dir`，不可能续上交互会话。单测里塞了 yolo profile 验证。
+12. **run 必须有终态**。`run-now` 起进程后由监督循环读 stdout 到 `agent_end`/EOF/超时，再
+    `finish_run(status, report, endedAt)`；取消时先置标记再 kill，所以记成 `cancelled` 而不是 `failed`。
+    报告只从 `agent_end.messages` 取（`message_update` 是 delta，只带 role，取不到正文），`turn_end` 作兜底。
+13. **host tool 的定义必须是 `parameters`**，不是 `inputSchema`：sidecar 会拒 `Host tool "x" must provide a JSON
+    Schema object`。定义从上游 TS 用 `scripts/extract-host-tools.mjs` 生成到 `host_tools_defs.json`，Rust 用
+    `include_str!` 加载，避免手抄漂移。
+14. **退出必须同步清理**。`app:quit` 跑在 async runtime 上，在里面 `block_on` 会 panic
+    （"cannot block the current thread from within a runtime"）；改用 `StatsServer::terminate_now()`（同步 kill）。
+    关窗与退出都先 `bench.abort()` → 关所有 tab → 停 stats 再退；强杀仍会留孤儿（需 Job Object）。
+15. **tab 顺序不能靠 HashMap**。`pool.tabs()` 按 id 数字后缀排序（`tab-2` 在 `tab-10` 前），否则
+    `tab:get-all` 吐给渲染层的顺序随机，违背「acquisition order」契约。
+16. **布局持久化要在切 active 之后**：`tab:spawn` 先 `start_tab` 再设 active，persist 必须放最后，
+    否则存下的 `activeIndex` 指向旧 tab。
 
 ---
 
-## 4. 如何运行
+## 5. 如何运行
 
 ```bash
 # 前端依赖（已用 npmmirror，无需代理）
@@ -137,11 +199,20 @@ scripts\with-msvc.cmd cargo run -p omp-agent --example probe -- resources/omp.ex
 
 # 开发态起窗（推荐：注入 MSVC/PATH/OMP_SIDECAR，并开 WebView2 CDP 9222）
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
-#   等价手动：set OMP_SIDECAR=D:/ompgui/resources/omp.exe 后再 bunx tauri dev
+#   等价手动：$env:OMP_SIDECAR="D:\rust-omp\resources\omp.exe" 后 bunx tauri dev
+#   （dev.ps1 优先取仓库内 resources/omp.exe，找不到才回落到别的 checkout）
 
 # 驱动 UI（CDP，无需截图）
 node scripts/cdp-eval.mjs "await window.omp.tabs.list()"
 node scripts/measure-click.mjs "先看下当前项目"
+
+# 性能采样（进程树 RSS 按 app/webview2/sidecar/stats 拆分）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/measure-perf.ps1
+# 已起窗后只采样当前状态：
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/measure-perf.ps1 -SampleOnly -Label 4tabs
+
+# 从上游 TypeScript 重新生成 host tool schema（改完 .research 后跑）
+node scripts/extract-host-tools.mjs
 ```
 
 ### sidecar 二进制重建（`resources/omp.exe`，gitignored）
@@ -159,28 +230,29 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 ---
 
-## 5. 未完成与风险
+## 6. 未完成与风险
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| 多 tab 剩余 | spawn/close、per-tab client/batcher、上限 6 + LRU 回收已落地；布局持久化/多窗口未做 | 中 |
-| 空闲 sidecar 释放 | 现在只按上限 LRU 回收，租约矩阵（待审批/终端/浏览器/MCP/队列）未细分 | 中 |
-| 模型指示器 | composer 仍显示“选择模型”而 sidecar 实际有模型（`get_state.model` 有值）；renderer model store 未被灌入 | 中 |
-| 会话操作 | 重命名/删除/搜索已实测；归档、批量、运行中跳过、会话树/branch/fork 未接 | 中 |
-| phantom tab | 启动后偶发出现一个无人点击的 tab（07:51:40 的 pinrong tab-2）；来源未定位，会污染 UI 测量 | **高**（未解释） |
-| fresh tab 会话 | argv 已带 `--no-auto-resume`，但一次 `get_state` 仍报旧会话；根因未确认 | 中 |
-| 未实现通道 | 仍缺：scheduler:*、models:*、bench:*、system 对话框/剪贴板/通知、editor:open-external、conversations:search、updater:* | 低（可见但会缺功能） |
-| 终端面板 UI | 帧已路由且实测收到 `terminal_opened/output`；xterm 面板视觉未人工确认 | 低 |
-| 浏览器面板 | `browser:state`/`browser:key` 是 GUI 侧发出的，sidecar 只有 `browser_host_start/stop`；要实现内置 webview host，不是接线活 | 中 |
-| `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除：它 import main 进程的 `toAbsolutePath` | 低 |
-| 打包 | `bundle.resources` 映射到 `omp.exe`；`Romp.exe` 不再撞名；NSIS 未构建 | 低 |
-| 调试器 | codelldb 解到旧用户目录，`.omp/dap.json` 已写，未跑过断点 | 低 |
+| **浏览器面板** | `browser:state`/`browser:key` 是 GUI 侧状态；sidecar 只有 `browser_host_start/stop` 的 relay websocket。要实现内置 webview host（离屏 + CDP relay），是 Phase 8 最大的一块，不是接线活 | **高**（唯一整块缺失的用户面） |
+| phantom tab | 启动后偶发一个无人点击的 tab。来源日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session/tabs，`tab:spawn` 打完整 launch 形状），但本轮 8 次干净启动只出现 `tab-1`，**未复现** | 中（待复发） |
+| 空闲 sidecar 租约矩阵 | 只按上限 LRU 回收；待审批/终端/浏览器/MCP/队列这些"不能回收"的租约未细分 | 中 |
+| 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
+| provider 登录 | `login` RPC 走通用转发，但 OAuth 需要浏览器回调，未做端到端 | 中（需人工点） |
+| 定时任务通知/insights | `scheduler:get-notices` 返回空、insights 是空壳；run 终态与报告已闭环 | 低 |
+| 打包 | `bundle.resources` 映射 `omp.exe`；NSIS 未构建，`Romp.exe` 命名/图标/资源路径都未在真实安装包上验 | 中 |
+| 深链/托盘 | `omp://` 与托盘未接 | 低 |
+| 终端面板 UI | 帧路由已实测（`terminal_opened/output` 以 `{tabId,frame}` 到达），xterm 视觉未人工确认 | 低 |
+| vendor 契约门 | `argv_matches_capabilities` 已通过（5 条）；`stats_paths_match_vendor` / `rpc-types` 对账需要 fork 的 `packages/stats/src/server.ts` 与 `coding-agent/src/modes/rpc/rpc-types.ts`，本机没有 | 中 |
+| 调试器 | codelldb 已解到 `C:/Users/666/.omp/tools/codelldb/`，`.omp/dap.json` 已写，断点未跑 | 低 |
+| 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |
+| `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除（它 import main 进程的 `toAbsolutePath`） | 低 |
 | MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |
-| vitest 配置 | 原仓库缺 `vitest.config.ts` / `scripts/test-locale.ts` | 已修复；1571 测试通过 |
+| dev.ps1 端口占用 | 反复起停会留下 vite 占住 1420（`beforeDevCommand` 报错）。先杀端口再起 | 低 |
 
 ---
 
-## 6. 环境与网络（本机实测）
+## 7. 环境与网络（本机实测）
 
 - GitHub raw：`https://ghfast.top/https://raw.githubusercontent.com/...`（0.8 s）优先，jsDelivr 次之。
 - `git clone` 直连会被 reset；走 `-c http.proxy=http://127.0.0.1:7897` 最稳（镜像前缀也能 clone 但慢）。
@@ -191,29 +263,42 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 ---
 
-## 7. 建议的下一步顺序
+## 8. 建议的下一步顺序
 
-1. **先定位 phantom tab**：给 `tab:spawn` 加来源日志（cwd/sessionPath/调用方），确认启动后那个无人
-   tab 是谁开的；未定位前所有 UI 测量都不可信。
-2. **人工确认两处手感**：① 干净窗口里点同 workspace 会话，确认 tab 数不增、sessionId 切换、首屏内容出现；
-   ② 打开终端面板，确认 xterm 真的出字。
-3. **fresh tab 会话根因**：确认是 renderer 启动后切换，还是该 build 忽略 `--no-auto-resume`；必要时改用
-   上游 `tab-spawn.ts` 的 fresh 会话创建路径。
-4. **浏览器面板**：`browser:state`/`browser:key` 是 GUI 侧状态，需要实现内置 webview host
-   （sidecar 只提供 `browser_host_start/stop` 的 relay websocket）。
-5. **剩余通道**：`scheduler:*`、`models:*`、`bench:*`、system 对话框/剪贴板/通知、`updater:*`、
-   `conversations:search`（SQLite 索引）。
-6. **契约门**：`vendor/` 放 fork 的 `rpc-types.ts` 与 `stats/server.ts`，跑 `stats_paths_match_vendor`
-   与 `argv_matches_capabilities` 两个测试。
-7. Phase 4–9 按 `docs/parity.md` 逐 area 推进，每完成一条把该行状态从 `todo` 改成 `done` 并附证据。
+按价值排（`docs/parity.md` 是逐条账本，完成一条就改该行状态并附证据）：
+
+1. **浏览器 webview host**（Phase 8，最大一块）。契约：`browser:state` / `browser:key` 由 GUI 发出，
+   sidecar 只提供 `browser_host_start/stop` 的 relay websocket。要 Tauri 子 webview + 离屏休眠 +
+   CDP relay，且 agent 的 `browser_*` 工具要能驱动它、截图要能回传。这是唯一整块缺失的用户面。
+2. **NSIS 打包**（Phase 9）。一次 `cargo tauri build` 会同时暴露 `bundle.resources` 的 `omp.exe` 路径、
+   图标、`externalBin` 与产品名（`Romp.exe`）的问题，比逐个猜便宜。
+3. **定时任务通知 / insights**（Phase 7 收尾）：`scheduler:get-notices` 与 insights 目前是空壳。
+4. **phantom tab**（Phase 3）：日志已就位，等复发时看 `runtime.log` 的 `ensure_tab_started` /
+   `spawning sidecar` 两条来源记录即可定案，不需要再加 instrument。
+5. **sidecar 租约矩阵**（Phase 3）：待审批 / 终端 / 浏览器 / MCP / 队列这些"不能回收"的状态要挡住 LRU。
+6. **会话归档 / 树 / branch-fork / 导出**（Phase 3+4）。
+7. **provider 登录/登出**（Phase 5）：OAuth 需要浏览器回调，要先人工走一遍。
+8. **契约门**（Gates）：`vendor/` 放 fork 的 `rpc-types.ts` 与 `packages/stats/src/server.ts`，
+   跑 `stats_paths_match_vendor`。`argv_matches_capabilities` 已通过。
+
+### 本轮已闭环、无需再查的项
+
+- 同 workspace 点会话不新增 tab、sessionId 真的切换（`switched=true`，tabs 1→1）
+- fresh tab 会话隔离（tab-2 拿到全新 session 文件，`--no-auto-resume` 没被忽略）
+- 模型指示器（composer 显示 `group/never-stuck · 超高 · 快速`）
+- 设置页 schema 渲染 + `set_setting` 写路径（原值写回 `success:true`）
+- 命令面板（`get_available_commands` 87 KB 命令表已推送到渲染层）
+- 统计服务自愈（杀子进程后 329 ms 换端口）、同窗口数字与 `stats.db` 三项完全一致
+- 会话搜索 snippet 的 U+0001/U+0002 标记确实穿过 IPC 到达渲染层
+- 退出无 panic、0 孤儿
 
 ---
 
-## 8. Git 与许可
+## 9. Git 与许可
 
 - 远端：`git@github.com:matata2017/omp-desktop.git`（private），分支 `master`。
-- 今日快照 tag：`2026-11-04` —— Romp 0.1.0-dev（Tauri 外壳 + RPC 传输 + 会话索引 + 原地会话切换 + 终端帧路由 + 会话增删改查）。
-  该 tag 只记录当天进度，**未推送**；后续功能继续在 `master` 上推进。
+- 进度快照：`2026-11-04` tag（未推送）。`2026-11-05` 之后的推进全部在 `master` 上，
+  单日新增 12 个提交（stats / bench / scheduler / 会话搜索 / 布局恢复 / models / editor / system / argv 契约门）。
 - `.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、`resources/*.exe`、
   `.probe/`、`replica/screens/`、`src-tauri/gen/schemas/`，以及侦察期的 JSON/清单/zip 临时产物。
 - 本机 SSH 认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。

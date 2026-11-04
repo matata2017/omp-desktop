@@ -264,11 +264,27 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
         tracing::info!(tab = %tab, "sidecar ready");
         // Agent tabs get the scheduler tools; a chat tab cannot schedule work.
         let kind = state.tab_kinds.lock().get(tab).copied().unwrap_or(TabKind::Agent);
-        if kind == TabKind::Agent
-            && let Some(client) = state.clients.lock().get(tab).cloned()
-        {
-            let mut cmd = json!({ "type": "set_host_tools", "tools": crate::host_tools::definitions() });
-            let _ = client.fire(&mut cmd);
+        if kind == TabKind::Agent {
+            let host_tools = crate::host_tools::definitions();
+            let tab_for_tools = tab.clone();
+            if let Some(client) = state.clients.lock().get(tab).cloned() {
+                tauri::async_runtime::spawn(async move {
+                    let mut cmd = json!({ "type": "set_host_tools", "tools": host_tools });
+                    match client.command(&mut cmd, None).await {
+                        Ok(response) if response.get("success").and_then(Value::as_bool) == Some(true) => {
+                            tracing::info!(tab = %tab_for_tools, "host tools registered");
+                        }
+                        Ok(response) => {
+                            tracing::warn!(
+                                tab = %tab_for_tools,
+                                error = ?response.get("error"),
+                                "host tools rejected by the agent"
+                            );
+                        }
+                        Err(err) => tracing::warn!(tab = %tab_for_tools, %err, "host tools not registered"),
+                    }
+                });
+            }
         }
         let _ = app.emit(
             events::SIDECAR_STATUS,
@@ -293,7 +309,11 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            let cwd = state.cwd.clone();
+            let tool_ctx = crate::host_tools::ToolContext {
+                cwd: state.cwd.clone(),
+                now: chrono::Utc::now().timestamp_millis(),
+                time_zone: "Local".to_owned(),
+            };
             let app_for_reply = app.clone();
             let tab_for_reply = tab.clone();
             let store = {
@@ -302,7 +322,7 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
             };
             tauri::async_runtime::spawn(async move {
                 let (text, is_error) = match store {
-                    Some(store) => crate::host_tools::handle(&store, &tool, &args, &cwd),
+                    Some(store) => crate::host_tools::handle(&store, &tool, &args, &tool_ctx),
                     None => ("scheduler database unavailable".to_owned(), true),
                 };
                 let reply = json!({
