@@ -74,6 +74,34 @@ pub struct SpareSidecar {
     pub ready: Arc<std::sync::atomic::AtomicBool>,
 }
 
+/// Push a full tab snapshot; the renderer's tab store listens to `tab:status` and
+/// uses this status for the in-place switch guard.
+pub(crate) fn emit_tab_status(app: &AppHandle, state: &AppState, tab: &TabId) {
+    let active = state.active_tab();
+    let status = if state.ready_tabs.lock().contains(tab) { "ready" } else { "starting" };
+    let cwd = state
+        .tab_cwds
+        .lock()
+        .get(tab)
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| state.cwd.to_string_lossy().into_owned());
+    let kind = match state.tab_kinds.lock().get(tab).copied().unwrap_or(TabKind::Agent) {
+        TabKind::Chat => "chat",
+        TabKind::Agent => "agent",
+    };
+    let _ = app.emit(
+        events::TAB_STATUS,
+        json!({
+            "tabId": tab,
+            "cwd": cwd,
+            "status": status,
+            "active": tab == &active,
+            "visible": tab == &active,
+            "kind": kind,
+        }),
+    );
+}
+
 /// Per-tab sidecar activity, used to pick a victim when the sidecar cap is reached.
 #[derive(Debug, Clone, Default)]
 pub struct TabActivity {
@@ -209,6 +237,7 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
             events::SIDECAR_STATUS,
             json!({ "tabId": tab, "payload": { "status": "ready" } }),
         );
+        emit_tab_status(app, &state, tab);
         return;
     }
 
@@ -355,6 +384,7 @@ pub(crate) fn ensure_tab_started(
             "payload": { "status": "starting", "cwd": cwd.to_string_lossy() }
         }),
     );
+    emit_tab_status(app, state, tab);
     let resume = state.tab_sessions.lock().get(tab).cloned();
     let launch = LaunchOptions {
         cwd: cwd.clone(),
@@ -463,7 +493,8 @@ pub fn run() {
             };
             app.manage(state);
             app.state::<AppState>().pool.register_deferred(first_tab);
-            // Warm spare is implemented but disabled until adoption is verified end to end.
+            // Warm spare stays disabled: the sidecar cannot switch across workspaces,
+            // and same-workspace switches happen in place on the existing sidecar.
             // The sidecar starts when the renderer activates tab-1 (tab:set-active /
             // tab:set-view), so the ready event cannot race the renderer's subscription.
             Ok(())

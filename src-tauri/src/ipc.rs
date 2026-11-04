@@ -529,6 +529,7 @@ fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
             crate::events::SIDECAR_STATUS,
             json!({ "tabId": tab, "payload": { "status": "ready" } }),
         );
+        crate::emit_tab_status(app, state, tab);
     }
 }
 

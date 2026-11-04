@@ -38,9 +38,10 @@
 
 | 面 | 偏差 | 原因 | 影响 |
 |---|---|---|---|
-| `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 其余 renderer 文件除下表两项外字节级一致 |
+| `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 其余 renderer 文件除下表四项外字节级一致 |
 | `src/renderer/index.html` | CSP 增加 `ipc:`/`http://ipc.localhost`/`ws://localhost:*`；入口改 `/main.tsx`；`pre-paint.js` 改绝对路径 | Vite 与 Tauri 的 IPC 需要 | 无 |
 | `src/renderer/components/chat/ChatStream.tsx` | `awaitingTranscript` 增加“status ready 且 tabHasHistory 且 rows===0 且未流式”分支 | sidecar ready 早于首屏 `get_messages`，原逻辑会先渲染空会话页再显示历史（点击会话的三段式闪烁） | 变成“启动/加载骨架 → 内容”，不再闪“想做点什么?”；上游文件不再字节级一致 |
+| `src/renderer/hooks/use-session-switch.ts` | `canBrowseInPlace` 允许任何空闲、同 workspace/kind 的 tab 原地 `switch_session`（不再要求 blank/browsing） | Codex 式的常驻 agent 线程切换：点击侧栏不应每次新起 244MB sidecar | 同 workspace 点击不再新开 tab/进程；跨 workspace 仍新开；流式/草稿/审批期间不切换 |
 | `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
 | 内置浏览器 | Phase 8 前一律返回 `unknown channel: browser:*` | 子 webview + CDP 未实现 | Browser 面板在 UI 上会退化为错误提示 |
@@ -149,7 +150,7 @@
 |---|---|---|---|
 | 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | wip（`crates/omp-session` 改为 32 KiB 头 + 32 KiB 尾窗口解析、标题/头行/首条用户消息/尾计数与状态、按 (size,mtime) 缓存 4096 条；侧栏列表明细实测 ~90ms） |
 | 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | wip（workspace 分组、family 折叠已通：`SessionInfo.parentSessionPath` 已从 header `parentSession` 解析；pinned/archived 未接） |
-| 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | todo |
+| 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | wip（同 workspace 空闲 tab 现在原地 `switch_session`，不再新开进程；owner 去重、流式/草稿/审批守卫已测；跨 workspace 仍新开 tab；首屏 hydrate 速度待优化） |
 | 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | wip（delete/rename 已 CDP 实测：删除清文件+子目录、越界路径被拒；重命名改写标题槽 `source:user`；archive/batch/运行中跳过未做） |
 | 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | wip（多 token 命中已通；改为按 (size,mtime) 缓存搜索文本、单文件 8 MiB 上限、总 64 MiB 预算） |
 | 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | todo |

@@ -251,9 +251,10 @@ function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	if (session.cwd !== state.cwd && session.cwd !== tab.cwd) return false;
 	const composer = useComposerStore.getState();
 	if (composer.sending || composer.draft.trim() !== "" || composer.images.length > 0) return false;
-	if (tab.browsing) return true;
-	// Blank: hydrated (it has an id) with nothing in its transcript.
-	return state.sessionId !== "" && state.messageCount === 0 && useMessagesStore.getState().messages.length === 0;
+	// Idle, same-workspace tab: switch the resident sidecar onto the clicked
+	// session instead of booting a new process/tab (Codex-style thread switch).
+	// Streaming, compaction, pending switches and unsent input returned above.
+	return true;
 }
 
 /**

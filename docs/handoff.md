@@ -63,7 +63,7 @@ crates/
                 pool.rs（tab→进程、deferStart、F-OWN 归属、F-UI-ORIGIN 回包路由）
   omp-rpc/examples/probe.rs    协议探针（Phase 1 验收）
 src-tauri/      lib.rs（状态/事件路由）ipc.rs（唯一命令 ipc_invoke）capabilities/ tauri.conf.json
-src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx、index.html、ChatStream.tsx（transcript 加载门）
+src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx、index.html、ChatStream.tsx（加载门）、use-session-switch.ts（原地切换）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
@@ -191,4 +191,4 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | `.trellis/`、`.omp/skills/trellis-*` | `mindfold-ai/Trellis` 模板 | AGPL-3.0（`LICENSES/trellis-AGPL-3.0.txt`） |
 | `crates/`、`src-tauri/`、`src/bridge/`、`replica/`、`docs/` | 本工程 | MIT（`LICENSE`） |
 
-发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`（加载门），其余保持上游。
+发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`（加载门）、`use-session-switch.ts`（原地切换），其余保持上游。
