@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_dialog::DialogExt;
 use crate::{AppState, ensure_tab_started, start_tab};
 use omp_agent::argv::{LaunchOptions, TabKind};
 use omp_core::{TabId, WindowId};
@@ -496,6 +497,90 @@ pub async fn ipc_invoke(
             Ok(json!(dir.to_string_lossy()))
         }
         // ---- models.yml provider editor --------------------------------------------------
+        // ---- Native dialogs, clipboard, notifications ------------------------------------
+        "system:save-dialog" => {
+            let default_path = payload
+                .get("defaultPath")
+                .and_then(Value::as_str)
+                .filter(|p| !p.is_empty())
+                .map(str::to_owned);
+            let filters = dialog_filters(&payload);
+            let app_for_dialog = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut dialog = app_for_dialog.dialog().file();
+                if let Some(name) = default_path {
+                    dialog = dialog.set_file_name(name);
+                }
+                for (name, extensions) in filters {
+                    let refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+                    dialog = dialog.add_filter(name, &refs);
+                }
+                dialog
+                    .blocking_save_file()
+                    .map(|path| path.to_string())
+            })
+            .await
+            .map_err(|e| e.to_string())
+            .map(|path| json!(path))
+        }
+        "system:open-dialog" => {
+            let filters = dialog_filters(&payload);
+            let directory = payload
+                .get("options")
+                .and_then(|options| options.get("directory"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let app_for_dialog = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut dialog = app_for_dialog.dialog().file();
+                for (name, extensions) in filters {
+                    let refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
+                    dialog = dialog.add_filter(name, &refs);
+                }
+                if directory {
+                    dialog
+                        .blocking_pick_folder()
+                        .map(|path| vec![path.to_string()])
+                        .unwrap_or_default()
+                } else {
+                    dialog
+                        .blocking_pick_files()
+                        .map(|paths| paths.iter().map(|p| p.to_string()).collect())
+                        .unwrap_or_default()
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())
+            .map(|paths| json!(paths))
+        }
+        "system:clipboard-read" => {
+            use tauri_plugin_clipboard_manager::ClipboardExt;
+            app.clipboard()
+                .read_text()
+                .map(Value::String)
+                .map_err(|e| e.to_string())
+        }
+        "system:notify" => {
+            use tauri_plugin_notification::NotificationExt;
+            let title = payload
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or("omp")
+                .to_owned();
+            let body = payload
+                .get("body")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let _ = app
+                .notification()
+                .builder()
+                .title(title)
+                .body(body)
+                .show();
+            Ok(Value::Null)
+        }
+
         // ---- External editor round trip -----------------------------------------------
         "editor:open-external" => {
             let content = payload
@@ -762,6 +847,33 @@ fn route_side_channel(
     };
     let tab = owner.unwrap_or_else(|| state.active_tab());
     state.pool.dispatch(&tab, frame).map_err(|e| e.to_string())
+}
+
+/// `[{ name, extensions: string[] }]` as the dialog plugin wants it.
+fn dialog_filters(payload: &Value) -> Vec<(String, Vec<String>)> {
+    payload
+        .get("filters")
+        .and_then(Value::as_array)
+        .map(|filters| {
+            filters
+                .iter()
+                .filter_map(|filter| {
+                    let name = filter.get("name").and_then(Value::as_str)?.to_owned();
+                    let extensions = filter
+                        .get("extensions")
+                        .and_then(Value::as_array)
+                        .map(|list| {
+                            list.iter()
+                                .filter_map(Value::as_str)
+                                .map(str::to_owned)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    Some((name, extensions))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn read_json_or(path: &Path, fallback: Value) -> Value {
