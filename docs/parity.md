@@ -146,11 +146,11 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | wip（`crates/omp-session` 全文件扫描；标题/session/首条用户消息/计数/mtime 已实现，头尾解析与 LRU 未做） |
+| 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | wip（`crates/omp-session` 改为 32 KiB 头 + 32 KiB 尾窗口解析、标题/头行/首条用户消息/尾计数与状态、按 (size,mtime) 缓存 4096 条；侧栏列表明细实测 ~90ms） |
 | 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | wip（侧栏已按 workspace 分组并显示计数；pinned/archived/family 未接） |
 | 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | todo |
 | 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | wip（delete/rename 已 CDP 实测：删除清文件+子目录、越界路径被拒；重命名改写标题槽 `source:user`；archive/batch/运行中跳过未做） |
-| 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | wip（多 token 全文件扫描已通，CDP 实测命中当前会话；`mtime:size` 缓存未做） |
+| 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | wip（多 token 命中已通；改为按 (size,mtime) 缓存搜索文本、单文件 8 MiB 上限、总 64 MiB 预算） |
 | 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | todo |
 | 会话树：分层树布局、平移/缩放、过滤模式、标签、切换 leaf、fork 到新窗口 | should | reuse | todo |
 | 从消息 branch / fork / fork_from | should | reuse | todo |
@@ -192,7 +192,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 多标签：每 tab 独立 sidecar / session / 事件路由，无 tab 数上限，未显示不 spawn | must | hybrid | wip（`tab:spawn/close`、per-tab client/batcher、lazy start 已通；session 归属/上限/持久化未做） |
+| 多标签：每 tab 独立 sidecar / session / 事件路由，无 tab 数上限，未显示不 spawn | must | hybrid | wip（`tab:spawn/close`、per-tab client/batcher、lazy start 已通；spawn 即置为 active，reconcile 不再跳回旧 tab；session 归属/上限/持久化未做） |
 | Tab 类型 agent / chat：chat 无工具、历史与项目组分离 | should | hybrid | wip（`tab:spawn` 传 kind，chat 走 `--chat`；历史分离未验证） |
 | Tab 条：拖拽排序、状态 chip、运行中关闭内联确认、右键菜单、⌘1–9 / ⌃Tab | should | reuse | wip（renderer 原样；`setOrder` 仅回 true，未持久化） |
 | 双栏拆分：左右/上下、拖拽 ratio、键盘调整、拖 tab 到边缘成对 | should | reuse | wip（`setView` 已接 pool；groups/ratio 持久化未做） |

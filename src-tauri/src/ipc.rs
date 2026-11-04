@@ -151,6 +151,9 @@ pub async fn ipc_invoke(
                 ..LaunchOptions::default()
             };
             start_tab(&app, tab.clone(), launch)?;
+            // The renderer switches to a spawned tab right away; keep main's active view
+            // in sync so a reconcile does not snap back to the previous tab.
+            *state.active_tab.lock() = tab.clone();
             if let Some(path) = session_path {
                 let _ = state.pool.claim_session(&tab, &path);
             }
