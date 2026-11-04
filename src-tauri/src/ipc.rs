@@ -46,7 +46,7 @@ pub async fn ipc_invoke(
                 .command(&mut cmd, timeout)
                 .await
                 .map_err(|e| e.to_string())?;
-            sync_switch_binding(&state, &tab, &cmd, &response);
+            sync_session_binding(&state, &tab, &cmd, &response);
             Ok(response)
         }
         "rpc:command-for-tab" => {
@@ -69,7 +69,7 @@ pub async fn ipc_invoke(
                 .command(&mut cmd, timeout)
                 .await
                 .map_err(|e| e.to_string())?;
-            sync_switch_binding(&state, &tab, &cmd, &response);
+            sync_session_binding(&state, &tab, &cmd, &response);
             Ok(response)
         }
 
@@ -537,14 +537,35 @@ fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
     }
 }
 
-/// An in-place `switch_session` changes the tab's session file; keep the resume
-/// binding and the pool's ownership map in sync with it.
-fn sync_switch_binding(state: &AppState, tab: &TabId, command: &Value, response: &Value) {
-    let Some(path) = confirmed_switch_path(command, response) else {
+/// Keep the resume binding and the pool's ownership map in sync with the session
+/// the sidecar is actually on: a confirmed in-place switch or a `get_state` snapshot
+/// (which carries `sessionFile`, including for a fresh tab's first session).
+fn sync_session_binding(state: &AppState, tab: &TabId, command: &Value, response: &Value) {
+    let path = match command.get("type").and_then(Value::as_str) {
+        Some("switch_session") => confirmed_switch_path(command, response),
+        Some("get_state")
+            if response.get("success").and_then(Value::as_bool) == Some(true) =>
+        {
+            response
+                .get("data")
+                .and_then(|data| data.get("sessionFile"))
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+        }
+        _ => None,
+    };
+    let Some(path) = path else {
         return;
     };
+    if state.tab_sessions.lock().get(tab) == Some(&path) {
+        return;
+    }
     if let Some(previous) = state.tab_sessions.lock().insert(tab.clone(), path.clone()) {
-        state.pool.release_session(&previous);
+        // Only drop an ownership entry this tab actually holds; a stale binding
+        // must never release another tab's live session.
+        if state.pool.session_owner(&previous).as_ref() == Some(tab) {
+            state.pool.release_session(&previous);
+        }
     }
     let _ = state.pool.claim_session(tab, &path);
 }

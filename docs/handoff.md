@@ -38,6 +38,8 @@ bunx tauri dev                                   → Romp ready；prompt "list f
 node scripts/cdp-eval.mjs                        → CDP eval/输入辅助（9222）
 sidecar click 观测                                 → cold 短会话首条 bubble 929ms；warm 切换 653ms；spawn→ready 600–950ms
                                                    → ChatStream 加载门修复后，cold 打开不再闪“想做点什么?”空会话页
+terminal_open 实测                                 → terminalId/pid 返回；terminal_opened + terminal_output 以 {tabId,frame} 到达 renderer
+fresh tab argv                                     → --mode rpc-ui --no-auto-resume（fork 已探针验证）
 ```
 
 本机验证的关键启动修复：

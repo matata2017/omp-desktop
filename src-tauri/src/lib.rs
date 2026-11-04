@@ -138,7 +138,7 @@ impl AppState {
 }
 
 /// How one event channel expects its payload. The renderer's subscriptions are typed against
-/// these two shapes in `src/bridge/omp-api.ts`, so emitting the wrong one reads as `undefined`
+/// these three shapes in `src/bridge/omp-api.ts`, so emitting the wrong one reads as `undefined`
 /// rather than throwing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PayloadShape {
