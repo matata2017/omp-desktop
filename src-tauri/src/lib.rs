@@ -204,6 +204,7 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
 
     if frame_type == "ready" {
         state.ready_tabs.lock().insert(tab.clone());
+        tracing::info!(tab = %tab, "sidecar ready");
         let _ = app.emit(
             events::SIDECAR_STATUS,
             json!({ "tabId": tab, "payload": { "status": "ready" } }),
