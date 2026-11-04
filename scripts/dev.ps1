@@ -26,6 +26,10 @@ $env:INCLUDE = @(
   (Join-Path $sdkRoot "Include\$($sdk.Name)\winrt")
 ) -join ";"
 if (-not $env:OMP_SIDECAR) { $env:OMP_SIDECAR = "D:\ompgui\resources\omp.exe" }
+$running = Get-Process romp-desktop -ErrorAction SilentlyContinue
+if ($running) {
+  throw "romp-desktop is already running (pid $($running.Id -join ',')). Stop it before tauri dev."
+}
 $log = Join-Path $PSScriptRoot "..\.probe\dev.log"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
 Start-Transcript -Path $log -Append | Out-Null

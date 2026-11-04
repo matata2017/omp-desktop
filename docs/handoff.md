@@ -25,15 +25,16 @@
 
 ### 已验证的事实（不是推断）
 
+```
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
 bun run test                                     → 186 files / 1566 passed
-cargo test --workspace                           → 59 passed（9 suites）
+cargo test --workspace                           → 60 passed（11 suites）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
   terminal_list / get_jobs / get_context_report → 全 success=true
-bunx tauri dev                                   → Romp 窗口 ready（截图 `.probe/romp-ready2.png`）
+bunx tauri dev                                   → Romp 窗口 ready；侧栏会话列表已由 `sessions:list` 提供
 ```
 
 本机验证的关键启动修复：

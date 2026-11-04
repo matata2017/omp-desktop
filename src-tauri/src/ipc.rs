@@ -22,7 +22,7 @@ pub async fn ipc_invoke(
     payload: Option<Value>,
 ) -> Result<Value, String> {
     let payload = payload.unwrap_or_else(|| json!({}));
-    tracing::info!(channel = %channel, "ipc_invoke");
+    tracing::debug!(channel = %channel, "ipc_invoke");
     if channel == "runtime:error-report" {
         tracing::warn!(?payload, "renderer runtime error");
     }

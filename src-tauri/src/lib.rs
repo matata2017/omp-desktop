@@ -254,10 +254,6 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
 pub fn run() {
     let log_dir = omp_core::paths::data_dir();
     std::fs::create_dir_all(&log_dir).ok();
-    let _ = std::fs::write(
-        log_dir.join("startup.log"),
-        format!("start pid={} args={:?}\n", std::process::id(), std::env::args()),
-    );
     let file_appender = tracing_appender::rolling::never(&log_dir, "runtime.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
