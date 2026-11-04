@@ -162,14 +162,19 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 ---
 
-## 8. Git
+## 8. Git 与许可
 
-仓库已 `git init`，`.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、
-`resources/*.exe`、`.probe/`、`replica/screens/`。尚无 remote；推送到 GitHub 需要先建空仓库，然后：
+- 远端：`git@github.com:matata2017/omp-desktop.git`（private），分支 `master`。
+- `.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、`resources/*.exe`、
+  `.probe/`、`replica/screens/`、`src-tauri/gen/schemas/`，以及侦察期的 JSON/清单/zip 临时产物。
+- 本机 SSH 认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。
 
-```bash
-git remote add origin git@github.com:<owner>/<repo>.git
-git push -u origin master
-```
+许可（本仓库**同时**承载三方代码，必须随附声明）：
 
-本机 SSH 已认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。
+| 目录 | 来源 | 许可 |
+|---|---|---|
+| `src/renderer`、`src/shared` | `nornzach/oh-my-pi-gui` v0.9.35 | MIT（`LICENSES/oh-my-pi-gui-MIT.txt`，含原版权行） |
+| `.trellis/`、`.omp/skills/trellis-*` | `mindfold-ai/Trellis` 模板 | AGPL-3.0（`LICENSES/trellis-AGPL-3.0.txt`） |
+| `crates/`、`src-tauri/`、`src/bridge/`、`replica/`、`docs/` | 本工程 | MIT（`LICENSE`） |
+
+发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx` 与 `index.html`。
