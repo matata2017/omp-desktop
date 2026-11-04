@@ -25,7 +25,11 @@ $env:INCLUDE = @(
   (Join-Path $sdkRoot "Include\$($sdk.Name)\ucrt"),
   (Join-Path $sdkRoot "Include\$($sdk.Name)\winrt")
 ) -join ";"
-if (-not $env:OMP_SIDECAR) { $env:OMP_SIDECAR = "D:\ompgui\resources\omp.exe" }
+if (-not $env:OMP_SIDECAR) {
+  # Repo-local sidecar first; the absolute fallback is another checkout's location.
+  $repoSidecar = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")).Path "resources\omp.exe"
+  $env:OMP_SIDECAR = if (Test-Path $repoSidecar) { $repoSidecar } else { "D:\ompgui\resources\omp.exe" }
+}
 if (-not $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) {
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
 }
