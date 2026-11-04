@@ -94,7 +94,7 @@ pub async fn ipc_invoke(
         // ---- Tabs -----------------------------------------------------------------------
         "tab:get-all" => {
             let active = state.active_tab();
-            ensure_tab_started(&app, &state, &active)?;
+            ensure_tab_started(&app, &state, &active, "tab:get-all")?;
             let ready = state.ready_tabs.lock();
             let cwds = state.tab_cwds.lock();
             let kinds = state.tab_kinds.lock();
@@ -151,6 +151,15 @@ pub async fn ipc_invoke(
             }
             let number = state.next_tab.fetch_add(1, Ordering::SeqCst);
             let tab = TabId::new(format!("tab-{number}"));
+            // Phantom-tab investigation: record who asked for this tab and for what.
+            tracing::info!(
+                tab = %tab,
+                cwd = %cwd.display(),
+                kind = ?kind,
+                session = ?session_path.as_ref().map(|p| p.display().to_string()),
+                tabs = state.pool.tab_count(),
+                "tab:spawn"
+            );
             state.tab_cwds.lock().insert(tab.clone(), cwd.clone());
             state.tab_kinds.lock().insert(tab.clone(), kind);
             if let Some(path) = &session_path {
@@ -194,7 +203,7 @@ pub async fn ipc_invoke(
                 return Ok(json!(false));
             };
             *state.active_tab.lock() = tab.clone();
-            ensure_tab_started(&app, &state, &tab)?;
+            ensure_tab_started(&app, &state, &tab, "tab:set-active")?;
             replay_ready(&app, &state, &tab);
             Ok(json!(true))
         }
@@ -222,7 +231,7 @@ pub async fn ipc_invoke(
                 .set_view(&WindowId::new("main"), focused.clone(), &visible)
                 .map_err(|e| e.to_string())?;
             for tab in &visible {
-                ensure_tab_started(&app, &state, tab)?;
+                ensure_tab_started(&app, &state, tab, "tab:set-view")?;
                 replay_ready(&app, &state, tab);
             }
             Ok(json!(true))

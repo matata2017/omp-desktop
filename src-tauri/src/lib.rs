@@ -364,11 +364,8 @@ pub(crate) fn ensure_tab_started(
     app: &AppHandle,
     state: &AppState,
     tab: &TabId,
+    origin: &str,
 ) -> Result<(), String> {
-    tracing::info!(tab = %tab, "ensure_tab_started");
-    if state.pool.is_started(tab) {
-        return Ok(());
-    }
     let cwd = state
         .tab_cwds
         .lock()
@@ -381,6 +378,22 @@ pub(crate) fn ensure_tab_started(
         .get(tab)
         .copied()
         .unwrap_or(TabKind::Agent);
+    let pending_session = state.tab_sessions.lock().get(tab).cloned();
+    // Phantom-tab investigation: log every call, including the no-op ones, so the trace shows
+    // which surface asked for which tab (an unexpected tab then has a caller, not just an id).
+    tracing::info!(
+        tab = %tab,
+        origin,
+        cwd = %cwd.display(),
+        kind = ?kind,
+        session = ?pending_session.as_ref().map(|p| p.display().to_string()),
+        tabs = state.pool.tab_count(),
+        already_started = state.pool.is_started(tab),
+        "ensure_tab_started"
+    );
+    if state.pool.is_started(tab) {
+        return Ok(());
+    }
     if state.clients.lock().len() >= crate::ipc::max_sidecars()
         && !crate::ipc::evict_idle_sidecar(app, state)
     {
