@@ -163,7 +163,7 @@
 | 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | wip（同 workspace 空闲 tab 原地 `switch_session`，不再新开进程；只有 `success && cancelled:false` 才更新归属，`cancelled:true` 是 hook veto/跨 workspace；流式/草稿/审批/队列守卫已测；首屏 `get_transcript_page` 在会话加载后约 10ms，主要成本是 switch 的 session 加载） |
 | 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | wip（delete/rename 已 CDP 实测：删除清文件+子目录、越界路径被拒；重命名改写标题槽 `source:user`；archive/batch/运行中跳过未做） |
 | 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | wip（多 token 命中已通；改为按 (size,mtime) 缓存搜索文本、单文件 8 MiB 上限、总 64 MiB 预算） |
-| 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | todo |
+| 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | done：`crates/omp-session/src/conversation.rs`（FTS5 trigram、`mtime_nanos:size` 签名、追加式增量 + 64B 尾部校验、terms 全 AND、400 行/每会话 3 命中/60 会话、片段用 U+0001/U+0002 标记、库打不开返回 `unavailable`）+ `conversations:search` 通道（懒开索引、`spawn_blocking`）。实测 `indexed:5`，查「复刻」返回 3 个会话带片段；6 个单测 |
 | 会话树：分层树布局、平移/缩放、过滤模式、标签、切换 leaf、fork 到新窗口 | should | reuse | todo |
 | 从消息 branch / fork / fork_from | should | reuse | todo |
 | 导出 HTML：保存对话框 → `export_html` → toast | should | reuse | todo |
@@ -209,7 +209,7 @@
 | Tab 类型 agent / chat：chat 无工具、历史与项目组分离 | should | hybrid | wip（`tab:spawn` 传 kind，chat 走 `--chat`；历史分离未验证） |
 | Tab 条：拖拽排序、状态 chip、运行中关闭内联确认、右键菜单、⌘1–9 / ⌃Tab | should | reuse | wip（renderer 原样；`setOrder` 仅回 true，未持久化） |
 | 双栏拆分：左右/上下、拖拽 ratio、键盘调整、拖 tab 到边缘成对 | should | reuse | wip（`setView` 已接 pool；groups/ratio 持久化未做） |
-| Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | todo |
+| Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | done：`src-tauri/src/tab_layout.rs` 落 `<app_data>/tab-layout.json`（原子写；加载丢弃 workspace 已不存在或 session 已删的 tab，activeIndex 越界归零）；`tab:spawn/close/set-active/set-view/set-order` 后持久化；启动按布局注册全部 tab、只启 active 的。实测开 2 个 tab 重启后仍 2 个、activeIndex 一致。注意 sidecar 退出会删除无消息的空会话，这类 tab 恢复成同 workspace 的新会话；groups 分屏比例未存 |
 | 多窗口：每窗口独立 tabs，会话可"在新窗口打开"，重复打开聚焦 owner | should | rust | todo |
 | Worktree tab：创建/删除 worktree、tab cwd 绑定 worktree、关闭时提示 | could | hybrid | todo |
 
