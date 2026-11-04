@@ -175,6 +175,7 @@ pub async fn ipc_invoke(
                 ..LaunchOptions::default()
             };
             start_tab(&app, tab.clone(), launch)?;
+            crate::persist_layout(&state);
             // The renderer switches to a spawned tab right away; keep main's active view
             // in sync so a reconcile does not snap back to the previous tab.
             *state.active_tab.lock() = tab.clone();
@@ -197,9 +198,13 @@ pub async fn ipc_invoke(
             state.tab_sessions.lock().remove(&tab);
             state.tab_activity.lock().remove(&tab);
             state.ready_tabs.lock().remove(&tab);
+            crate::persist_layout(&state);
             Ok(json!(existed))
         }
-        "tab:set-order" => Ok(json!(true)),
+        "tab:set-order" => {
+            crate::persist_layout(&state);
+            Ok(json!(true))
+        }
         "tab:set-active" => {
             let Some(tab) = payload.get("tabId").and_then(Value::as_str).map(TabId::new) else {
                 return Ok(json!(false));
@@ -207,6 +212,7 @@ pub async fn ipc_invoke(
             *state.active_tab.lock() = tab.clone();
             ensure_tab_started(&app, &state, &tab, "tab:set-active")?;
             replay_ready(&app, &state, &tab);
+            crate::persist_layout(&state);
             Ok(json!(true))
         }
         "tab:set-view" => {
@@ -236,6 +242,7 @@ pub async fn ipc_invoke(
                 ensure_tab_started(&app, &state, tab, "tab:set-view")?;
                 replay_ready(&app, &state, tab);
             }
+            crate::persist_layout(&state);
             Ok(json!(true))
         }
         "tab:get-session-owner" => {
@@ -632,6 +639,46 @@ pub async fn ipc_invoke(
             let path = crate::models::ensure_file(&crate::models::models_path())?;
             let opened = tauri_plugin_opener::open_path(path.as_path(), None::<&str>).is_ok();
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
+        }
+
+        // ---- conversation search ---------------------------------------------------------
+        "conversations:search" => {
+            let query = payload
+                .get("query")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let cwd = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(PathBuf::from);
+            let cached = state.conversations.lock().clone();
+            let index = match cached {
+                Some(index) => index,
+                None => {
+                    let db = state.data_dir.join("conversation-index.db");
+                    match omp_session::conversation::ConversationIndex::open(&db) {
+                        Ok(index) => {
+                            let index = Arc::new(index);
+                            *state.conversations.lock() = Some(index.clone());
+                            index
+                        }
+                        Err(err) => {
+                            tracing::warn!("conversation index unavailable: {err}");
+                            return Ok(omp_session::conversation::ConversationIndex::unavailable());
+                        }
+                    }
+                }
+            };
+            // Indexing and searching both touch the disk; keep them off the async runtime.
+            tauri::async_runtime::spawn_blocking(move || {
+                let sessions = omp_core::paths::sessions_dir();
+                index.sync(&sessions);
+                index.search(&query, cwd.as_deref(), 60)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| e.to_string())
         }
 
         // ---- benchmarks ------------------------------------------------------------------

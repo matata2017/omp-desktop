@@ -5,6 +5,7 @@ pub mod builtin_providers;
 pub mod editor;
 pub mod ipc;
 pub mod models;
+pub mod tab_layout;
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -69,6 +70,8 @@ pub struct AppState {
     pub stats_client: Mutex<Option<Arc<omp_stats::StatsClient>>>,
     /// One `omp bench --json` run at a time; `bench:abort` kills it.
     pub bench: crate::bench::BenchRunner,
+    /// Lazily-opened FTS index over what was said in sessions (`conversations:search`).
+    pub conversations: Mutex<Option<Arc<omp_session::conversation::ConversationIndex>>>,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -476,6 +479,60 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     }
 }
 
+/// Numeric suffix of `tab-N`, used to keep the strip order stable across restarts.
+fn tab_order(id: &TabId) -> u64 {
+    id.as_str()
+        .rsplit('-')
+        .next()
+        .and_then(|suffix| suffix.parse().ok())
+        .unwrap_or(u64::MAX)
+}
+
+/// Current tab strip as it should be saved: ordered tabs plus the active index.
+pub(crate) fn snapshot_layout(state: &AppState) -> tab_layout::PersistedLayout {
+    let mut tabs: Vec<TabId> = state.pool.tabs();
+    tabs.sort_by_key(|tab| tab_order(tab));
+    let cwds = state.tab_cwds.lock();
+    let kinds = state.tab_kinds.lock();
+    let sessions = state.tab_sessions.lock();
+    let active = state.active_tab.lock().clone();
+
+    let mut active_index = 0;
+    let specs: Vec<tab_layout::TabSpec> = tabs
+        .iter()
+        .enumerate()
+        .map(|(index, tab)| {
+            if *tab == active {
+                active_index = index;
+            }
+            tab_layout::TabSpec {
+                cwd: cwds
+                    .get(tab)
+                    .map(|p| p.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| state.cwd.to_string_lossy().into_owned()),
+                session_path: sessions.get(tab).map(|p| p.to_string_lossy().into_owned()),
+                kind: match kinds.get(tab) {
+                    Some(TabKind::Chat) => "chat".to_owned(),
+                    _ => "agent".to_owned(),
+                },
+            }
+        })
+        .collect();
+    tab_layout::PersistedLayout {
+        version: 1,
+        tabs: specs,
+        active_index,
+    }
+}
+
+/// Persist the strip after any change that alters it. Failures are logged, never fatal.
+pub(crate) fn persist_layout(state: &AppState) {
+    let layout = snapshot_layout(state);
+    if let Err(err) = tab_layout::PersistedLayout::save(&state.data_dir, &layout) {
+        tracing::warn!("tab layout not saved: {err}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let log_dir = omp_core::paths::data_dir();
@@ -525,7 +582,52 @@ pub fn run() {
             } else {
                 launch_cwd
             };
-            let first_tab = TabId::new("tab-1");
+            // Restore the saved tab strip: every tab is registered, only the active one starts.
+            let saved = tab_layout::PersistedLayout::load(&data_dir);
+            let restored: Vec<tab_layout::TabSpec> = if saved.tabs.is_empty() {
+                vec![tab_layout::TabSpec {
+                    cwd: cwd.to_string_lossy().into_owned(),
+                    session_path: None,
+                    kind: "agent".to_owned(),
+                }]
+            } else {
+                saved.tabs.clone()
+            };
+            let tab_ids: Vec<TabId> = (1..=restored.len())
+                .map(|n| TabId::new(format!("tab-{n}")))
+                .collect();
+            let active = tab_ids
+                .get(saved.active_index)
+                .or_else(|| tab_ids.first())
+                .cloned()
+                .unwrap_or_else(|| TabId::new("tab-1"));
+            let tab_cwds: HashMap<TabId, PathBuf> = tab_ids
+                .iter()
+                .zip(&restored)
+                .map(|(id, spec)| (id.clone(), PathBuf::from(&spec.cwd)))
+                .collect();
+            let tab_kinds: HashMap<TabId, TabKind> = tab_ids
+                .iter()
+                .zip(&restored)
+                .map(|(id, spec)| {
+                    let kind = if spec.kind == "chat" {
+                        TabKind::Chat
+                    } else {
+                        TabKind::Agent
+                    };
+                    (id.clone(), kind)
+                })
+                .collect();
+            let tab_sessions: HashMap<TabId, PathBuf> = tab_ids
+                .iter()
+                .zip(&restored)
+                .filter_map(|(id, spec)| {
+                    spec.session_path
+                        .as_ref()
+                        .map(|path| (id.clone(), PathBuf::from(path)))
+                })
+                .collect();
+            let tab_count = tab_ids.len() as u64;
             let stats_binary = sidecar_binary
                 .clone()
                 .unwrap_or_else(|| PathBuf::from("omp.exe"));
@@ -536,19 +638,18 @@ pub fn run() {
                 pool: SidecarPool::new(),
                 clients: Mutex::new(HashMap::new()),
                 batchers: Mutex::new(HashMap::new()),
-                tab_cwds: Mutex::new(HashMap::from([(first_tab.clone(), cwd.clone())])),
-                tab_kinds: Mutex::new(HashMap::from([(first_tab.clone(), TabKind::Agent)])),
+                tab_cwds: Mutex::new(tab_cwds),
+                tab_kinds: Mutex::new(tab_kinds),
                 ready_tabs: Mutex::new(HashSet::new()),
-                tab_sessions: Mutex::new(HashMap::new()),
+                tab_sessions: Mutex::new(tab_sessions),
                 tab_activity: Mutex::new(HashMap::new()),
                 spare: Mutex::new(None),
-                active_tab: Mutex::new(first_tab.clone()),
-                stats: omp_stats::StatsServer::new(
-                    stats_binary.clone(),
-                ),
+                active_tab: Mutex::new(active.clone()),
+                stats: omp_stats::StatsServer::new(stats_binary),
                 stats_client: Mutex::new(None),
                 bench: crate::bench::BenchRunner::new(),
-                next_tab: AtomicU64::new(2),
+                conversations: Mutex::new(None),
+                next_tab: AtomicU64::new(tab_count + 1),
                 cwd: cwd.clone(),
             };
             app.manage(state);
@@ -564,7 +665,9 @@ pub fn run() {
                     }
                 });
             }
-            app.state::<AppState>().pool.register_deferred(first_tab);
+            for id in &tab_ids {
+                app.state::<AppState>().pool.register_deferred(id.clone());
+            }
             // Warm spare stays disabled: the sidecar cannot switch across workspaces,
             // and same-workspace switches happen in place on the existing sidecar.
             // The sidecar starts when the renderer activates tab-1 (tab:set-active /
