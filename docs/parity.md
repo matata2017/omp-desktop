@@ -1,0 +1,228 @@
+# 复刻对照表（parity）
+
+上游：`nornzach/oh-my-pi-gui` v0.9.35（MIT）。本文件是 `replica/features.csv` 的活账本：
+功能条目来自侦察，**状态与证据由本工程维护**。
+
+状态词：`todo` 未开始 / `wip` 进行中 / `done` 已实现且有验证 / `degraded` 降级（说明原因）/ `skip` 不复刻。
+
+机器可读的源是 `replica/features.csv`（100 行，priority must 23 / should 67 / could 10）。
+本表按 area 汇总，逐条状态写在下面的清单里。
+
+## 汇总
+
+| area | 条目 | must | 当前状态 |
+|---|---|---|---|
+| agents | 4 | 0 | 见下 |
+| browser | 4 | 0 | 见下 |
+| chat | 17 | 8 | 见下 |
+| files | 5 | 0 | 见下 |
+| i18n | 2 | 0 | 见下 |
+| models | 6 | 3 | 见下 |
+| packaging | 4 | 2 | 见下 |
+| panels | 5 | 0 | 见下 |
+| scheduler | 4 | 0 | 见下 |
+| sessions | 9 | 3 | 见下 |
+| settings | 5 | 0 | 见下 |
+| stats | 5 | 0 | 见下 |
+| system | 7 | 1 | 见下 |
+| tabs | 7 | 1 | 见下 |
+| terminal | 4 | 0 | 见下 |
+| themes | 3 | 0 | 见下 |
+| tools | 9 | 5 | 见下 |
+
+## 已知偏差（与上游行为不同，需持续维护）
+
+| 面 | 偏差 | 原因 | 影响 |
+|---|---|---|---|
+| `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 无（其余 renderer 文件字节级一致） |
+| `src/renderer/index.html` | CSP 增加 `ipc:`/`http://ipc.localhost`/`ws://localhost:*`；入口改 `/main.tsx`；`pre-paint.js` 改绝对路径 | Vite 与 Tauri 的 IPC 需要 | 无 |
+| `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
+| `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
+| 内置浏览器 | Phase 8 前一律返回 `unknown channel: browser:*` | 子 webview + CDP 未实现 | Browser 面板在 UI 上会退化为错误提示 |
+
+## 逐条清单
+
+### agents
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| Agent Hub「定义」页：发现 project/user/bundled agent，启用/禁用，按 agent 覆盖模型与 prewalk | should | reuse | todo |
+| Agent Hub「Hub」页：实时 subagent 表（状态/耗时/模型）、transcript 抽屉、单 agent abort/revive | should | reuse | todo |
+| 侧栏 agent 行：会话下挂当轮 agent、活动文案与计数 pill，历史 transcript 折叠 | should | reuse | todo |
+| Collab relay：host / join / leave 共享会话，带只读视图 | could | reuse | todo |
+
+### browser
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| Browser 面板：地址栏、多页 chip、前进/后退/刷新/停止、DevTools 入口 | should | reuse | todo |
+| Agent 驱动页面：本地 WebSocket relay + 每页 CDP attach/send/createTab + tabSnapshot | should | rust | todo |
+| 持久登录与页面休眠：`persist:omp-browser` 分区、离屏页面停帧、agent 活跃期唤醒 | should | rust | todo |
+| 回复内链接路由：普通点击进面板浏览器，⌘/Ctrl-click 与 chat tab 走系统浏览器 | should | reuse | todo |
+
+### chat
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| Prompt 发送与流式增量渲染（`text_delta`，节流写入、只重解析尾部） | must | reuse | todo |
+| 流中 steer 与 follow-up 队列（Enter steer / ⌘Enter follow-up，按住修饰键预览） | must | reuse | todo |
+| Abort 当前轮与 abort-and-prompt | must | reuse | todo |
+| Markdown 渲染：GFM + 原样 HTML 白名单 sanitize + 本地/网页链接解析 | must | reuse | todo |
+| 代码块：highlight.js 懒加载、字符上限、行号、复制 | must | reuse | todo |
+| 工具调用卡：实时 running 卡、结果回填、过程分组折叠 | must | reuse | todo |
+| 虚拟化 transcript：稳定行 key、贴底跟随、滚动位置恢复、游标分页 | must | reuse | todo |
+| 扩展 UI 与工具审批对话框：select/confirm/input/editor/open_url、超时倒计时、审批样式 | must | reuse | todo |
+| 思考块：折叠、实时时长、level 标注 | should | reuse | todo |
+| Markdown 增强：KaTeX 公式（`$…$` / `$$…$$`、美元价格守卫）与 Mermaid 图（懒加载、主题、SVG 消毒、失败回退源码） | should | reuse | todo |
+| 图片附件：粘贴/拖拽图片转 ImageContent 并在 composer 预览 | should | reuse | todo |
+| @file 提及与 /slash 补全：按 cwd 缓存文件列表、命令参数提示、输入历史 | should | reuse | todo |
+| Plan 审批：批准并可执行/压缩上下文/保留上下文/保存，附反馈 | should | reuse | todo |
+| transcript 内查找：⌘F 打开、命中高亮、上一个/下一个、计数 | should | reuse | todo |
+| Composer 上方 dock 卡：Todos（拖拽/内联编辑/`set_todos`）、Plan、Goal、Agents、Queue | should | reuse | todo |
+| 用量与轮次行：tokens/cost/cache/tps、turn 状态与失败原因 | could | reuse | todo |
+| 语音：听写（边说边上屏、按短语落到光标）与实时语音会话 | could | reuse | todo |
+
+### files
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 工作区文件树：`fs:list` 深度默认 8（上限 16）、总文件数 2000（上限 20000）、跳过 `.git`/`node_modules` 等 | should | rust | todo |
+| 文件预览与 @mention 插入：markdown/代码渲染、默认 200 KB 截断（上限 2 MB）、按行定位、图片 data URL | should | hybrid | todo |
+| 打开/在文件管理器中显示/系统编辑器，路径右键菜单 | should | plugin | todo |
+| Git 变更视图：仓库状态、逐文件 diff、working tree 自动刷新 | should | hybrid | todo |
+| 多根工作区目录：列/加/删目录并重置会话工作区 | should | rust | todo |
+
+### i18n
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 三语界面（en / zh / ru）+ 未知 key 回退英文 | should | reuse | todo |
+| 全局语言切换：跨窗口广播、原生菜单/托盘/对话框文案、日期格式化 locale | should | hybrid | todo |
+
+### models
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 模型选择器：按 provider 分组、搜索、目录增量刷新 | must | reuse | todo |
+| 模型与推理控制：`set_model` / `cycle_model`（⌃P 前后）/ thinking level / fast / slow | must | reuse | todo |
+| Provider 管理：认证状态、OAuth / API key 登录登出、多账号选择 | must | reuse | todo |
+| 自定义 provider：`models.yml` 保序原子读写、模型编辑器（context/limits/cost/thinking）、删除 | should | hybrid | todo |
+| 模型角色分配：role → model + thinking，按 metadata 校验 | should | reuse | todo |
+| Provider 用量窗口：配额窗口条 + 本地 token/cost 统计 + reset credit | should | reuse | todo |
+
+### packaging
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 内置 sidecar 解析：`OMP_BUNDLED_OMP` → `resources/omp(.exe)`，绝不回退系统 omp | must | rust | todo |
+| sidecar 构建：`compileCodingAgent` 单文件、natives 目标架构暂存、stats/collab 资源生成 | must | rust | todo |
+| 图标与平台元数据：icns/ico/png 集合、NSIS 允许改安装目录、Linux `executableName` | should | rust | todo |
+| 安装包目标与 extraResources：dmg/zip、NSIS/portable、AppImage/deb + `omp://` 协议声明 | should | rust | todo |
+
+### panels
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 工作区抽屉：7 个视图（overview/agents/btw/diff/files/terminal/browser）、宽度拖拽、chat tab 只留 overview/btw/files | should | reuse | todo |
+| Overview 面板：上下文分类占用、工作区、改动文件、运行中 subagent、MCP 服务器 | should | reuse | todo |
+| Queue 面板：steering / followUp 两 lane 的编辑、移动、清空、恢复 | should | reuse | todo |
+| 上下文与用量指示：标题栏 chip、popover、分类 breakdown、compact 策略条 | should | reuse | todo |
+| MCP 管理面板与向导：添加/测试/重连/重授权/启停/删除 | should | reuse | todo |
+
+### scheduler
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 定时任务 CRUD：once/cron/interval 编辑器、深度与工具策略、草稿校验、修订历史 | should | rust | todo |
+| 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | should | rust | todo |
+| 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | todo |
+| Review 队列：accept / reject + note | should | reuse | todo |
+
+### sessions
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 会话索引：256 B 标题槽 + 32 KiB 头/尾解析、mtime 倒序、状态推断、4096 条 LRU | must | rust | todo |
+| 侧栏会话列表：code/work 双模式、按 cwd 分组、pinned/archived、family 折叠 | must | reuse | todo |
+| 新建/切换会话：busy 守卫、会话归属去重（已打开则聚焦 owner） | must | hybrid | todo |
+| 会话重命名/删除/归档（含批量与运行中跳过） | should | rust | todo |
+| 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | should | rust | todo |
+| 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | todo |
+| 会话树：分层树布局、平移/缩放、过滤模式、标签、切换 leaf、fork 到新窗口 | should | reuse | todo |
+| 从消息 branch / fork / fork_from | should | reuse | todo |
+| 导出 HTML：保存对话框 → `export_html` → toast | should | reuse | todo |
+
+### settings
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | should | reuse | todo |
+| GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | should | hybrid | todo |
+| 审批模式：always-ask / always-ask-cached / write / yolo，随 spawn argv 生效 | should | hybrid | todo |
+| 运行时开关：steering / follow-up / interrupt 模式、auto-compaction、auto-retry | should | reuse | todo |
+| 管理页：Security 扫描、Skills 启用/编辑、SSH host 增删改测、Updates 版本与检查 | could | reuse | todo |
+
+### stats
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 统计仪表盘外壳：10 个路由、1h/24h/7d/30d/90d/all、手动 sync、打开时静默同步 | should | reuse | todo |
+| Overview 路由 | should | reuse | todo |
+| Models 路由（模型维度 token/cost/速度） | should | reuse | todo |
+| 统计服务托管：`omp stats --host 127.0.0.1 --port 0 --no-open`、ANSI 剥壳取端口、指数退避重启 | should | rust | todo |
+| 其余 8 条路由：costs / errors / requests / providers / tools / frustration / gain / projects | could | reuse | todo |
+
+### system
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 原生应用菜单：File/Edit/View/Window/Help，动作经 `MENU_ACTION` 回渲染层；renderer 拥有的 chord 不设 accelerator | should | rust | todo |
+| `omp://` 深链 + 单实例锁：`new-session` / `switch-session` | should | plugin | todo |
+| 窗口几何持久化：多显示器可达性修正、多窗口级联、最大化状态 | should | rust | todo |
+| 退出守卫：有运行中会话/定时任务时确认；`app:quit` 是唯一退出路径 | should | rust | todo |
+| 系统集成：桌面通知、打开/保存对话框、剪贴板读取、openExternal、录制文件落盘 | must | plugin | todo |
+| 命令面板：⌘K 搜索、分类、子菜单、prompt 透传、TUI-only 标记不可用 | should | reuse | todo |
+| 自动更新：4h 轮询、manual/automatic 两模式、下载/应用、GitHub releases 源 | could | plugin | todo |
+
+### tabs
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 多标签：每 tab 独立 sidecar / session / 事件路由，无 tab 数上限，未显示不 spawn | must | hybrid | todo |
+| Tab 类型 agent / chat：chat 无工具、历史与项目组分离 | should | hybrid | todo |
+| Tab 条：拖拽排序、状态 chip、运行中关闭内联确认、右键菜单、⌘1–9 / ⌃Tab | should | reuse | todo |
+| 双栏拆分：左右/上下、拖拽 ratio、键盘调整、拖 tab 到边缘成对 | should | reuse | todo |
+| Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | todo |
+| 多窗口：每窗口独立 tabs，会话可"在新窗口打开"，重复打开聚焦 owner | should | rust | todo |
+| Worktree tab：创建/删除 worktree、tab cwd 绑定 worktree、关闭时提示 | could | hybrid | todo |
+
+### terminal
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 终端面板：每 tab 多 shell、xterm + fit、颜色随 GUI 主题 | should | reuse | todo |
+| Agent `pty:true` bash 接入终端并自动 reveal | should | reuse | todo |
+| 终端生命周期同步：open/input/resize/close/list/snapshot，快照与后续帧用 seq 对齐 | should | hybrid | todo |
+| 终端链接与 CLI 转发：识别路径/URL，`terminal_run_cli` / `tui_open` | could | reuse | todo |
+
+### themes
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| 内置主题：12 套命名主题 + system 跟随系统，119 个 `--omp-*` token 全量写入 | should | reuse | todo |
+| 自定义主题目录：`~/.omp/gui/themes/*.json`，extends/tokens 校验、热更新、错误提示 | could | hybrid | todo |
+| Agent/插件主题叠加与首帧引导：follow agent theme、终端调色板、插件 token overlay、pre-paint | could | reuse | todo |
+
+### tools
+
+| 功能 | 优先级 | 载体 | 状态 |
+|---|---|---|---|
+| read 卡：文件预览、语法高亮、行号、重复 read 折叠成组 | must | reuse | todo |
+| write 卡：路径 + 内容预览、可折叠、成功/失败态 | must | reuse | todo |
+| edit / apply_patch / ast_edit 卡：diff 渲染（复用 `lib/diff` 的 parseDiff/DiffView）、流式参数稳定 | must | reuse | todo |
+| bash 卡：命令 + 流式输出 + exit code + 输出压缩提示（Minimized: a → b） | must | reuse | todo |
+| 未知 / MCP / host 工具通用卡：名称、摘要、JSON 参数与结果 | must | reuse | todo |
+| grep / glob / find 结果卡：文件:行:内容、命中高亮、文件树式 glob | should | reuse | todo |
+| task 卡：子代理 spawn 进度、日志与结果 | should | reuse | todo |
+| web_search 卡：结果列表、来源链接、查询回显 | should | reuse | todo |
+| 后台协调卡：`wait` job、`proc://` 任务/服务、`agent://` 消息与 hub 进程表 | should | reuse | todo |

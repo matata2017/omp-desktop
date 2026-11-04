@@ -1,0 +1,2631 @@
+/**
+ * RPC protocol types for the omp GUI sidecar connection.
+ * Hand-written from verified source (rpc-types.ts, rpc-mode.ts).
+ * These are the wire types — no runtime dependency on @oh-my-pi/*.
+ */
+
+// ============================================================================
+// RPC Commands (GUI → omp stdin)
+// ============================================================================
+
+/** One chat's own settings (`get_chat_config`, `set_chat_config`); a chat that saved none follows `chat.*`. */
+export interface RpcChatConfig {
+	/** Sent as the whole system prompt; blank sends the built-in chat prompt. */
+	systemPrompt: string;
+	/** `single` sends every message on its own. */
+	history: "continuous" | "single";
+	/** Earlier turns a continuous chat sends with each message; 0 sends all of them. */
+	historyTurns: number;
+}
+
+export type RpcCommand =
+	| { id?: string; type: "negotiate_protocol"; protocolVersion: number }
+	| { id?: string; type: "prompt"; message: string; images?: ImageContent[]; streamingBehavior?: "steer" | "followUp" }
+	| { id?: string; type: "steer"; message: string; images?: ImageContent[] }
+	| { id?: string; type: "follow_up"; message: string; images?: ImageContent[] }
+	| { id?: string; type: "abort" }
+	| { id?: string; type: "abort_and_prompt"; message: string; images?: ImageContent[] }
+	| { id?: string; type: "new_session"; parentSession?: string }
+	| { id?: string; type: "drop_session" }
+	| { id?: string; type: "get_state" }
+	| { id?: string; type: "set_fast_mode"; enabled: boolean }
+	| { id?: string; type: "set_slow_mode"; enabled: boolean }
+	| { id?: string; type: "get_available_commands" }
+	| { id?: string; type: "set_todos"; phases: TodoPhase[] }
+	| { id?: string; type: "set_host_tools"; tools: HostToolDefinition[] }
+	| { id?: string; type: "set_host_uri_schemes"; schemes: HostUriSchemeDefinition[] }
+	| { id?: string; type: "set_subagent_subscription"; level: SubagentSubscriptionLevel }
+	/**
+	 * `messageUpdates: "delta"` drops the accumulated `partial` snapshot from every
+	 * `message_update`; omitting it resets the sidecar to full snapshots.
+	 */
+	| { id?: string; type: "set_event_filter"; events: string[] | null; messageUpdates?: "full" | "delta" }
+	/** Opts the host into upstream's `ask` extension-dialog protocol (`answers` responses). */
+	| { id?: string; type: "set_ask_dialog"; enabled: boolean }
+	| { id?: string; type: "get_subagents" }
+	| { id?: string; type: "get_subagent_messages"; subagentId?: string; sessionFile?: string; fromByte?: number }
+	| { id?: string; type: "set_model"; provider: string; modelId: string }
+	| { id?: string; type: "cycle_model"; direction?: "forward" | "backward" }
+	| { id?: string; type: "get_available_models"; forceRefresh?: boolean }
+	| { id?: string; type: "set_thinking_level"; level: ThinkingLevel | "auto" }
+	| { id?: string; type: "cycle_thinking_level" }
+	| { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
+	| { id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }
+	| { id?: string; type: "set_interrupt_mode"; mode: "immediate" | "wait" }
+	| { id?: string; type: "compact"; customInstructions?: string }
+	| { id?: string; type: "set_auto_compaction"; enabled: boolean }
+	| { id?: string; type: "set_auto_retry"; enabled: boolean }
+	| { id?: string; type: "abort_retry" }
+	| { id?: string; type: "bash"; command: string; excluded?: boolean }
+	| { id?: string; type: "abort_bash" }
+	| { id?: string; type: "eval"; language?: "python" | "js" | "ruby" | "julia"; code: string; excluded?: boolean }
+	| { id?: string; type: "abort_eval" }
+	| { id?: string; type: "dequeue" }
+	// Queue management: stable per-entry ids (never array indices). queueId is
+	// the entry id surfaced by get_queue; queue_edit changes plain user text
+	// while preserving attachments; queue_move addresses visible-user order
+	// with a clamped target unless toLane switches lanes; queue_clear drops
+	// user-restorable entries only.
+	| { id?: string; type: "get_queue" }
+	| { id?: string; type: "queue_edit"; queueId: string; text: string }
+	| { id?: string; type: "queue_remove"; queueId: string }
+	| { id?: string; type: "queue_move"; queueId: string; toIndex: number; toLane?: "steering" | "followUp" }
+	| { id?: string; type: "queue_clear"; lane?: "steering" | "followUp" }
+	| { id?: string; type: "get_session_stats" }
+	| { id?: string; type: "export_html"; outputPath?: string }
+	| { id?: string; type: "switch_session"; sessionPath: string; provider?: string; modelId?: string }
+	| { id?: string; type: "branch"; entryId: string }
+	| { id?: string; type: "fork" }
+	| { id?: string; type: "get_branch_messages" }
+	| { id?: string; type: "get_config_warnings" }
+	| { id?: string; type: "get_advisor_status" }
+	| { id?: string; type: "list_reset_credits" }
+	| { id?: string; type: "redeem_reset_credit"; target: RpcResetCreditTarget; label: string }
+	| { id?: string; type: "get_last_assistant_text" }
+	| { id?: string; type: "set_session_name"; name: string; sessionPath?: string }
+	| { id?: string; type: "set_entry_label"; entryId: string; label?: string }
+	| { id?: string; type: "handoff"; customInstructions?: string }
+	| { id?: string; type: "get_messages" }
+	| { id?: string; type: "get_messages_page"; cursor?: string; limit?: number }
+	| { id?: string; type: "get_login_providers" }
+	| { id?: string; type: "login"; providerId: string }
+	| { id?: string; type: "get_logout_accounts"; providerId: string }
+	| { id?: string; type: "logout"; providerId: string; credentialId: number }
+	| { id?: string; type: "get_usage" }
+	| { id?: string; type: "get_settings_schema" }
+	| { id?: string; type: "get_settings"; paths?: string[] }
+	| { id?: string; type: "set_setting"; path: string; value: unknown }
+	| { id?: string; type: "get_providers"; forceRefresh?: boolean }
+	| { id?: string; type: "set_plan_mode"; enabled: boolean }
+	| { id?: string; type: "get_plan_mode" }
+	| { id?: string; type: "get_model_roles" }
+	| {
+			id?: string;
+			type: "set_model_role";
+			role: string;
+			modelId: string | null;
+			/** Saved as `modelId`'s `:level` suffix; one of the candidate's `thinkingLevels`. */
+			thinkingLevel?: ThinkingLevel | "auto";
+	  }
+	| { id?: string; type: "get_model_role_metadata" }
+
+	// Domain inspection (read-only)
+	| { id?: string; type: "get_skills" }
+	| { id?: string; type: "get_skill_detail"; name: string }
+	| { id?: string; type: "get_agent_definitions" }
+	| { id?: string; type: "get_hooks" }
+	| { id?: string; type: "get_mcp_servers" }
+	| { id?: string; type: "get_gui_themes" }
+	| { id?: string; type: "get_plugins" }
+	| { id?: string; type: "get_marketplaces" }
+	| { id?: string; type: "get_prompt_templates" }
+	| { id?: string; type: "get_memory_report" }
+	| { id?: string; type: "get_memory_overview"; cwd?: string }
+	| { id?: string; type: "get_memory_activity"; cwd?: string }
+	| { id?: string; type: "edit_memory"; cwd?: string; edit: RpcMemoryEdit }
+	| { id?: string; type: "update_memory"; cwd?: string; minIdleMinutes?: number }
+	| { id?: string; type: "get_security_dashboard" }
+	| { id?: string; type: "get_security_scan"; scanId: string }
+	| { id?: string; type: "get_ssh_hosts" }
+	| { id?: string; type: "get_omp_update" }
+
+	// Session reports (structured TUI /context /share /jobs parity; /tools rides get_active_tools)
+	| { id?: string; type: "get_context_report" }
+	| { id?: string; type: "get_active_tools" }
+	| { id?: string; type: "preview_share_session" }
+	| { id?: string; type: "share_session"; snapshotId?: string }
+	| { id?: string; type: "get_jobs" }
+	| { id?: string; type: "set_session_pinned"; sessionId: string; pinned: boolean }
+	| { id?: string; type: "get_chat_config" }
+	| { id?: string; type: "set_chat_config"; config: Partial<RpcChatConfig> }
+
+	// One-shot session actions (TUI /prewalk /fresh /shake /reload-plugins
+	// /force parity). set_force_tool takes exactly one of `tool` or
+	// `clear: true`; fresh is refused with code "busy" while streaming.
+	| { id?: string; type: "set_prewalk"; enabled: boolean }
+	| { id?: string; type: "fresh" }
+	| { id?: string; type: "shake_context"; mode: "elide" | "images" | "thinking" }
+	| { id?: string; type: "reload_plugins" }
+	| { id?: string; type: "set_force_tool"; tool?: string; clear?: boolean }
+	| { id?: string; type: "get_force_tool" }
+	| { id?: string; type: "get_session_tree" }
+	| { id?: string; type: "get_themes" }
+	| { id?: string; type: "get_theme_colors"; name: string }
+	| { id?: string; type: "get_transcript" }
+	| { id?: string; type: "get_transcript_page"; cursor?: string; limit?: number }
+	| { id?: string; type: "get_copy_targets" }
+
+	// Plan approval (structured)
+	| {
+			id?: string;
+			type: "plan_approval";
+			approved: boolean;
+			option?: "execute" | "compact" | "keep_context" | "save";
+			feedback?: string;
+			savePath?: string;
+	  }
+
+	// Modes
+	| { id?: string; type: "get_vibe_mode" }
+	| { id?: string; type: "set_vibe_mode"; enabled: boolean }
+	| { id?: string; type: "get_goal" }
+	| { id?: string; type: "guided_goal"; initial?: string }
+	| { id?: string; type: "set_agents_paused"; enabled: boolean }
+	| { id?: string; type: "btw"; question: string; recordId?: string }
+	| { id?: string; type: "btw_branch" }
+	| { id?: string; type: "btw_cancel"; recordId: string }
+	| { id?: string; type: "btw_inject"; recordId: string }
+	| { id?: string; type: "get_btw_history" }
+	| { id?: string; type: "tan"; work: string }
+	| { id?: string; type: "omfg"; complaint: string }
+	| {
+			id?: string;
+			type: "set_goal";
+			objective?: string;
+			tokenBudget?: number | null;
+			action?: "pause" | "resume" | "drop";
+	  }
+	| { id?: string; type: "get_loop_mode" }
+	| { id?: string; type: "set_loop_mode"; enabled: boolean; args?: string }
+
+	// Domain actions (mutating)
+	| { id?: string; type: "set_skill_enabled"; name: string; enabled: boolean }
+	| {
+			id?: string;
+			type: "manage_skill";
+			action: "create" | "update" | "delete";
+			name: string;
+			description?: string;
+			body?: string;
+	  }
+	| { id?: string; type: "set_hook_enabled"; hookId: string; enabled: boolean }
+	| { id?: string; type: "set_plugin_enabled"; pluginId: string; enabled: boolean; scope?: "user" | "project" }
+	| {
+			id?: string;
+			type: "mcp_action";
+			name: string;
+			action: "enable" | "disable" | "reconnect" | "remove";
+			scope?: "user" | "project";
+	  }
+	| { id?: string; type: "security_start"; target: RpcSecurityTargetInput }
+	| { id?: string; type: "security_cancel"; operationId: string }
+	| { id?: string; type: "security_validate"; scanId: string; findingId: string }
+	| {
+			id?: string;
+			type: "security_set_disposition";
+			scanId: string;
+			findingId: string;
+			status: RpcSecurityDispositionStatus;
+			rationale?: string;
+	  }
+	| {
+			id?: string;
+			type: "ssh_manage";
+			action: "create" | "update" | "delete";
+			scope: "user" | "project";
+			name: string;
+			previousName?: string;
+			previousScope?: "user" | "project";
+			host?: RpcSshHostInput;
+	  }
+	| { id?: string; type: "ssh_test"; host: RpcSshHostInput & { name: string } }
+
+	// Voice. Dictation: the GUI's microphone feeds the dictation model; words come back as
+	// `host_dictation_*` frames. `pcm16Base64` is little-endian PCM16 mono at 16 kHz.
+	| { id?: string; type: "host_dictation_start" }
+	| { id?: string; type: "host_dictation_audio"; pcm16Base64: string }
+	| { id?: string; type: "host_dictation_stop" }
+	| { id?: string; type: "host_dictation_cancel" }
+	| { id?: string; type: "synthesize_speech"; text: string }
+	| { id?: string; type: "retry" }
+	| { id?: string; type: "clear_context" }
+	| { id?: string; type: "abort_subagent"; agentId: string }
+	| { id?: string; type: "revive_subagent"; agentId: string }
+	| { id?: string; type: "write_local_paste"; content: string }
+	| { id?: string; type: "list_foreign_sessions"; source: "claude" | "codex" }
+	| { id?: string; type: "import_foreign_session"; source: "claude" | "codex"; foreignId: string }
+	| { id?: string; type: "fork_from"; entryId: string }
+	| { id?: string; type: "switch_leaf"; entryId: string; summarize?: boolean; customInstructions?: string }
+	| { id?: string; type: "resume_after_ask_reanswer" }
+	| { id?: string; type: "get_command_arg_completions"; command: string; prefix: string }
+	| { id?: string; type: "mcp_add"; name: string; config: RpcMcpServerInput; scope?: "user" | "project" }
+	| { id?: string; type: "mcp_test"; name?: string; config?: RpcMcpServerInput }
+	| { id?: string; type: "mcp_reauth"; name: string }
+	| { id?: string; type: "mcp_reauth_cancel"; name: string }
+	| {
+			id?: string;
+			type: "marketplace_action";
+			action: "add" | "remove" | "update" | "install" | "uninstall" | "upgrade" | "list_available";
+			marketplace?: string;
+			plugin?: string;
+			source?: string;
+	  }
+	| { id?: string; type: "get_plugin_detail"; pluginId: string }
+	| { id?: string; type: "set_plugin_features"; pluginId: string; features: string[] }
+	| { id?: string; type: "set_plugin_setting"; pluginId: string; key: string; value: unknown }
+	| { id?: string; type: "delete_plugin_setting"; pluginId: string; key: string }
+	| { id?: string; type: "live_start"; voice?: string; instructions?: string }
+	| { id?: string; type: "live_stop" }
+	| { id?: string; type: "live_mute"; muted?: boolean }
+	| { id?: string; type: "terminal_open"; cols?: number; rows?: number; cwd?: string }
+	| { id?: string; type: "terminal_run_cli"; subcommand: RpcTerminalCliSubcommand; args?: string[] }
+	| { id?: string; type: "tui_open"; surface: RpcTuiSurface }
+	| { id?: string; type: "terminal_input"; terminalId: string; data: string }
+	| { id?: string; type: "terminal_resize"; terminalId: string; cols: number; rows: number }
+	| { id?: string; type: "terminal_close"; terminalId: string }
+	| { id?: string; type: "terminal_list" }
+	| { id?: string; type: "terminal_snapshot"; terminalId: string }
+	| { id?: string; type: "terminal_configure"; interactiveCommands: boolean; agentTools?: boolean }
+	| { id?: string; type: "browser_host_start" }
+	| { id?: string; type: "browser_host_stop" }
+	| { id?: string; type: "debug"; params: RpcDebugParams }
+	| { id?: string; type: "collab_start"; relayUrl?: string; view?: boolean }
+	| { id?: string; type: "collab_join"; link: string }
+	| { id?: string; type: "collab_leave" }
+	| { id?: string; type: "get_collab_state" }
+
+	// Workspace directories (TUI /dirs /add-dir /remove-dir /move parity).
+	// add_directory/remove_directory return the post-mutation directory list;
+	// remove_directory refuses the primary (cwd) directory; move_session
+	// relocates the session file's cwd association on disk.
+	| { id?: string; type: "get_directories" }
+	| { id?: string; type: "add_directory"; path: string }
+	| { id?: string; type: "remove_directory"; path: string }
+	| { id?: string; type: "move_session"; path: string }
+	// Git worktrees (tab × worktree binding, plan/20). get_git_status feeds the
+	// footer git segment; worktree_create materializes branch omp/gui/<name> at
+	// ~/.omp/wt/gui-<name>-<hash7>; worktree_remove refuses dirty unless force.
+	| { id?: string; type: "get_git_status" }
+	| { id?: string; type: "get_git_changes" }
+	| { id?: string; type: "get_git_diff"; path: string }
+	| { id?: string; type: "worktree_create"; name: string; baseCwd?: string; baseRef?: "HEAD" | "default" }
+	| { id?: string; type: "worktree_remove"; path: string; force?: boolean }
+	// Pull requests (PR Center, plan/21). pr_diff is per-file (lazy), pr_draft
+	// is a model call, pr_checkout lands the PR in a worktree (plan/20 scheme).
+	| { id?: string; type: "pr_repo" }
+	| { id?: string; type: "pr_list"; state?: "open" | "closed" | "merged" | "all"; limit?: number }
+	| { id?: string; type: "pr_get"; number: number }
+	| { id?: string; type: "pr_diff"; number: number; path: string }
+	| { id?: string; type: "pr_draft"; base?: string; head?: string }
+	| { id?: string; type: "pr_create"; title: string; body: string; base?: string; head?: string; draft?: boolean }
+	| { id?: string; type: "pr_checkout"; number: number };
+
+// ============================================================================
+// RPC Responses (omp stdout → GUI)
+// ============================================================================
+
+export interface RpcResponseSuccess {
+	id?: string;
+	type: "response";
+	command: string;
+	success: true;
+	data?: unknown;
+}
+
+export interface RpcResponseError {
+	id?: string;
+	type: "response";
+	command: string;
+	success: false;
+	error: string;
+	code?: string;
+	/**
+	 * Optional structured details for machine-handled failures. Defined codes:
+	 * `session_owned_elsewhere` (F-OWN switch_session refusal) carries
+	 * `{ ownerTabId: string; ownerWinId: number }`.
+	 */
+	data?: unknown;
+}
+
+// ============================================================================
+// Session Report Results (/context /share /jobs parity)
+// ============================================================================
+
+/** Provider-anchored token breakdown, mirroring the agent's ContextUsageBreakdown. */
+export interface RpcContextUsageBreakdown {
+	contextWindow: number;
+	anchored: boolean;
+	usedTokens: number;
+	systemPromptTokens: number;
+	systemToolsTokens: number;
+	systemContextTokens: number;
+	skillsTokens: number;
+	messagesTokens: number;
+}
+
+/** get_context_report result. `contextWindow` 0 (and `model` empty) = no model selected. */
+export interface RpcContextReportResult {
+	breakdown?: RpcContextUsageBreakdown;
+	contextWindow: number;
+	model: string;
+}
+
+/** share_session result. `truncated` rides only when content was trimmed to fit the share budget. */
+export interface RpcShareSessionPreview {
+	/** The local preview already reflects upload size limits. */
+	truncated?: boolean;
+	snapshotId: string;
+	preview: string;
+	serverUrl: string;
+	store: "blob" | "gist";
+	redactionEnabled: boolean;
+}
+
+export interface RpcShareSessionResult {
+	url: string;
+	truncated?: boolean;
+}
+
+/** Provenance of one active tool (get_active_tools). Plugin-shipped tools surface as `extension`. */
+export type RpcToolSource = "builtin" | "mcp" | "extension" | "plugin";
+
+export interface RpcActiveTool {
+	name: string;
+	description?: string;
+	source: RpcToolSource;
+}
+
+/** Result of get_active_tools: active top-level tools, then xd:// mounted entries. */
+export interface RpcActiveToolsResult {
+	tools: RpcActiveTool[];
+}
+
+/** Result of set_prewalk: the armed state after the toggle. */
+export interface RpcPrewalkState {
+	enabled: boolean;
+}
+
+/** Result of shake_context. `removed` is the one-line operator summary (TUI formatShakeSummary). */
+export interface RpcShakeContextResult {
+	removed: string;
+}
+
+/** Result of reload_plugins: post-reload inventory counts. */
+export interface RpcReloadPluginsResult {
+	plugins: number;
+	skills: number;
+	commands: number;
+}
+
+/** Result of set_force_tool / get_force_tool: the pending forced tool, or null. */
+export interface RpcForceToolState {
+	tool: string | null;
+}
+
+/** Tone slot of a job-widget item; maps to theme colors (neutral/muted→dim, pending→warning). */
+export type RpcWidgetTone =
+	| "neutral"
+	| "accent"
+	| "info"
+	| "success"
+	| "warning"
+	| "error"
+	| "pending"
+	| "muted"
+	| "user";
+
+/** A formatted number with the direction it moved (`▲ 15%`). */
+export interface RpcJobWidgetTrend {
+	text: string;
+	tone: "success" | "error" | "muted";
+}
+
+/** Block of a job widget; mirrors JobWidgetBlock from the sidecar's job-widgets. */
+export type RpcJobWidgetBlock =
+	| {
+			kind: "spark";
+			label: string;
+			values: number[];
+			min: number;
+			max: number;
+			marks?: { value: number; label: string; tone?: RpcWidgetTone }[];
+			last: string;
+			tips?: string[];
+			tone?: RpcWidgetTone;
+	  }
+	| {
+			kind: "bars";
+			label: string;
+			items: { label: string; value: number; text: string; tone?: RpcWidgetTone }[];
+			max: number;
+	  }
+	| { kind: "meter"; label: string; value: number; text: string; tone?: RpcWidgetTone }
+	| {
+			kind: "stat";
+			items: { label: string; text: string; tone?: RpcWidgetTone; trend?: RpcJobWidgetTrend }[];
+	  }
+	| { kind: "grid"; label: string; items: { label: string; text: string; tone: RpcWidgetTone }[] }
+	| { kind: "text"; text: string };
+
+/** A job's live widget authored by the `widget` model role (frozen once the job settles). */
+export interface RpcJobWidgetView {
+	title: string;
+	headline?: { text: string; label?: string; trend?: RpcJobWidgetTrend };
+	stage?: string;
+	blocks: RpcJobWidgetBlock[];
+	state: "authoring" | "live" | "fallback";
+	updatedAt: number;
+}
+
+/** One async background job, as carried by the agent's job snapshot. */
+export interface RpcAsyncJobItem {
+	id: string;
+	type: "bash" | "task" | "eval";
+	status: "running" | "completed" | "failed" | "cancelled";
+	label: string;
+	/** What the model said the call is for (omp ≥18.15 sidecars); listings lead with it ahead of the command. */
+	intent?: string;
+	/** One line on what a long command does and when it ends, written by the widget model while widgets are on. */
+	caption?: string;
+	/** Full command line of a job that runs a process; `label` is cut to 120 characters. */
+	command?: string;
+	/** Epoch ms when the job started. */
+	startTime: number;
+	endedAt?: number;
+	/** Subagent a task job runs. */
+	agentId?: string;
+	/** Subagent that owns the job; absent for the viewing agent's own jobs. */
+	ownerId?: string;
+	cancellationPending?: boolean;
+	resultPreview?: string;
+	errorPreview?: string;
+	previewTruncated?: boolean;
+	/** Live widget authored for this job (omp ≥18.12.5 sidecars). */
+	widget?: RpcJobWidgetView;
+}
+
+/** One get_jobs tree row: a job (a task job also heads its subagent), or a header for a subagent with no listed task job. */
+export interface RpcJobTreeRow {
+	/** 0 for the viewing agent's own jobs; one more per subagent level. */
+	depth: number;
+	job?: RpcAsyncJobItem;
+	/** Subagent this row heads. */
+	agentId?: string;
+}
+
+/** get_jobs result: running jobs first, then recent (TUI /jobs ordering). */
+export interface RpcJobsResult {
+	jobs: RpcAsyncJobItem[];
+	/** This agent's and its subagents' jobs nested as TUI /jobs shows them, in display order (newer sidecars). */
+	tree?: RpcJobTreeRow[];
+}
+
+export type RpcResponse = RpcResponseSuccess | RpcResponseError;
+
+export type RpcDebugAction =
+	| "launch"
+	| "attach"
+	| "set_breakpoint"
+	| "remove_breakpoint"
+	| "set_instruction_breakpoint"
+	| "remove_instruction_breakpoint"
+	| "data_breakpoint_info"
+	| "set_data_breakpoint"
+	| "remove_data_breakpoint"
+	| "continue"
+	| "step_over"
+	| "step_in"
+	| "step_out"
+	| "pause"
+	| "evaluate"
+	| "stack_trace"
+	| "threads"
+	| "scopes"
+	| "variables"
+	| "disassemble"
+	| "read_memory"
+	| "write_memory"
+	| "modules"
+	| "loaded_sources"
+	| "custom_request"
+	| "output"
+	| "terminate"
+	| "sessions";
+
+export interface RpcDebugParams {
+	action: RpcDebugAction;
+	program?: string;
+	args?: string[];
+	adapter?: string;
+	cwd?: string;
+	file?: string;
+	line?: number;
+	function?: string;
+	name?: string;
+	condition?: string;
+	hit_condition?: string;
+	expression?: string;
+	context?: string;
+	frame_id?: number;
+	scope_id?: number;
+	variable_ref?: number;
+	pid?: number;
+	port?: number;
+	host?: string;
+	levels?: number;
+	memory_reference?: string;
+	instruction_reference?: string;
+	instruction_count?: number;
+	instruction_offset?: number;
+	count?: number;
+	data?: string;
+	data_id?: string;
+	access_type?: "read" | "write" | "readWrite";
+	command?: string;
+	arguments?: Record<string, unknown>;
+	offset?: number;
+	resolve_symbols?: boolean;
+	allow_partial?: boolean;
+	start_module?: number;
+	module_count?: number;
+	timeout?: number;
+}
+
+export type RpcLivePhase = "connecting" | "listening" | "working" | "speaking" | "muted" | "error";
+
+/** Live session phase change. */
+export interface RpcLivePhaseFrame {
+	type: "live_phase";
+	phase: RpcLivePhase;
+}
+
+/** Microphone/speaker RMS in [0, 1], at most one frame per 100 ms. */
+export interface RpcLiveLevelsFrame {
+	type: "live_levels";
+	input: number;
+	output: number;
+}
+
+/** Incremental (`final: false`) or final transcript of one realtime turn; coalesce on `role` + `turn`. */
+export interface RpcLiveTranscriptFrame {
+	type: "live_transcript";
+	role: "user" | "assistant";
+	turn: number;
+	text: string;
+	final: boolean;
+}
+
+/** Emitted exactly once per live session when it has ended; `error` carries the failure cause. */
+export interface RpcLiveEndFrame {
+	type: "live_end";
+	error?: string;
+}
+
+export type RpcLiveFrame = RpcLivePhaseFrame | RpcLiveLevelsFrame | RpcLiveTranscriptFrame | RpcLiveEndFrame;
+
+export const LIVE_FRAME_TYPES: ReadonlySet<string> = new Set<RpcLiveFrame["type"]>([
+	"live_phase",
+	"live_levels",
+	"live_transcript",
+	"live_end",
+]);
+
+// ============================================================================
+// Dictation (upstream shape: coding-agent rpc-dictation.ts)
+// ============================================================================
+
+/**
+ * `preparing`: loading (or downloading) the model, audio is not yet consumed;
+ * `recording`: audio is transcribed live; `transcribing`: finishing after stop.
+ */
+export type RpcDictationState = "preparing" | "recording" | "transcribing" | "idle";
+
+export interface RpcDictationStateFrame {
+	type: "host_dictation_state";
+	state: RpcDictationState;
+}
+
+/**
+ * Edits to the composer: `volatile` replaces the in-progress words; `commit` inserts final
+ * text at the dictation point; `clear` drops the in-progress words; `trim` deletes `count`
+ * characters before the dictation point; `submit` sends, per `stt.submitTrigger`.
+ */
+export type RpcDictationTextFrame =
+	| { type: "host_dictation_text"; op: "volatile"; text: string }
+	| { type: "host_dictation_text"; op: "commit"; text: string }
+	| { type: "host_dictation_text"; op: "clear" }
+	| { type: "host_dictation_text"; op: "trim"; count: number }
+	| { type: "host_dictation_text"; op: "submit" };
+
+export interface RpcDictationNoticeFrame {
+	type: "host_dictation_notice";
+	level: "warning" | "status";
+	message: string;
+}
+
+/** Download progress of the dictation model while preparing (integer percent, never decreasing). */
+export interface RpcDictationDownloadFrame {
+	type: "host_dictation_download";
+	label: string;
+	percent: number;
+}
+
+export type RpcDictationFrame =
+	| RpcDictationStateFrame
+	| RpcDictationTextFrame
+	| RpcDictationNoticeFrame
+	| RpcDictationDownloadFrame;
+
+export const DICTATION_FRAME_TYPES: ReadonlySet<string> = new Set<RpcDictationFrame["type"]>([
+	"host_dictation_state",
+	"host_dictation_text",
+	"host_dictation_notice",
+	"host_dictation_download",
+]);
+
+/** Result of `host_dictation_start`: `recording`, or `idle` when the start was cancelled or failed. */
+export interface RpcDictationStartResult {
+	state: RpcDictationState;
+}
+
+// ============================================================================
+// Terminals (sidecar-hosted PTYs; upstream shape: coding-agent rpc-terminal.ts)
+// ============================================================================
+
+/** One sidecar-hosted terminal. */
+/** omp subcommands `terminal_run_cli` launches in a revealed terminal (each brings its own terminal UI). */
+export type RpcTerminalCliSubcommand = "git" | "cleanse";
+
+/** TUI-only screens `tui_open` hosts in a terminal. */
+export type RpcTuiSurface = "advisor_config";
+
+/** `get_advisor_status`: the roster behind the TUI's advisor eye badge, plus advisor spend. */
+export interface RpcAdvisorStatus {
+	/** `advisor.enabled` is on; `advisors` lists the configured roster either way. */
+	configured: boolean;
+	advisors: Array<{
+		name: string;
+		status: "running" | "paused" | "quota_exhausted" | "error" | "no_model";
+		/** Every comment on the yielded primary turn is in; none arrive until the next turn. */
+		yielded: boolean;
+	}>;
+	/** Cumulative advisor cost recorded for this session, in USD. */
+	cost: number;
+	usingSubscription: boolean;
+}
+
+/** A saved-reset option bound to one stored credential; pass back unchanged to `redeem_reset_credit`. */
+export interface RpcResetCreditTarget {
+	provider: string;
+	credentialId: number;
+	creditId?: string;
+	accountId?: string;
+	email?: string;
+	orgId?: string;
+}
+
+/** One provider account row of `list_reset_credits`, active account first. */
+export interface RpcResetCreditAccount {
+	label: string;
+	provider: string;
+	providerLabel: string;
+	/** Banked resets, including grants that cannot be spent right now. */
+	availableCount: number;
+	/** Resets the provider currently permits this account to spend. */
+	redeemableCount: number;
+	target: RpcResetCreditTarget;
+	active: boolean;
+	error?: string;
+	unavailableReason?: string;
+	expiresAt?: string;
+}
+
+/** `redeem_reset_credit`: whether a reset was applied, plus a human-facing summary. */
+export interface RpcResetCreditRedeemResult {
+	ok: boolean;
+	code: string;
+	message: string;
+}
+
+export interface RpcTerminalInfo {
+	terminalId: string;
+	/**
+	 * `shell`: a login shell the user opened; `command`: a `pty: true` bash call
+	 * waiting on the user; `background`: a long-lived command the agent started
+	 * with its `terminal` tool (a dev server, a watcher); `session`: a shell the
+	 * agent drives command by command, here or over SSH.
+	 */
+	kind: "shell" | "command" | "background" | "session";
+	/** Shell name, the command's first line, or a session's label. */
+	title: string;
+	cwd: string;
+	running: boolean;
+	exitCode?: number;
+	pid?: number;
+	cols: number;
+	rows: number;
+	/** SSH destination of a remote session. */
+	host?: string;
+	/**
+	 * A session's state: `starting` until its shell is ready, `idle` at the
+	 * prompt, `busy` running the agent's command, `input` waiting for the user
+	 * to answer a password, passphrase, or host-key question.
+	 */
+	state?: "starting" | "idle" | "busy" | "input";
+	/** The session's shell runs as root. */
+	root?: boolean;
+}
+
+/** A terminal exists; `reveal` asks the GUI to show it (an agent command waits for the user). */
+export interface RpcTerminalOpenedFrame {
+	type: "terminal_opened";
+	terminal: RpcTerminalInfo;
+	reveal?: boolean;
+}
+
+/** Raw PTY output; `seq` counts characters sent for this terminal through the end of `data`. */
+export interface RpcTerminalOutputFrame {
+	type: "terminal_output";
+	terminalId: string;
+	data: string;
+	seq: number;
+}
+
+/** The terminal's process ended; the terminal stays until closed. */
+export interface RpcTerminalExitFrame {
+	type: "terminal_exit";
+	terminalId: string;
+	exitCode?: number;
+	cancelled: boolean;
+	timedOut: boolean;
+}
+
+export interface RpcTerminalClosedFrame {
+	type: "terminal_closed";
+	terminalId: string;
+}
+
+export type RpcTerminalFrame =
+	| RpcTerminalOpenedFrame
+	| RpcTerminalOutputFrame
+	| RpcTerminalExitFrame
+	| RpcTerminalClosedFrame;
+
+export const TERMINAL_FRAME_TYPES: ReadonlySet<string> = new Set<RpcTerminalFrame["type"]>([
+	"terminal_opened",
+	"terminal_output",
+	"terminal_exit",
+	"terminal_closed",
+]);
+
+/** `terminal_snapshot` result: recent output through `seq`; later frames have a larger `seq`. */
+export interface RpcTerminalSnapshot {
+	terminal: RpcTerminalInfo;
+	data: string;
+	seq: number;
+}
+
+/** `browser_host_start` result: the relay websocket the GUI dials as the extension. */
+export interface RpcBrowserHostInfo {
+	extensionUrl: string;
+}
+
+/** One /btw turn (upstream wire shape: `session/btw-history`). */
+export interface BtwHistoryTurn {
+	question: string;
+	answer: string;
+	status: "running" | "complete" | "cancelled" | "error" | "interrupted";
+	createdAt: number;
+	updatedAt: number;
+	error?: string;
+}
+
+/** Where a side answer's steering prompt stands (`btw.inject`); only this sidecar's answers can be sent. */
+export type BtwInjectState = "ready" | "sending" | "sent";
+
+/** A side-question conversation: the root turn plus follow-up turns. */
+export interface BtwHistoryRecord extends BtwHistoryTurn {
+	id: string;
+	leafId: string | null;
+	followUps?: readonly BtwHistoryTurn[];
+	/** The latest turn's `<inject>` block: `ready` to send with `btw_inject`, `sending` or `sent`. */
+	inject?: BtwInjectState;
+}
+
+/** An answer around its closed `<inject>` block (the agent's `splitBtwInject`). */
+export interface BtwInjectParts {
+	before: string;
+	inject: string;
+	after: string;
+}
+
+/**
+ * Split an answer at its last closed `<inject>` block: the last opener with a close after it,
+ * paired with the first close after it, so a tag mentioned in prose cannot capture the block.
+ */
+export function splitBtwInject(answer: string): BtwInjectParts | undefined {
+	const lastClose = answer.lastIndexOf("</inject>");
+	const open = lastClose === -1 ? -1 : answer.lastIndexOf("<inject>", lastClose - "<inject>".length);
+	if (open === -1) return undefined;
+	const close = answer.indexOf("</inject>", open + "<inject>".length);
+	const inject = answer.slice(open + "<inject>".length, close).trim();
+	if (!inject) return undefined;
+	return { before: answer.slice(0, open), inject, after: answer.slice(close + "</inject>".length) };
+}
+
+/** The latest (or root) turn of a btw record. */
+export function getBtwLatestTurn(record: BtwHistoryRecord): BtwHistoryTurn {
+	return record.followUps?.at(-1) ?? record;
+}
+
+/** Every turn of a side conversation: the root turn first, then follow-ups. */
+export function getBtwTurns(record: BtwHistoryRecord): readonly BtwHistoryTurn[] {
+	return [record, ...(record.followUps ?? [])];
+}
+
+/** Copy the most recent nonblank answer, preserving its original whitespace. */
+export function getBtwCopyText(record: BtwHistoryRecord): string | undefined {
+	const followUps = record.followUps ?? [];
+	for (let index = followUps.length - 1; index >= 0; index--) {
+		const answer = followUps[index]!.answer;
+		if (answer.trim()) return answer;
+	}
+	return record.answer.trim() ? record.answer : undefined;
+}
+
+/** One stored credential selectable for /logout (upstream `logout-account-selector`). */
+export interface LogoutAccount {
+	credentialId: number;
+	provider: string;
+	label: string;
+	detail: string;
+	type: "api_key" | "oauth";
+	active: boolean;
+}
+
+/** Text appended to the running side question's latest answer. */
+export interface RpcBtwDeltaFrame {
+	type: "btw_delta";
+	recordId: string;
+	delta: string;
+}
+
+/** Full record snapshot on every lifecycle change: started, complete, cancelled, error. */
+export interface RpcBtwRecordFrame {
+	type: "btw_record";
+	record: BtwHistoryRecord;
+}
+
+export type RpcBtwFrame = RpcBtwDeltaFrame | RpcBtwRecordFrame;
+
+export const BTW_FRAME_TYPES: ReadonlySet<string> = new Set<RpcBtwFrame["type"]>(["btw_delta", "btw_record"]);
+
+export interface RpcLiveStartResult {
+	voice: string;
+}
+
+export interface RpcLiveMuteResult {
+	muted: boolean;
+}
+
+export interface RpcCollabParticipant {
+	name: string;
+	role: "host" | "guest";
+	readOnly?: boolean;
+}
+
+export interface RpcCollabState {
+	role: "host" | "guest" | null;
+	readOnly: boolean;
+	link?: string;
+	viewLink?: string;
+	webLink?: string;
+	webViewLink?: string;
+	participants: RpcCollabParticipant[];
+}
+
+// ============================================================================
+// Queue Management (get_queue / queue_edit / queue_remove / queue_move / queue_clear)
+// ============================================================================
+
+/**
+ * One user-restorable queued message surfaced by get_queue. `id` is the
+ * stable per-entry queue id assigned at enqueue time, valid for queue
+ * operations until the entry is consumed or removed. `editable` distinguishes
+ * plain user prompts from structured command payloads.
+ */
+export interface RpcQueuedMessage {
+	id: string;
+	text: string;
+	images?: ImageContent[];
+	editable: boolean;
+	timestamp: number;
+}
+
+/** get_queue result: both lanes in visible execution order. */
+export interface RpcGetQueueResult {
+	steering: RpcQueuedMessage[];
+	followUp: RpcQueuedMessage[];
+}
+
+/** queue_edit result. */
+export interface RpcQueueEditResult {
+	updated: true;
+}
+
+/** queue_remove result. */
+export interface RpcQueueRemoveResult {
+	removed: true;
+}
+
+/** queue_move result: the entry's lane and final visible index. */
+export interface RpcQueueMoveResult {
+	lane: "steering" | "followUp";
+	index: number;
+}
+
+/** queue_clear result: count of user-restorable messages removed. */
+export interface RpcQueueClearResult {
+	removed: number;
+}
+
+// ============================================================================
+// Domain inspection results (read-only)
+// ============================================================================
+
+/** A discoverable skill with its session enable state. */
+export interface RpcSkillInfo {
+	name: string;
+	description: string;
+	/** "<provider>:<level>", e.g. "native:project", "claude:user". */
+	source: string;
+	enabled: boolean;
+	location: string;
+	provider: string;
+	providerName: string;
+	level: "user" | "project" | "native";
+	managed: boolean;
+	hidden: boolean;
+	/** Managed skills only: last write to SKILL.md, ms since epoch. */
+	modifiedAt?: number;
+}
+export interface RpcSkillsResult {
+	skills: RpcSkillInfo[];
+}
+export interface RpcSkillDetail extends RpcSkillInfo {
+	body: string;
+}
+export interface RpcManageSkillResult {
+	action: "create" | "update" | "delete";
+	name: string;
+}
+
+/** A discovered pre/post tool hook. */
+export interface RpcHookInfo {
+	/** Stable id used by `disabledExtensions`: "hook:<type>:<tool>:<name>". */
+	id: string;
+	name: string;
+	/** Hook event: "<pre|post>:<tool>", e.g. "pre:bash". */
+	event: string;
+	enabled: boolean;
+	source: string;
+	path: string;
+}
+export interface RpcHooksResult {
+	hooks: RpcHookInfo[];
+}
+
+/** A configured or discovered MCP server with live connection state. */
+export interface RpcMcpServerInfo {
+	name: string;
+	transport: "stdio" | "http" | "sse" | "unknown";
+	status: "connected" | "connecting" | "disconnected";
+	toolCount: number;
+	enabled: boolean;
+	authed: boolean;
+	/** Config provenance (C1). */
+	scope?: "user" | "project";
+	/** stdio only. */
+	command?: string;
+	/** http/sse only. */
+	url?: string;
+	lastError?: string;
+	authState?: "none" | "authorized" | "expired" | "required";
+}
+export interface RpcMcpServersResult {
+	servers: RpcMcpServerInfo[];
+}
+
+/** Input for adding an MCP server (C1 wizard). */
+export interface RpcMcpServerInput {
+	transport: "stdio" | "http" | "sse";
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+	url?: string;
+	headers?: Record<string, string>;
+	timeoutMs?: number;
+}
+
+/** One plugin listed by marketplace_action list_available (cache-backed). */
+export interface RpcMarketplacePluginInfo {
+	name: string;
+	description?: string;
+	version?: string;
+	installed: boolean;
+	/** Catalog metadata; each field is absent when the catalog entry omits it. */
+	author?: string;
+	license?: string;
+	repository?: string;
+	homepage?: string;
+	category?: string;
+	tags?: string[];
+}
+
+/** Plugin detail for the config editor (C1). Secret values are never included in `values`. */
+export interface RpcPluginDetail {
+	id: string;
+	enabled: boolean;
+	features: Array<{ id: string; description?: string; enabled: boolean }>;
+	settingsSchema?: unknown;
+	values: Record<string, unknown>;
+	/** Keys with persisted values, including write-only secret settings. */
+	configuredKeys: string[];
+}
+
+/** Theme tokens contributed by one enabled plugin's gui.theme asset. */
+export interface RpcGuiThemeInfo {
+	id: string;
+	tokens: Record<string, string>;
+}
+
+/** Result of `get_gui_themes`: declarative GUI theme tokens from enabled plugins. */
+export interface RpcGuiThemesResult {
+	themes: RpcGuiThemeInfo[];
+}
+
+/** An installed plugin (npm package or marketplace install). */
+export interface RpcPluginInfo {
+	name: string;
+	marketplace: string;
+	enabled: boolean;
+	version: string;
+	id?: string;
+	scope?: "user" | "project";
+	shadowedBy?: "project";
+}
+export interface RpcPluginsResult {
+	plugins: RpcPluginInfo[];
+}
+
+/** One session workspace root. Exactly one entry — the session cwd — is primary. */
+export interface RpcWorkspaceDirectory {
+	path: string;
+	primary: boolean;
+}
+
+/**
+ * Result of get_directories / add_directory / remove_directory: the session's
+ * workspace roots, primary (cwd) first, additional directories in order.
+ */
+export interface RpcWorkspaceDirectoriesResult {
+	directories: RpcWorkspaceDirectory[];
+}
+
+/**
+ * Result of get_git_status: footer git segment state for the session cwd.
+ * `isRepo` false outside a repository (counts zeroed, branch null).
+ */
+/** Net changes from the current HEAD to this checkout, including untracked files. */
+export interface RpcGitChanges {
+	isRepo: boolean;
+	root: string | null;
+	base: string | null;
+	files: { path: string; oldPath?: string; status: string }[];
+	truncated: boolean;
+}
+
+export interface RpcGitDiff {
+	path: string;
+	diff: string;
+	kind: "text" | "binary" | "large" | "symlink" | "directory";
+	truncated: boolean;
+}
+
+export interface RpcGitStatus {
+	isRepo: boolean;
+	branch: string | null;
+	staged: number;
+	unstaged: number;
+	untracked: number;
+}
+
+/** Result of worktree_create: the materialized worktree + its new branch + the repo it forked from. */
+export interface RpcWorktreeCreateResult {
+	path: string;
+	branch: string;
+	baseCwd: string;
+}
+
+/** pr_repo: gh availability + the session cwd's GitHub repo, or the typed reason it's unusable. */
+export type RpcPrRepo =
+	| { available: true; repo: string; defaultBranch: string | null }
+	| { available: false; reason: "gh_missing" | "not_a_repo" | "no_github_remote" };
+
+/** pr_list row: one PR with rollup CI counts. */
+export interface RpcPrListItem {
+	number: number;
+	title: string;
+	url: string;
+	isDraft: boolean;
+	authorLogin: string;
+	headRefName: string;
+	baseRefName: string;
+	additions: number;
+	deletions: number;
+	updatedAt: string;
+	reviewDecision: string | null;
+	checks: { success: number; failure: number; pending: number };
+}
+
+/** pr_get detail: everything rendered except per-file diff text (lazy pr_diff). */
+export interface RpcPrDetail {
+	number: number;
+	title: string;
+	url: string;
+	isDraft: boolean;
+	authorLogin: string;
+	body: string;
+	baseRefName: string;
+	headRefName: string;
+	mergeStateStatus: string;
+	additions: number;
+	deletions: number;
+	reviewDecision: string | null;
+	files: Array<{ path: string; changeType: string; additions: number; deletions: number }>;
+	checks: Array<{ name: string; status: string; conclusion: string | null }>;
+}
+
+/** pr_draft / pr_create results. */
+export interface RpcPrDraftResult {
+	title: string;
+	body: string;
+}
+export interface RpcPrCreateResult {
+	url: string;
+	number: number;
+}
+
+/** A configured marketplace source. */
+export interface RpcMarketplaceInfo {
+	name: string;
+	source: string;
+	pluginCount?: number;
+}
+export interface RpcMarketplacesResult {
+	marketplaces: RpcMarketplaceInfo[];
+}
+
+/** A file-based prompt template. */
+export interface RpcPromptTemplateInfo {
+	name: string;
+	description: string;
+	source: string;
+	argumentHint?: string;
+}
+export interface RpcPromptTemplatesResult {
+	templates: RpcPromptTemplateInfo[];
+}
+
+/** Structured memory backend status (mirrors MemoryBackendStatus). */
+export interface RpcMemoryStatus {
+	active: boolean;
+	writable: boolean;
+	searchable: boolean;
+	scope?: string;
+	retainBank?: string;
+	recallBanks?: string[];
+	workingCount?: number;
+	episodicCount?: number;
+	tripleCount?: number;
+	lastMemory?: string;
+	lastRecall?: boolean;
+	database?: string;
+	message?: string;
+	error?: string;
+}
+/** One bullet of the user's notes or the captured lessons; edits name it by `line`. */
+export interface RpcMemoryListEntry {
+	line: string;
+	text: string;
+	context?: string;
+}
+
+/** Where a session stands in its project's memory (mirrors MemorySourceState). */
+export type RpcMemorySourceState =
+	| "remembered"
+	| "nothing"
+	| "forgotten"
+	| "reading"
+	| "failed"
+	| "waiting"
+	| "queued"
+	| "old";
+
+export interface RpcMemorySource {
+	threadId: string;
+	sessionPath?: string;
+	title?: string;
+	/** ms since epoch; 0 when unknown. */
+	updatedAt: number;
+	state: RpcMemorySourceState;
+	summary?: string;
+	readAt?: number;
+	changedSinceRead?: boolean;
+	forgottenAt?: number;
+	error?: string;
+}
+
+export interface RpcMemoryActivity {
+	phase: "reading" | "consolidating";
+	done: number;
+	total: number;
+	/** Another omp process holds the work; counts are unknown. */
+	elsewhere: boolean;
+}
+
+/** One project's local memory (mirrors MemoryOverview). */
+export interface RpcMemoryOverview {
+	cwd: string;
+	/** The project's memory folder (may not exist yet). */
+	root: string;
+	backend: string;
+	enabled: boolean;
+	notes: RpcMemoryListEntry[];
+	lessons: RpcMemoryListEntry[];
+	summary: string;
+	full: string;
+	playbooks: Array<{ name: string; description: string; content: string }>;
+	injection: {
+		tokens: { notes: number; summary: number; learned: number; budget: number };
+		notesIncluded: number;
+		lessonsIncluded: number;
+		summaryTruncated: boolean;
+	};
+	sources: RpcMemorySource[];
+	activity?: RpcMemoryActivity;
+	consolidation: { updatedAt?: number; error?: string; pending: boolean };
+	limits: { idleHours: number; maxAgeDays: number; perUpdate: number };
+	models: { read?: string; consolidate?: string };
+}
+
+export type RpcMemoryEdit =
+	| { kind: "note"; action: "add"; text: string }
+	| { kind: "note" | "lesson"; action: "update"; line: string; text: string; context?: string }
+	| { kind: "note" | "lesson"; action: "delete"; line: string }
+	| { kind: "source"; action: "forget" | "restore"; threadId: string }
+	| { kind: "erase" };
+
+export type RpcMemoryEditOutcome = { ok: true; line?: string } | { ok: false; reason: "empty" | "not_found" | "full" };
+
+export interface RpcMemoryEditResult {
+	result: RpcMemoryEditOutcome;
+	overview: RpcMemoryOverview;
+}
+
+export interface RpcMemoryUpdateResult {
+	started: boolean;
+	overview: RpcMemoryOverview;
+}
+
+/** Read-only memory backend report. */
+export interface RpcMemoryReport {
+	backend: string;
+	entryCount?: number;
+	status?: RpcMemoryStatus;
+	stats?: string;
+	diagnosis?: string;
+}
+
+export type RpcSecurityDispositionStatus = "open" | "false_positive" | "accepted_risk" | "fixed" | "wont_fix";
+export type RpcSecuritySeverityLevel = "critical" | "high" | "medium" | "low" | "informational";
+export type RpcSecurityTargetInput =
+	| { kind: "repository" }
+	| { kind: "working_tree" }
+	| { kind: "ref_diff"; baseRevision: string; headRevision: string };
+export interface RpcSecurityFindingInfo {
+	id: string;
+	scanId: string;
+	title: string;
+	summary: string;
+	severity: RpcSecuritySeverityLevel;
+	confidence: "high" | "medium" | "low";
+	path?: string;
+	line?: number;
+	disposition: RpcSecurityDispositionStatus;
+	validation: "unvalidated" | "validated" | "rejected" | "partial" | "error";
+	remediation?: string;
+	evidence: Array<{ label: string; explanation: string; excerpt?: string; path?: string; line?: number }>;
+}
+export interface RpcSecurityScanInfo {
+	id: string;
+	status: "planned" | "running" | "completed" | "partial" | "cancelled" | "failed";
+	createdAt: string;
+	completedAt?: string;
+	producer: string;
+	findingCount: number;
+	target: {
+		kind: "repository" | "scoped_path" | "ref_diff" | "working_tree" | "imported";
+		displayName: string;
+		revision?: string;
+		baseRevision?: string;
+		headRevision?: string;
+	};
+}
+export interface RpcSecurityOperationInfo {
+	operationId: string;
+	planId: string;
+	scanId: string;
+	phase: "queued" | "preparing" | "reviewing" | "publishing" | "completed" | "partial" | "cancelled" | "failed";
+	createdAt: string;
+	updatedAt: string;
+	findingCount: number;
+	error?: string;
+}
+export interface RpcSecurityDashboardResult {
+	enabled: boolean;
+	modelReady: boolean;
+	modelLabel?: string;
+	repositoryRoot: string;
+	revision?: string;
+	scans: RpcSecurityScanInfo[];
+	operations: RpcSecurityOperationInfo[];
+	latest?: RpcSecurityScanResult;
+}
+export interface RpcSecurityScanResult {
+	scan: RpcSecurityScanInfo;
+	findings: RpcSecurityFindingInfo[];
+}
+export interface RpcSshHostInput {
+	host: string;
+	username?: string;
+	port?: number;
+	keyPath?: string;
+	description?: string;
+	compat?: boolean;
+}
+export interface RpcSshHostInfo extends RpcSshHostInput {
+	name: string;
+	scope: "user" | "project" | "native";
+	editable: boolean;
+	source: string;
+	os?: "windows" | "linux" | "macos" | "unknown";
+	shell?: "cmd" | "powershell" | "bash" | "zsh" | "sh" | "unknown";
+	compatShell?: "bash" | "sh";
+	transferShell?: "sh" | "bash" | "zsh";
+}
+export interface RpcSshHostsResult {
+	openSshAvailable: boolean;
+	hosts: RpcSshHostInfo[];
+	warnings: string[];
+}
+export interface RpcSshTestResult {
+	name: string;
+	ok: boolean;
+	checkedAt: string;
+	os?: RpcSshHostInfo["os"];
+	shell?: RpcSshHostInfo["shell"];
+	compatShell?: RpcSshHostInfo["compatShell"];
+	transferShell?: RpcSshHostInfo["transferShell"];
+	error?: string;
+}
+export interface RpcOmpUpdateResult {
+	currentVersion: string;
+	latestVersion: string;
+	updateAvailable: boolean;
+	checkedAt: string;
+	distribution: "bundled";
+	installStrategy: "gui-update";
+}
+
+/** A node in the session's branch tree (visual session navigation). */
+export interface RpcSessionTreeNode {
+	entryId: string;
+	parentId: string | null;
+	role: "user" | "assistant" | "system";
+	textPreview: string;
+	timestamp: number;
+	label?: string;
+	onActiveBranch: boolean;
+	isLeaf: boolean;
+}
+export interface RpcSessionTreeResult {
+	tree: RpcSessionTreeNode[];
+	activeLeafId: string | null;
+}
+
+export interface RpcThemeInfo {
+	name: string;
+	path?: string;
+}
+export interface RpcThemesResult {
+	themes: RpcThemeInfo[];
+}
+
+/** A UI theme's resolved colors as CSS hex strings, keyed by theme token (accent, statusLineBg, …). */
+export interface RpcThemeColorsResult {
+	name: string;
+	colors: Record<string, string>;
+}
+
+export interface RpcVibeModeState {
+	enabled: boolean;
+	killedWorkers?: number;
+}
+export interface RpcGoalState {
+	enabled: boolean;
+	status?: string;
+	objective?: string;
+	tokenBudget?: number | null;
+	tokensUsed?: number;
+	timeUsedSeconds?: number;
+	mode?: string;
+}
+export type RpcLoopLimit =
+	| { kind: "iterations"; initial: number; remaining: number }
+	| { kind: "duration"; durationMs: number; deadlineMs: number };
+export interface RpcLoopModeState {
+	enabled: boolean;
+	state: "off" | "waiting" | "running" | "paused";
+	prompt?: string;
+	limit?: RpcLoopLimit;
+}
+
+// ============================================================================
+// Ready Frame
+// ============================================================================
+
+export interface RpcReadyFrame {
+	type: "ready";
+	protocolVersion: number;
+	supportedProtocolVersions: number[];
+	maxFrameBytes: number;
+	maxReassembledFrameBytes: number;
+}
+
+// ============================================================================
+// Chunk Frame (v2 transport)
+// ============================================================================
+
+export interface RpcChunkFrame {
+	type: "rpc_chunk";
+	chunkId: string;
+	index: number;
+	count: number;
+	byteLength: number;
+	data: string; // base64
+}
+
+// ============================================================================
+// Session State
+// ============================================================================
+
+export interface ContextUsage {
+	tokens: number;
+	contextWindow: number;
+	percent: number;
+}
+
+/** Per-million-token rate card, as carried by the catalog model on the wire. */
+export interface ModelCost {
+	input?: number;
+	output?: number;
+	cacheRead?: number;
+	cacheWrite?: number;
+}
+
+export interface ModelInfo {
+	provider: string;
+	id: string;
+	name?: string;
+	description?: string;
+	isNew?: boolean;
+	isBeta?: boolean;
+	isRecommended?: boolean;
+	int?: number | null;
+	tps?: number | null;
+	/** Present on the wire (get_available_models / get_state carry full Model
+	 * objects) — used by the picker to flag over-context switches. */
+	contextWindow?: number | null;
+	/** Below the catalog these are reported only for models with a rate card. */
+	maxTokens?: number | null;
+	cost?: ModelCost;
+	/** Wire API the model speaks (`openai-responses`, `anthropic-messages`, …); present on `get_state`. */
+	api?: string;
+	/** Input modalities; `image` means snapcompact can archive history for this model. */
+	input?: string[];
+	/** Catalog-resolved quirks (an opaque bag here); the context strategy reads only `supportsServerCompaction`. */
+	compat?: object;
+}
+
+export interface RpcSessionState {
+	collab?: RpcCollabState;
+	model?: ModelInfo | null;
+	thinkingLevel: ThinkingLevel | undefined;
+	/** Configured selector: "auto" while auto mode is active, else the effective level. */
+	thinkingConfigured?: ThinkingLevel | "auto";
+	/** Levels the active model supports (empty = no reasoning); the picker must not offer unsupported values. */
+	availableThinkingLevels?: ThinkingLevel[];
+	isStreaming: boolean;
+	isCompacting: boolean;
+	steeringMode: "all" | "one-at-a-time";
+	followUpMode: "all" | "one-at-a-time";
+	interruptMode: "immediate" | "wait";
+	sessionFile?: string | null;
+	cwd: string;
+	sessionId: string;
+	sessionName?: string | null;
+	fastModeEnabled: boolean;
+	fastModeActive: boolean;
+	/** `/slow` applies to the active model (flex tier on OpenAI/Google, low priority on Claude subscriptions). */
+	slowModeSupported?: boolean;
+	/** `/slow` is on for the active model; always `false` when `slowModeSupported` is `false`. */
+	slowModeEnabled?: boolean;
+	/** Where the active model's `/slow` lives: `global` (persisted config shared by every session) or `session` (this session only). */
+	slowModeScope?: "session" | "global";
+	tokensPerSecond: number | null;
+	autoCompactionEnabled: boolean;
+	autoRetryEnabled: boolean;
+	messageCount: number;
+	queuedMessageCount: number;
+	/** Background jobs or deliveries can still inject a follow-up and wake the session. */
+	hasPendingAsyncWork?: boolean;
+	/** True only when the session is idle with no queued or pending async work. */
+	isSettled?: boolean;
+	todoPhases: TodoPhase[];
+	systemPrompt?: string[];
+	dumpTools?: ToolDump[];
+	contextUsage?: ContextUsage | null;
+	planModeEnabled: boolean;
+	/** Whether a prewalk model switch is armed and waiting for the first edit/write. */
+	prewalkArmed?: boolean;
+	agentsPaused: boolean;
+	agentsPausedAt?: number;
+	/** Session kind. Absent = agent; chat sessions are tool-free. */
+	kind?: "chat";
+}
+
+/** Authoritative selector/effective pair returned after set_thinking_level. */
+export interface RpcThinkingLevelState {
+	thinkingLevel: ThinkingLevel | undefined;
+	thinkingConfigured: ThinkingLevel | "auto" | undefined;
+}
+
+export interface ToolDump {
+	name: string;
+	description: string;
+	parameters: unknown;
+}
+
+export interface CopyTarget {
+	id: string;
+	label: string;
+	hint?: string;
+	preview: string;
+	language?: string;
+	content?: string;
+	copyMessage?: string;
+	children?: CopyTarget[];
+}
+
+// ============================================================================
+// Extension UI
+// ============================================================================
+
+export interface ExtensionAskDialogOption {
+	label: string;
+	description?: string;
+	preview?: string;
+}
+export interface ExtensionAskDialogQuestion {
+	id: string;
+	question: string;
+	header?: string;
+	options: ExtensionAskDialogOption[];
+	multi?: boolean;
+	recommended?: number;
+}
+export interface ExtensionAskDialogResultItem {
+	id: string;
+	question: string;
+	options: string[];
+	multi: boolean;
+	selectedOptions: string[];
+	customInput?: string;
+	note?: string;
+	timedOut?: boolean;
+}
+export interface ExtensionAskDialogSubmitResult {
+	kind: "submit";
+	results: ExtensionAskDialogResultItem[];
+}
+export interface ExtensionAskDialogChatResult {
+	kind: "chat";
+}
+export type ExtensionAskDialogResult = ExtensionAskDialogSubmitResult | ExtensionAskDialogChatResult;
+
+export interface ExtensionUISelectOptionDetail {
+	description?: string;
+}
+
+export type ExtensionUIRequest =
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "select";
+			title: string;
+			options: string[];
+			optionDetails?: ExtensionUISelectOptionDetail[];
+			timeout?: number;
+	  }
+	| { type: "extension_ui_request"; id: string; method: "confirm"; title: string; message: string; timeout?: number }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "askDialog";
+			questions: ExtensionAskDialogQuestion[];
+			timeout?: number;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "ask";
+			questions: ExtensionAskDialogQuestion[];
+			timeout?: number;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "input";
+			title: string;
+			placeholder?: string;
+			timeout?: number;
+			/**
+			 * Set on a pasted OAuth authorization-code prompt: the id of the
+			 * `open_url` request it belongs to. The agent closes it when the
+			 * browser signs in first.
+			 */
+			authCodeFor?: string;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "editor";
+			title: string;
+			prefill?: string;
+			promptStyle?: boolean;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "notify";
+			message: string;
+			notifyType?: "info" | "warning" | "error";
+	  }
+	| { type: "extension_ui_request"; id: string; method: "setStatus"; statusKey: string; statusText?: string }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "setWidget";
+			widgetKey: string;
+			widgetLines?: string[];
+			widgetPlacement?: string;
+	  }
+	| { type: "extension_ui_request"; id: string; method: "setTitle"; title: string }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "set_editor_text";
+			text: string;
+			images?: ImageContent[];
+			prepend?: boolean;
+	  }
+	| {
+			type: "extension_ui_request";
+			id: string;
+			method: "open_url";
+			url: string;
+			launchUrl?: string;
+			instructions?: string;
+	  }
+	| { type: "extension_ui_request"; id: string; method: "cancel"; targetId: string };
+
+export type ExtensionUIResponse =
+	| { type: "extension_ui_response"; id: string; value: string }
+	| { type: "extension_ui_response"; id: string; confirmed: boolean }
+	| { type: "extension_ui_response"; id: string; askDialog: ExtensionAskDialogResult }
+	/** Upstream `ask` protocol: one answer per question, in request order. */
+	| {
+			type: "extension_ui_response";
+			id: string;
+			answers: Array<{ id: string; selectedOptions: string[]; customInput?: string }>;
+	  }
+	| { type: "extension_ui_response"; id: string; cancelled: true; timedOut?: boolean };
+
+// ============================================================================
+// Host Tools & URIs
+// ============================================================================
+
+export interface HostToolDefinition {
+	name: string;
+	label?: string;
+	description: string;
+	parameters: Record<string, unknown>;
+	hidden?: boolean;
+	/** "essential" lists the tool to the model directly; the agent's default hides it behind tool search. */
+	loadMode?: "essential" | "discoverable";
+}
+
+export interface HostToolCallRequest {
+	type: "host_tool_call";
+	/** Snowflake request id the host echoes back in host_tool_result. */
+	id: string;
+	toolCallId: string;
+	toolName: string;
+	arguments: Record<string, unknown>;
+}
+
+export interface HostToolCancelRequest {
+	type: "host_tool_cancel";
+	id: string;
+	targetId: string;
+}
+
+/** A host tool's output as the agent reads it (an AgentToolResult). */
+export interface HostToolOutput {
+	content: { type: "text"; text: string }[];
+	/** Structured outcome kept on the tool result, for the transcript card. */
+	details?: Record<string, unknown>;
+}
+
+/** Sent by the host to complete a pending host tool call. The agent drops a frame whose `result` has no content array. */
+export interface HostToolResult {
+	type: "host_tool_result";
+	id: string;
+	result: HostToolOutput;
+	isError?: boolean;
+}
+
+/** Sent by the host to stream a partial tool update. */
+export interface HostToolUpdate {
+	type: "host_tool_update";
+	id: string;
+	partialResult: HostToolOutput;
+}
+
+export interface HostUriSchemeDefinition {
+	scheme: string;
+	description: string;
+	writable?: boolean;
+	immutable?: boolean;
+}
+
+export interface HostUriRequest {
+	type: "host_uri_request";
+	id: string;
+	operation: "read" | "write";
+	url: string;
+	/** Present for write operations. */
+	content?: string;
+}
+
+export interface HostUriCancelRequest {
+	type: "host_uri_cancel";
+	id: string;
+	targetId: string;
+}
+
+/** Sent by the host to complete a pending URI request. */
+export interface HostUriResult {
+	type: "host_uri_result";
+	id: string;
+	content?: string;
+	error?: string;
+}
+
+// ============================================================================
+// Subagents
+// ============================================================================
+export type AgentSource = "bundled" | "user" | "project";
+export type SubagentSubscriptionLevel = "off" | "progress" | "events";
+
+export interface SubagentSnapshot {
+	id: string;
+	index: number;
+	agent: string;
+	agentSource?: AgentSource;
+	description?: string;
+	status: string;
+	/** False when a registry ref claims running but has no turn in flight. */
+	live?: boolean;
+	task?: string;
+	assignment?: string;
+	sessionFile?: string;
+	lastUpdate: number;
+	/** When the agent first started, ms since the epoch; a revival keeps the first start. */
+	spawnedAt?: number;
+	progress?: AgentProgress;
+	parentToolCallId?: string;
+	/** Present when spawned by another subagent (absent = root spawn from main session). */
+	parentSubagentId?: string;
+	kind?: "sub" | "advisor";
+}
+
+export interface RpcAgentDefinitionInfo {
+	name: string;
+	description: string;
+	source: "bundled" | "user" | "project";
+	filePath?: string;
+	model?: string[];
+	thinkingLevel?: string;
+	tools?: string[];
+	spawns?: string[] | "*";
+	autoloadSkills?: string[];
+	output?: unknown;
+	blocking?: boolean;
+	readSummarize?: boolean;
+	prewalk?: boolean | string;
+	defaultPatterns: string[];
+	defaultResolved?: string;
+	effectivePatterns: string[];
+	effectiveResolved?: string;
+	effectiveThinkingLevel?: string;
+	prewalkPattern?: string;
+	prewalkResolved?: string;
+}
+
+export interface RpcAgentDefinitionsResult {
+	agents: RpcAgentDefinitionInfo[];
+}
+
+export interface AgentProgress {
+	index: number;
+	id: string;
+	agent: string;
+	agentSource: AgentSource;
+	status: "pending" | "running" | "completed" | "failed" | "aborted";
+	task: string;
+	assignment?: string;
+	description?: string;
+	lastIntent?: string;
+	currentTool?: string;
+	currentToolArgs?: string;
+	currentToolStartMs?: number;
+	recentTools: Array<{ tool: string; args: string; endMs: number }>;
+	recentOutput: string[];
+	toolCount: number;
+	requests: number;
+	tokens: number;
+	contextTokens?: number;
+	contextWindow?: number;
+	cost: number;
+	durationMs: number;
+	modelOverride?: string | string[];
+	modelRole?: string;
+	resolvedModel?: string;
+	resolvedModelIsFallback?: boolean;
+	extractedToolData?: Record<string, unknown[]>;
+	retryState?: {
+		attempt: number;
+		maxAttempts: number;
+		delayMs: number;
+		errorMessage: string;
+		startedAtMs: number;
+	};
+	retryFailure?: { attempt: number; errorMessage: string };
+	inflightTaskDetails?: unknown;
+}
+
+export interface SubagentLifecyclePayload {
+	id: string;
+	agent: string;
+	agentSource: AgentSource;
+	description?: string;
+	status: "started" | "completed" | "failed" | "aborted";
+	sessionFile?: string;
+	parentToolCallId?: string;
+	parentSubagentId?: string;
+	index: number;
+	detached?: boolean;
+}
+
+export interface SubagentProgressPayload {
+	index: number;
+	agent: string;
+	agentSource: AgentSource;
+	task: string;
+	parentToolCallId?: string;
+	parentSubagentId?: string;
+	assignment?: string;
+	progress: AgentProgress;
+	sessionFile?: string;
+	detached?: boolean;
+}
+
+export interface SubagentLifecycleFrame {
+	type: "subagent_lifecycle";
+	payload: SubagentLifecyclePayload;
+}
+
+export interface SubagentProgressFrame {
+	type: "subagent_progress";
+	payload: SubagentProgressPayload;
+}
+
+export interface SubagentEventFrame {
+	type: "subagent_event";
+	payload: { id: string; event: AgentSessionEvent };
+}
+
+export type SubagentFrame = SubagentLifecycleFrame | SubagentProgressFrame | SubagentEventFrame;
+
+// ============================================================================
+// Shared Value Types
+// ============================================================================
+
+export type ThinkingLevel = "inherit" | "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/**
+ * Extension-UI methods that block until the user responds — the "waiting for
+ * input" surfaces (approval/ask flows). Used by the notification gate and the
+ * sidebar's waiting-for-confirmation signal.
+ */
+export const BLOCKING_UI_METHODS: Record<string, true> = {
+	select: true,
+	confirm: true,
+	askDialog: true,
+	ask: true,
+	input: true,
+	editor: true,
+	open_url: true,
+};
+
+/** All levels in ascending effort order (picker menus, cycle parity). */
+export const THINKING_LEVEL_VALUES: readonly ThinkingLevel[] = [
+	"off",
+	"minimal",
+	"low",
+	"medium",
+	"high",
+	"xhigh",
+	"max",
+];
+
+/** Runtime narrowing for wire values (thinking_level_changed.configured, get_state). */
+export function isThinkingLevel(value: unknown): value is ThinkingLevel {
+	return typeof value === "string" && (THINKING_LEVEL_VALUES as readonly string[]).includes(value);
+}
+
+export interface ImageContent {
+	type: "image";
+	data: string;
+	mimeType: string;
+}
+
+export interface TodoPhase {
+	name: string;
+	tasks: TodoTask[];
+}
+
+export interface TodoTask {
+	content: string;
+	status: "pending" | "in_progress" | "completed" | "abandoned" | "blocked";
+}
+
+// ============================================================================
+// Messages (simplified wire format)
+// ============================================================================
+
+export interface AgentMessage {
+	/** Persisted OMP session-tree node id, present on user/assistant transcript messages. */
+	entryId?: string;
+	/** GUI-only local echo awaiting ownership by the persisted transcript. */
+	optimistic?: boolean;
+	/** Last committed entry when this local echo was created; null means an empty transcript. */
+	optimisticAfterEntryId?: string | null;
+	/** The local echo has received its wire delivery and must not match another user message. */
+	optimisticDelivered?: boolean;
+	role:
+		| "user"
+		| "assistant"
+		| "system"
+		| "toolResult"
+		| "bashExecution"
+		| "pythonExecution"
+		| "custom"
+		| "hookMessage"
+		| "branchSummary"
+		| "compactionSummary"
+		| "fileMention";
+	content?: MessageContent[] | string;
+	steering?: boolean;
+	stopReason?: string;
+	errorMessage?: string;
+	errorId?: number;
+	timestamp?: string | number;
+	command?: string;
+	code?: string;
+	output?: string;
+	exitCode?: number;
+	cancelled?: boolean;
+	truncated?: boolean;
+	toolCallId?: string;
+	toolName?: string;
+	details?: unknown;
+	isError?: boolean;
+	excludeFromContext?: boolean;
+	/** Time to first token (ms), sibling of `duration` on assistant messages — rides the wire via event passthrough (event-controller.ts:1258). */
+	ttft?: number;
+	customType?: string;
+	display?: boolean;
+	summary?: string;
+	shortSummary?: string;
+	tokensBefore?: number;
+	tokensAfter?: number;
+	method?: string;
+	files?: Array<{
+		path: string;
+		content: string;
+		lineCount?: number;
+		byteSize?: number;
+		skippedReason?: "tooLarge" | "binary";
+		image?: ImageContent;
+	}>;
+	[key: string]: unknown;
+}
+
+export type MessageContent = TextContent | ImageContent | ThinkingContent | ToolCallContent;
+
+export interface TextContent {
+	type: "text";
+	text: string;
+}
+
+export interface ThinkingContent {
+	type: "thinking";
+	thinking: string;
+}
+
+export interface ToolCallContent {
+	type: "toolCall";
+	id: string;
+	name: string;
+	arguments: Record<string, unknown>;
+	partialArgs?: string;
+	streamIndex?: number;
+	intent?: string;
+}
+
+// ============================================================================
+// Messages Page
+// ============================================================================
+
+export interface MessagesPage {
+	messages: AgentMessage[];
+	totalMessages: number;
+	nextCursor?: string;
+}
+
+// ============================================================================
+// Available Commands
+// ============================================================================
+
+export interface AvailableCommand {
+	name: string;
+	description: string;
+	aliases?: string[];
+	/** Input hint (ghost text) for commands that take a simple argument. */
+	input?: { hint?: string };
+	/** Declarative subcommands for dropdown completion (e.g. /mcp add). */
+	subcommands?: Array<{ name: string; description?: string; usage?: string }>;
+	/** Where the command came from (builtin, skill, extension, custom, mcp_prompt, file). */
+	source?: string;
+	/** Whether the command consumes text after its name (drives post-space completion). */
+	allowArgs?: boolean;
+	/** Whether dynamic candidates exist via get_command_arg_completions. */
+	hasDynamicArgCompletion?: boolean;
+	/** False for builtins that require a native GUI/TUI surface. */
+	textModeExecutable?: boolean;
+}
+
+// ============================================================================
+// Login Providers
+// ============================================================================
+
+export interface LoginProvider {
+	id: string;
+	name: string;
+	available: boolean;
+	authenticated: boolean;
+}
+
+// ============================================================================
+// Usage (provider quotas + local session tallies)
+// ============================================================================
+
+export interface UsageLimit {
+	id: string;
+	label: string;
+	usedFraction?: number;
+	used?: number;
+	limit?: number;
+	unit?: string;
+	remainingFraction?: number;
+	windowLabel?: string;
+	resetsAt?: number;
+	status?: string;
+	notes?: string[];
+}
+
+export interface UsageReport {
+	provider: string;
+	fetchedAt: number;
+	limits: UsageLimit[];
+	notes?: string[];
+	account?: string;
+	resetCreditsAvailable?: number;
+}
+
+export interface UsageSessionStats {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens: number;
+	orchestrationTokens: number;
+	premiumRequests: number;
+	cost: number;
+}
+
+export interface UsageResult {
+	reports: UsageReport[];
+	session: UsageSessionStats;
+}
+
+// ============================================================================
+// Settings schema
+// ============================================================================
+
+export interface SettingProvenance {
+	layers: ("global" | "project" | "overlay" | "runtime")[];
+	globalValue?: unknown;
+	globalPath?: string;
+}
+
+export interface SettingEntry {
+	provenance?: SettingProvenance;
+	path: string;
+	type: "boolean" | "string" | "number" | "enum" | "array" | "record";
+	value: unknown;
+	default: unknown;
+	label?: string;
+	description?: string;
+	tab?: string;
+	group?: string;
+	options?: Array<{ value: string; label: string; description?: string }>;
+	secret?: boolean;
+	advanced?: boolean;
+	/** Visibility gate name; hidden only when the GUI can evaluate it to false. */
+	condition?: string;
+	/** True when array order is meaningful and the editor supports reordering. */
+	ordered?: boolean;
+	/** True when the setting only affects TUI chrome — the GUI hides it. */
+	tuiOnly?: boolean;
+	/** True when the value is cached at session construction — edits need a sidecar restart. */
+	restartRequired?: boolean;
+}
+
+export interface SettingsSchemaResult {
+	entries: SettingEntry[];
+	tabs: Array<{ id: string; label: string; groups: string[] }>;
+}
+
+// ============================================================================
+// Providers
+// ============================================================================
+
+export interface ProviderInfo {
+	id: string;
+	name: string;
+	authenticated: boolean;
+	authKind?: "oauth" | "apikey" | "env";
+	account?: string;
+	loginAvailable: boolean;
+	disabled: boolean;
+	baseUrl?: string;
+	modelCount: number;
+}
+
+export type ProviderDiscoveryStatus = "idle" | "ok" | "empty" | "cached" | "unavailable" | "unauthenticated";
+
+export interface ProviderDiscoveryState {
+	provider: string;
+	status: ProviderDiscoveryStatus;
+	optional: boolean;
+	stale: boolean;
+	fetchedAt?: number;
+	models: string[];
+	error?: string;
+}
+
+export interface AvailableModelsResult {
+	models: ModelInfo[];
+	discoveryStates: ProviderDiscoveryState[];
+	refreshPending: boolean;
+	generation: number;
+}
+
+export interface ProvidersResult {
+	providers: ProviderInfo[];
+	models: ModelInfo[];
+	discoveryStates: ProviderDiscoveryState[];
+	refreshPending: boolean;
+	generation: number;
+}
+
+export interface ModelCatalogUpdateFrame extends AvailableModelsResult {
+	type: "model_catalog_update";
+	providers: ProviderInfo[];
+}
+
+// ============================================================================
+// Plan Mode
+// ============================================================================
+
+export interface PlanModeState {
+	enabled: boolean;
+	planFilePath?: string;
+}
+
+// ============================================================================
+// Model Roles
+// ============================================================================
+
+export interface ModelRoleCandidate {
+	provider: string;
+	id: string;
+	name: string;
+	kind: "chat" | "tiny" | "image" | "tts" | "stt" | "search" | "judge";
+	/** Thinking levels a role can run this model at, in menu order; empty when it does not reason. */
+	thinkingLevels?: (ThinkingLevel | "auto")[];
+}
+
+/** The candidate a role's selector names, with its `:level` suffix parsed by the backend. */
+export interface ModelRoleSelection {
+	provider: string;
+	id: string;
+	thinkingLevel?: ThinkingLevel | "auto";
+}
+
+export interface ModelRoleEntry extends ModelRoleMetadata {
+	/** Configured selector, not necessarily a catalog model id. */
+	model?: string;
+	/** Set when `model` names one of `candidates`; absent for aliases and fallback chains. */
+	selected?: ModelRoleSelection;
+	source: string;
+	/** Backend-filtered eligible models; never shared with the chat picker. */
+	candidates: ModelRoleCandidate[];
+}
+
+export interface ModelRolesResult {
+	roles: ModelRoleEntry[];
+}
+
+export interface ModelRoleMetadata {
+	id: string;
+	name: string;
+	tag?: string;
+	color?: string;
+	hidden?: boolean;
+	section: "chat" | "kind";
+}
+
+export interface ModelRoleMetadataResult {
+	roles: ModelRoleMetadata[];
+}
+
+// ============================================================================
+// Session Stats
+// ============================================================================
+
+export interface SessionStats {
+	/** Entire journal, including pre-compaction history and sibling branches. */
+	history?: {
+		input: number;
+		output: number;
+		cacheRead: number;
+		cacheWrite: number;
+		totalTokens: number;
+		orchestrationInput: number;
+		orchestrationOutput: number;
+		orchestrationCacheRead: number;
+		premiumRequests: number;
+		cost: number;
+		sampledAt: number;
+	};
+	sessionFile?: string;
+	sessionId: string;
+	userMessages: number;
+	assistantMessages: number;
+	toolCalls: number;
+	toolResults: number;
+	totalMessages: number;
+	tokens: {
+		input: number;
+		output: number;
+		reasoning: number;
+		cacheRead: number;
+		cacheWrite: number;
+		total: number;
+	};
+	premiumRequests: number;
+	cost: number;
+	credits?: {
+		cost: number;
+		committedCost: number;
+		acuCost: number;
+	};
+	routedModels?: Record<string, number>;
+	contextUsage?: ContextUsage;
+}
+
+// ============================================================================
+// Voice (speech in/out)
+// ============================================================================
+
+/** Result of `synthesize_speech`: local TTS output as base64 WAV (PCM16). */
+export interface SynthesizeSpeechResult {
+	audioBase64: string;
+	mimeType: string;
+}
+
+// ============================================================================
+// Outbound Frame Union (everything omp can emit on stdout)
+// ============================================================================
+
+export type OutboundFrame =
+	| RpcReadyFrame
+	| RpcResponse
+	| RpcChunkFrame
+	| AgentSessionEvent
+	| ExtensionUIRequest
+	| HostToolCallRequest
+	| HostToolCancelRequest
+	| HostUriRequest
+	| HostUriCancelRequest
+	| SubagentFrame
+	| AvailableCommandsUpdateFrame
+	| PromptResultFrame
+	| SessionSettledFrame
+	| CommandOutputFrame
+	| SessionInfoUpdateFrame
+	| ConfigUpdateFrame
+	| RpcLiveFrame
+	| RpcDictationFrame
+	| RpcTerminalFrame
+	| ModelCatalogUpdateFrame
+	| ExtensionErrorFrame;
+
+export interface AvailableCommandsUpdateFrame {
+	type: "available_commands_update";
+	commands: AvailableCommand[];
+}
+
+/** Result of switch_leaf (session.navigateTree passthrough + the leaf after the move). */
+export interface RpcSwitchLeafResult {
+	cancelled: boolean;
+	aborted?: boolean;
+	reopenAsk?: { toolCallId: string; questions: unknown };
+	editorText?: string;
+	editorImages?: ImageContent[];
+	activeLeafId?: string;
+	askReanswerCommitted?: boolean;
+}
+
+/** Lightweight metadata of one Claude/Codex session offered for import. */
+export interface RpcForeignSessionInfo {
+	id: string;
+	path: string;
+	cwd: string;
+	title?: string;
+	created: string;
+	modified: string;
+	messageCount?: number;
+	firstMessage?: string;
+}
+/** Prompt terminal status introduced by the upstream RPC lifecycle contract. */
+export type RpcPromptStatus = "completed" | "aborted" | "error";
+
+export interface RpcPromptError {
+	message: string;
+	provider?: string;
+	model?: string;
+	httpStatus?: number;
+	retryable: boolean;
+}
+
+export interface PromptResultFrame {
+	type: "prompt_result";
+	id?: string;
+	agentInvoked: boolean;
+	status?: RpcPromptStatus;
+	error?: RpcPromptError;
+	/** False means background work can still wake the session. */
+	sessionSettled?: boolean;
+}
+
+export interface SessionSettledFrame {
+	type: "session_settled";
+}
+
+export interface CommandOutputFrame {
+	type: "command_output";
+	text: string;
+}
+
+export interface SessionInfoUpdateFrame {
+	type: "session_info_update";
+	title?: string | null;
+	sessionId?: string;
+}
+
+export interface ConfigUpdateFrame {
+	type: "config_update";
+	[key: string]: unknown;
+}
+
+export interface ExtensionErrorFrame {
+	type: "extension_error";
+	extensionPath: string;
+	event: string;
+	error: string;
+}
+
+// ============================================================================
+// AgentSessionEvent (24 types)
+// ============================================================================
+
+export type AgentSessionEvent =
+	| { type: "collab_state"; state: RpcCollabState; restored?: boolean }
+	| { type: "agent_start"; sessionId?: string }
+	| { type: "agent_end"; messages?: AgentMessage[]; isTerminal?: boolean; telemetry?: unknown; coverage?: unknown }
+	| { type: "turn_start" }
+	| { type: "turn_end"; message?: AgentMessage; toolResults?: unknown[] }
+	| { type: "message_start"; messageId?: string; message: AgentMessage }
+	| {
+			type: "message_update";
+			messageId?: string;
+			/** Delta-mode frames carry only the role; full-mode frames carry the whole snapshot. */
+			message: Pick<AgentMessage, "role">;
+			assistantMessageEvent: AssistantMessageEvent;
+	  }
+	| { type: "message_end"; messageId?: string; message: AgentMessage }
+	| {
+			type: "tool_execution_start";
+			toolCallId: string;
+			toolName: string;
+			args: Record<string, unknown>;
+			intent?: string;
+	  }
+	| {
+			type: "tool_execution_update";
+			toolCallId: string;
+			toolName: string;
+			args: Record<string, unknown>;
+			partialResult: unknown;
+	  }
+	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: unknown; isError?: boolean }
+	| { type: "auto_compaction_start"; reason: "threshold" | "overflow" | "idle" | "incomplete"; action: string }
+	| {
+			type: "auto_compaction_end";
+			action: string;
+			result: unknown;
+			aborted: boolean;
+			willRetry: boolean;
+			errorMessage?: string;
+			skipped?: boolean;
+	  }
+	| {
+			type: "auto_retry_start";
+			attempt: number;
+			maxAttempts: number;
+			delayMs: number;
+			errorMessage: string;
+			errorId?: number;
+	  }
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string; recoveredErrors?: unknown[] }
+	| { type: "retry_fallback_applied"; from: string; to: string; role: string }
+	| { type: "retry_fallback_succeeded"; model: string; role: string }
+	| { type: "model_changed" }
+	// Payload-free: re-read with get_config_warnings / get_advisor_status.
+	| { type: "config_warnings_changed" }
+	| { type: "advisor_cost_changed" }
+	| { type: "advisor_yielded" }
+	| { type: "ttsr_triggered"; rules: unknown[] }
+	| { type: "todo_reminder"; todos: TodoTask[]; attempt: number; maxAttempts: number }
+	| { type: "todo_auto_clear" }
+	| { type: "irc_message"; message: unknown }
+	| { type: "notice"; level: "info" | "warning" | "error"; message: string; source?: string }
+	| {
+			type: "thinking_level_changed";
+			thinkingLevel: ThinkingLevel | undefined;
+			configured?: string;
+			resolved?: string;
+	  }
+	| { type: "goal_updated"; goal: unknown; state?: unknown }
+	| {
+			type: "plan_proposal";
+			planFilePath: string;
+			title?: string;
+			suggestedFileName?: string;
+			planContent: string;
+			options: string[];
+	  }
+	| { type: "loop_mode_update"; state: RpcLoopModeState }
+	// Authoritative queue snapshot after every queue mutation (enqueue,
+	// drain/consume, remove, move, clear, dequeue restore). The queue store
+	// treats this as the update channel; get_queue is only a hydrate fallback.
+	| { type: "queue_update"; steering: RpcQueuedMessage[]; followUp: RpcQueuedMessage[] };
+
+/**
+ * The GUI opts into delta-only `message_update` frames, so `partial` (the
+ * accumulated message) is absent; it is kept optional for sidecars that ignore
+ * the opt-in. A streaming tool call's id and name first arrive on `toolcall_end`.
+ */
+export type AssistantMessageEvent =
+	| { type: "text_delta"; contentIndex: number; delta: string; partial?: AgentMessage }
+	| { type: "thinking_delta"; contentIndex: number; delta: string; partial?: AgentMessage }
+	| { type: "toolcall_delta"; contentIndex: number; delta: string; partial?: AgentMessage }
+	| { type: "toolcall_end"; contentIndex: number; toolCall: ToolCallContent; partial?: AgentMessage };
+
+// ============================================================================
+// Sidecar Status
+// ============================================================================
+
+/**
+ * `asleep` is the state of a sidecar that was created but never spawned — a
+ * restored background tab, whose process is started the first time the tab
+ * becomes visible. It is distinct from `exited` (a spawn that ran and ended)
+ * and from `starting` (a spawn already under way).
+ */
+export type SidecarStatus = "asleep" | "starting" | "ready" | "exited" | "error" | "restarting";
+
+/** Crash-loop progress carried by a `restarting` status, and by the terminal
+ * `error` when the attempts ran out. Structured so the banner can render
+ * "attempt N/M" without parsing main's diagnostic text. */
+export interface SidecarRestartProgress {
+	attempt: number;
+	maxAttempts: number;
+}
+
+/** Payload of `SidecarManager`'s `status` event, forwarded to the renderer as
+ * the `SIDECAR_STATUS` IPC. `message` is the raw technical reason (exit code +
+ * stderr tail), never user-facing copy. */
+export interface SidecarStatusPayload {
+	status: SidecarStatus;
+	message?: string;
+	cwd: string;
+	restart?: SidecarRestartProgress;
+	/** On `ready`: the saved session model that could not be restored; the session resumed on the default model. */
+	modelFallback?: string;
+}

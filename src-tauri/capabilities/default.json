@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "omp desktop default capabilities: core IPC/event surface plus opener and dialog",
+  "windows": ["main"],
+  "permissions": ["core:default", "opener:default", "dialog:default"]
+}

@@ -1,0 +1,524 @@
+/**
+ * Tauri replacement for the Electron preload script: exposes the same `OmpApi` on `window.omp`.
+ *
+ * Every namespace call becomes one `ipc_invoke` bridge command carrying the original channel
+ * string, so `src/shared/ipc-types.ts` stays the single source of truth on both sides. Event
+ * subscriptions return unsubscribe functions, exactly as before.
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import type {
+	ConversationSearchResponse,
+	CustomProviderInput,
+	CustomProviderView,
+	DeepLinkPayload,
+	IpcActiveTabEnvelope,
+	IpcBenchmarkRunOptions,
+	IpcBenchmarkRunResult,
+	IpcBrowserActionPayload,
+	IpcBrowserKeyPayload,
+	IpcBrowserState,
+	IpcBrowserViewportPayload,
+	IpcConversationSearchPayload,
+	IpcCustomThemes,
+	IpcFsListResult,
+	IpcFsReadImageResult,
+	IpcFsReadPlanPayload,
+	IpcFsReadPlanResult,
+	IpcFsReadResult,
+	IpcMemoryChange,
+	IpcOpenPathResult,
+	IpcResolvedPath,
+	IpcSessionOpenNewWindowPayload,
+	IpcSessionOwner,
+	IpcSetTabOrderPayload,
+	IpcSetTabViewPayload,
+	IpcSidecarRestartPayload,
+	IpcSidecarStatusPayload,
+	IpcSpawnTabPayload,
+	IpcSpawnTabResult,
+	IpcStatsUrlResult,
+	IpcTabGroup,
+	IpcTabInfo,
+	IpcTabStatusPayload,
+	IpcTerminalFramePayload,
+	LogBatch,
+	MenuAction,
+	MenuActionPayload,
+	OmpApi,
+	RunProgressState,
+	RuntimeErrorReport,
+	SessionInfo,
+	SystemInfo,
+	TrayState,
+	UpdateStatus,
+} from "../shared/ipc-types";
+import { IPC_COMMANDS, IPC_EVENTS } from "../shared/ipc-types";
+import type { Language } from "../shared/languages";
+import { createSessionRpcClient, timeoutForCommand } from "../shared/rpc-client";
+import type {
+	AgentSessionEvent,
+	AvailableCommand,
+	CommandOutputFrame,
+	ConfigUpdateFrame,
+	ExtensionErrorFrame,
+	ExtensionUIRequest,
+	ExtensionUIResponse,
+	HostToolCallRequest,
+	HostToolResult,
+	HostToolUpdate,
+	HostUriRequest,
+	HostUriResult,
+	ModelCatalogUpdateFrame,
+	PromptResultFrame,
+	RpcBtwFrame,
+	RpcCommand,
+	RpcDictationFrame,
+	RpcLiveFrame,
+	RpcResponse,
+	SessionInfoUpdateFrame,
+	SubagentFrame,
+} from "../shared/rpc-types";
+import type {
+	DraftProblem,
+	RunProgress,
+	SchedulerInsights,
+	SchedulerLimits,
+	SchedulerOpenTarget,
+	SchedulerSnapshot,
+	TaskConfig,
+	TaskDraft,
+	TaskNotice,
+	TaskRevision,
+	TaskRun,
+	TaskSaveResult,
+} from "../shared/scheduler-types";
+
+function rpcCommand(cmd: RpcCommand, timeoutMs?: number): Promise<RpcResponse> {
+	return call(IPC_COMMANDS.RPC_COMMAND, {
+		command: cmd,
+		timeoutMs: timeoutMs ?? timeoutForCommand(cmd),
+	});
+}
+
+const IPC_INVOKE = "ipc_invoke";
+
+/** One bridge command: every namespace call funnels through here. */
+function call<T>(channel: string, payload?: unknown): Promise<T> {
+	return invoke<T>(IPC_INVOKE, { channel, payload });
+}
+
+/** Fire-and-forget bridge command (no caller waits for a value). */
+function fire(channel: string, payload?: unknown): void {
+	void invoke(IPC_INVOKE, { channel, payload }).catch(() => {});
+}
+
+/**
+ * Subscribe to one main-process event. Tauri's `listen` is async, so the unlisten handle is
+ * resolved lazily; calling the returned function before that resolves still detaches.
+ */
+function subscribe<T>(channel: string, callback: (data: T) => void): () => void {
+	let disposed = false;
+	let unlisten: (() => void) | null = null;
+	void listen<T>(channel, event => {
+		// A throwing handler must not take down the other listeners on this channel.
+		try {
+			callback(event.payload);
+		} catch (error) {
+			const failure = error instanceof Error ? error : new Error(String(error));
+			fire(IPC_COMMANDS.RUNTIME_ERROR_REPORT, {
+				source: "preload",
+				message: `IPC handler for "${channel}" failed: ${failure.message}`,
+				stack: failure.stack,
+				details: { channel },
+			} satisfies RuntimeErrorReport);
+		}
+	}).then(detach => {
+		if (disposed) detach();
+		else unlisten = detach;
+	});
+	return () => {
+		disposed = true;
+		unlisten?.();
+		unlisten = null;
+	};
+}
+
+/**
+ * Paths of files the user dropped, in arrival order. Tauri hands us real paths on the drop
+ * event, while `File` objects in the renderer carry only a name — matching by name keeps
+ * `app.pathForFile` working for the composer's drop target.
+ */
+const droppedPaths: Array<{ name: string; path: string }> = [];
+
+function rememberDroppedPaths(paths: string[]): void {
+	for (const path of paths) {
+		const name = path.split(/[\\/]/).pop() ?? path;
+		droppedPaths.push({ name, path });
+	}
+	// Keep the queue bounded: only recent drops can still be claimed by a pending render.
+	if (droppedPaths.length > 32) droppedPaths.splice(0, droppedPaths.length - 32);
+}
+
+function pathForFile(file: File): string {
+	const index = droppedPaths.findIndex(entry => entry.name === file.name);
+	if (index === -1) return "";
+	const [entry] = droppedPaths.splice(index, 1);
+	return entry.path;
+}
+
+let activeTabId: string | null = null;
+
+function subscribeActiveTab<T>(channel: string, callback: (data: T) => void): () => void {
+	return subscribe<IpcActiveTabEnvelope<T>>(channel, envelope => {
+		if (activeTabId === null || envelope.tabId === activeTabId) callback(envelope.payload);
+	});
+}
+
+function subscribeTab<T>(channel: string, callback: (data: T, tabId: string) => void): () => void {
+	return subscribe<IpcActiveTabEnvelope<T>>(channel, envelope => callback(envelope.payload, envelope.tabId));
+}
+
+const api: OmpApi = {
+	runtime: {
+		report: (error: RuntimeErrorReport) => fire(IPC_COMMANDS.RUNTIME_ERROR_REPORT, error),
+		logPath: () => call(IPC_COMMANDS.RUNTIME_LOG_PATH) as Promise<string>,
+		logSnapshot: () => call(IPC_COMMANDS.LOG_SNAPSHOT) as Promise<LogBatch>,
+		logTail: (maxLines: number) => call(IPC_COMMANDS.RUNTIME_LOG_TAIL, maxLines) as Promise<string[]>,
+	},
+	// Fire-and-forget: the guard may show a modal, and the renderer has nothing
+	// to learn from the outcome.
+	app: {
+		quit: () => fire(IPC_COMMANDS.APP_QUIT),
+		pathForFile: (file: File) => pathForFile(file),
+	},
+
+	rpc: {
+		...createSessionRpcClient(rpcCommand),
+		commandForTab: (tabId: string, cmd: RpcCommand, timeoutMs?: number) =>
+			call(IPC_COMMANDS.RPC_COMMAND_FOR_TAB, {
+				tabId,
+				command: cmd,
+				timeoutMs: timeoutMs ?? timeoutForCommand(cmd),
+			}) as Promise<RpcResponse>,
+	},
+
+	events: {
+		onBatch: (callback: (events: AgentSessionEvent[]) => void) =>
+			subscribeActiveTab<AgentSessionEvent[]>(IPC_EVENTS.EVENTS_BATCH, callback),
+		onSidecarStatus: (callback: (status: IpcSidecarStatusPayload) => void) =>
+			subscribeActiveTab<IpcSidecarStatusPayload>(IPC_EVENTS.SIDECAR_STATUS, callback),
+		onTabStatus: (callback: (payload: IpcTabStatusPayload) => void) =>
+			subscribe<IpcTabStatusPayload>(IPC_EVENTS.TAB_STATUS, callback),
+		onExtensionUi: (callback: (request: ExtensionUIRequest, tabId: string) => void) =>
+			subscribe<{ request: ExtensionUIRequest; tabId: string }>(IPC_EVENTS.EXTENSION_UI, data =>
+				callback(data.request, data.tabId),
+			),
+		onHostToolCall: (callback: (request: HostToolCallRequest) => void) =>
+			subscribe<{ request: HostToolCallRequest }>(IPC_EVENTS.HOST_TOOL_CALL, data => callback(data.request)),
+		onHostUriRequest: (callback: (request: HostUriRequest) => void) =>
+			subscribe<{ request: HostUriRequest }>(IPC_EVENTS.HOST_URI_REQUEST, data => callback(data.request)),
+		onSubagentFrame: (callback: (frame: SubagentFrame) => void) =>
+			subscribeActiveTab<SubagentFrame>(IPC_EVENTS.SUBAGENT_FRAME, callback),
+		onLiveFrame: (callback: (frame: RpcLiveFrame) => void) =>
+			subscribeActiveTab<RpcLiveFrame>(IPC_EVENTS.LIVE_FRAME, callback),
+		onBtwFrame: (callback: (frame: RpcBtwFrame) => void) =>
+			subscribeActiveTab<RpcBtwFrame>(IPC_EVENTS.BTW_FRAME, callback),
+		onModelCatalogUpdate: (callback: (frame: ModelCatalogUpdateFrame) => void) =>
+			subscribeActiveTab<ModelCatalogUpdateFrame>(IPC_EVENTS.MODEL_CATALOG_UPDATE, callback),
+		onCommandsUpdate: (callback: (commands: AvailableCommand[]) => void) =>
+			subscribeActiveTab<AvailableCommand[]>(IPC_EVENTS.COMMANDS_UPDATE, callback),
+		onConfigUpdate: (callback: (payload: ConfigUpdateFrame) => void) =>
+			subscribeActiveTab<ConfigUpdateFrame>(IPC_EVENTS.CONFIG_UPDATE, callback),
+		onSessionsChanged: (callback: () => void) => subscribe<undefined>(IPC_EVENTS.SESSIONS_CHANGED, () => callback()),
+		onMemoryChanged: (callback: (change: IpcMemoryChange) => void) =>
+			subscribe<IpcMemoryChange>(IPC_EVENTS.MEMORY_CHANGED, callback),
+		onLogLines: (callback: (lines: string[]) => void) =>
+			subscribe<LogBatch>(IPC_EVENTS.LOG_LINE, batch => callback(batch.lines)),
+		onLogBatch: (callback: (batch: LogBatch) => void) => subscribe<LogBatch>(IPC_EVENTS.LOG_LINE, callback),
+		onPromptResult: (callback: (frame: PromptResultFrame) => void) =>
+			subscribeActiveTab<PromptResultFrame>(IPC_EVENTS.PROMPT_RESULT, callback),
+		onCommandOutput: (callback: (frame: CommandOutputFrame) => void) =>
+			subscribeActiveTab<CommandOutputFrame>(IPC_EVENTS.COMMAND_OUTPUT, callback),
+		onSessionInfoUpdate: (callback: (frame: SessionInfoUpdateFrame) => void) =>
+			subscribeActiveTab<SessionInfoUpdateFrame>(IPC_EVENTS.SESSION_INFO_UPDATE, callback),
+		onExtensionError: (callback: (frame: ExtensionErrorFrame) => void) =>
+			subscribeActiveTab<ExtensionErrorFrame>(IPC_EVENTS.EXTENSION_ERROR, callback),
+		onTabBatch: (callback: (events: AgentSessionEvent[], tabId: string) => void) =>
+			subscribeTab<AgentSessionEvent[]>(IPC_EVENTS.EVENTS_BATCH, callback),
+		onTabSidecarStatus: (callback: (status: IpcSidecarStatusPayload, tabId: string) => void) =>
+			subscribeTab<IpcSidecarStatusPayload>(IPC_EVENTS.SIDECAR_STATUS, callback),
+		onTabSubagentFrame: (callback: (frame: SubagentFrame, tabId: string) => void) =>
+			subscribeTab<SubagentFrame>(IPC_EVENTS.SUBAGENT_FRAME, callback),
+		onTabDictationFrame: (callback: (frame: RpcDictationFrame, tabId: string) => void) =>
+			subscribeTab<RpcDictationFrame>(IPC_EVENTS.DICTATION_FRAME, callback),
+		onTabModelCatalogUpdate: (callback: (frame: ModelCatalogUpdateFrame, tabId: string) => void) =>
+			subscribeTab<ModelCatalogUpdateFrame>(IPC_EVENTS.MODEL_CATALOG_UPDATE, callback),
+		onTabCommandsUpdate: (callback: (commands: AvailableCommand[], tabId: string) => void) =>
+			subscribeTab<AvailableCommand[]>(IPC_EVENTS.COMMANDS_UPDATE, callback),
+		onTabConfigUpdate: (callback: (frame: ConfigUpdateFrame, tabId: string) => void) =>
+			subscribeTab<ConfigUpdateFrame>(IPC_EVENTS.CONFIG_UPDATE, callback),
+		onTabPromptResult: (callback: (frame: PromptResultFrame, tabId: string) => void) =>
+			subscribeTab<PromptResultFrame>(IPC_EVENTS.PROMPT_RESULT, callback),
+		onTabCommandOutput: (callback: (frame: CommandOutputFrame, tabId: string) => void) =>
+			subscribeTab<CommandOutputFrame>(IPC_EVENTS.COMMAND_OUTPUT, callback),
+		onTabSessionInfoUpdate: (callback: (frame: SessionInfoUpdateFrame, tabId: string) => void) =>
+			subscribeTab<SessionInfoUpdateFrame>(IPC_EVENTS.SESSION_INFO_UPDATE, callback),
+		onTabExtensionError: (callback: (frame: ExtensionErrorFrame, tabId: string) => void) =>
+			subscribeTab<ExtensionErrorFrame>(IPC_EVENTS.EXTENSION_ERROR, callback),
+		onMenuAction: (callback: (action: MenuAction, payload?: MenuActionPayload) => void) =>
+			subscribe<{ action: MenuAction } & MenuActionPayload>(IPC_EVENTS.MENU_ACTION, data =>
+				callback(data.action, data),
+			),
+		onDeepLink: (callback: (link: DeepLinkPayload) => void) =>
+			subscribe<DeepLinkPayload>(IPC_EVENTS.DEEP_LINK, callback),
+		onUpdaterStatus: (callback: (status: UpdateStatus) => void) =>
+			subscribe<UpdateStatus>(IPC_EVENTS.UPDATER_STATUS, callback),
+		onTerminalFrame: (callback: (payload: IpcTerminalFramePayload) => void) =>
+			subscribe<IpcTerminalFramePayload>(IPC_EVENTS.TERMINAL_FRAME, callback),
+		onBrowserState: (callback: (state: IpcBrowserState) => void) =>
+			subscribe<IpcBrowserState>(IPC_EVENTS.BROWSER_STATE, callback),
+		onBrowserKey: (callback: (payload: IpcBrowserKeyPayload) => void) =>
+			subscribe<IpcBrowserKeyPayload>(IPC_EVENTS.BROWSER_KEY, callback),
+	},
+
+	browser: {
+		getState: (tabId: string) => call(IPC_COMMANDS.BROWSER_GET_STATE, { tabId }),
+		open: (tabId: string, url: string) => call(IPC_COMMANDS.BROWSER_OPEN, { tabId, url }),
+		action: (payload: IpcBrowserActionPayload) => call(IPC_COMMANDS.BROWSER_ACTION, payload),
+		// Fire-and-forget: the panel reports its rect on every layout change.
+		setViewport: (payload: IpcBrowserViewportPayload) => {
+			fire(IPC_COMMANDS.BROWSER_SET_VIEWPORT, payload);
+		},
+		capture: (tabId: string) => call(IPC_COMMANDS.BROWSER_CAPTURE, { tabId }),
+		setShortcuts: (chords: string[]) => {
+			fire(IPC_COMMANDS.BROWSER_SET_SHORTCUTS, { chords });
+		},
+	},
+
+	updater: {
+		check: () => call(IPC_COMMANDS.UPDATER_CHECK),
+		download: () => call(IPC_COMMANDS.UPDATER_DOWNLOAD),
+		apply: () => call(IPC_COMMANDS.UPDATER_APPLY),
+		getStatus: () => call(IPC_COMMANDS.UPDATER_GET_STATUS),
+		version: () => call(IPC_COMMANDS.UPDATER_VERSION),
+	},
+
+	ui: {
+		respondExtensionUi: (response: ExtensionUIResponse) => {
+			call(IPC_COMMANDS.EXTENSION_UI_RESPOND, { response });
+		},
+		sendHostToolResult: (result: HostToolResult) => {
+			call(IPC_COMMANDS.HOST_TOOL_RESULT, { result });
+		},
+		sendHostToolUpdate: (update: HostToolUpdate) => {
+			call(IPC_COMMANDS.HOST_TOOL_UPDATE, { update });
+		},
+		sendHostUriResult: (result: HostUriResult) => {
+			call(IPC_COMMANDS.HOST_URI_RESULT, { result });
+		},
+	},
+
+	scheduler: {
+		snapshot: () => call(IPC_COMMANDS.SCHEDULER_GET_SNAPSHOT) as Promise<SchedulerSnapshot>,
+		validate: (draft: TaskDraft, editingId?: string) =>
+			call(IPC_COMMANDS.SCHEDULER_VALIDATE, { draft, editingId }) as Promise<DraftProblem[]>,
+		create: (draft: TaskDraft) =>
+			call(IPC_COMMANDS.SCHEDULER_CREATE, { draft }) as Promise<TaskSaveResult>,
+		update: (taskId: string, config: TaskConfig) =>
+			call(IPC_COMMANDS.SCHEDULER_UPDATE, { taskId, config }) as Promise<TaskSaveResult>,
+		setEnabled: (taskId: string, enabled: boolean) =>
+			call(IPC_COMMANDS.SCHEDULER_SET_ENABLED, { taskId, enabled }) as Promise<TaskSaveResult>,
+		archive: (taskId: string, cancelLive: boolean) =>
+			call(IPC_COMMANDS.SCHEDULER_ARCHIVE, { taskId, cancelLive }) as Promise<void>,
+		remove: (taskId: string) => call(IPC_COMMANDS.SCHEDULER_DELETE, { taskId }) as Promise<boolean>,
+		runNow: (taskId: string) =>
+			call(IPC_COMMANDS.SCHEDULER_RUN_NOW, { taskId }) as Promise<TaskRun | null>,
+		cancelRun: (runId: string) =>
+			call(IPC_COMMANDS.SCHEDULER_CANCEL_RUN, { runId }) as Promise<boolean>,
+		review: (runId: string, decision: "accepted" | "rejected", note?: string) =>
+			call(IPC_COMMANDS.SCHEDULER_REVIEW, { runId, decision, note }) as Promise<TaskRun | null>,
+		setPaused: (paused: boolean) =>
+			call(IPC_COMMANDS.SCHEDULER_SET_PAUSED, { paused }) as Promise<void>,
+		setLimits: (patch: Partial<Pick<SchedulerLimits, "maxConcurrentRuns" | "retainDays">>) =>
+			call(IPC_COMMANDS.SCHEDULER_SET_LIMITS, { patch }) as Promise<void>,
+		insights: (periodDays: number, taskId?: string) =>
+			call(IPC_COMMANDS.SCHEDULER_INSIGHTS, { periodDays, taskId }) as Promise<SchedulerInsights>,
+		getRun: (runId: string) =>
+			call(IPC_COMMANDS.SCHEDULER_GET_RUN, { runId }) as Promise<TaskRun | null>,
+		taskRuns: (taskId: string) =>
+			call(IPC_COMMANDS.SCHEDULER_TASK_RUNS, { taskId }) as Promise<TaskRun[]>,
+		revisions: (taskId: string) =>
+			call(IPC_COMMANDS.SCHEDULER_REVISIONS, { taskId }) as Promise<TaskRevision[]>,
+		onSnapshot: (callback: (snapshot: SchedulerSnapshot) => void) =>
+			subscribe<SchedulerSnapshot>(IPC_EVENTS.SCHEDULER_SNAPSHOT, callback),
+		onProgress: (callback: (runId: string, progress: RunProgress) => void) =>
+			subscribe<{ runId: string; progress: RunProgress }>(IPC_EVENTS.SCHEDULER_PROGRESS, data =>
+				callback(data.runId, data.progress),
+			),
+		onOpen: (callback: (target: SchedulerOpenTarget) => void) =>
+			subscribe<SchedulerOpenTarget>(IPC_EVENTS.SCHEDULER_OPEN, callback),
+		notices: () => call(IPC_COMMANDS.SCHEDULER_GET_NOTICES) as Promise<TaskNotice[]>,
+		markNoticesRead: (ids?: string[]) =>
+			call(IPC_COMMANDS.SCHEDULER_MARK_NOTICES_READ, { ids }) as Promise<void>,
+		onNotices: (callback: (notices: TaskNotice[]) => void) =>
+			subscribe<TaskNotice[]>(IPC_EVENTS.SCHEDULER_NOTICES, callback),
+	},
+	sessions: {
+		list: (scope: "local" | "global") =>
+			call(IPC_COMMANDS.SESSIONS_LIST, { scope }) as Promise<SessionInfo[]>,
+		delete: (sessionPath: string) =>
+			call(IPC_COMMANDS.SESSIONS_DELETE, { sessionPath }) as Promise<void>,
+		rename: (sessionPath: string, name: string) =>
+			call(IPC_COMMANDS.SESSIONS_RENAME, { sessionPath, name }) as Promise<void>,
+		search: (query: string, scope: "local" | "global") =>
+			call(IPC_COMMANDS.SESSIONS_SEARCH, { query, scope }) as Promise<string[]>,
+		searchConversations: (query: string, cwd?: string | null) =>
+			call(IPC_COMMANDS.CONVERSATIONS_SEARCH, {
+				query,
+				cwd,
+			} satisfies IpcConversationSearchPayload) as Promise<ConversationSearchResponse>,
+		openInNewWindow: (payload: IpcSessionOpenNewWindowPayload) =>
+			call(IPC_COMMANDS.SESSION_OPEN_NEW_WINDOW, payload) as Promise<boolean>,
+		consumePendingOpen: () => call(IPC_COMMANDS.SESSION_CONSUME_PENDING) as Promise<string | null>,
+	},
+
+	tabs: {
+		list: () => call(IPC_COMMANDS.GET_TABS) as Promise<IpcTabInfo[]>,
+		spawn: (payload: IpcSpawnTabPayload) =>
+			call(IPC_COMMANDS.SPAWN_TAB, payload) as Promise<IpcSpawnTabResult | null>,
+		close: (tabId: string) => call(IPC_COMMANDS.CLOSE_TAB, { tabId }) as Promise<boolean>,
+		setActive: async (tabId: string) => {
+			const switched = (await call(IPC_COMMANDS.SET_ACTIVE_TAB, { tabId })) as boolean;
+			if (switched) activeTabId = tabId;
+			return switched;
+		},
+		setView: async (focusedTabId: string, visibleTabIds: string[], groups?: IpcTabGroup[]) => {
+			const payload: IpcSetTabViewPayload = { focusedTabId, visibleTabIds, groups };
+			const switched = (await call(IPC_COMMANDS.SET_TAB_VIEW, payload)) as boolean;
+			if (switched) activeTabId = focusedTabId;
+			return switched;
+		},
+		setOrder: (tabIds: string[]) => {
+			const payload: IpcSetTabOrderPayload = { tabIds };
+			return call(IPC_COMMANDS.SET_TAB_ORDER, payload) as Promise<boolean>;
+		},
+		getSessionOwner: (sessionPath: string) =>
+			call(IPC_COMMANDS.GET_SESSION_OWNER, { sessionPath }) as Promise<IpcSessionOwner | null>,
+	},
+
+	stats: {
+		fetch: (path: string, params?: Record<string, string>) =>
+			call(IPC_COMMANDS.STATS_FETCH, { path, params }),
+		url: () => call(IPC_COMMANDS.STATS_URL) as Promise<IpcStatsUrlResult>,
+	},
+
+	bench: {
+		run: (options: IpcBenchmarkRunOptions) =>
+			call(IPC_COMMANDS.BENCH_RUN, options) as Promise<IpcBenchmarkRunResult>,
+		abort: () => call(IPC_COMMANDS.BENCH_ABORT) as Promise<boolean>,
+	},
+
+	system: {
+		info: () => call(IPC_COMMANDS.SYSTEM_INFO) as Promise<SystemInfo>,
+		openExternal: (url: string) => call(IPC_COMMANDS.SYSTEM_OPEN_EXTERNAL, url),
+		openPath: (path: string) => call(IPC_COMMANDS.SYSTEM_OPEN_PATH, path) as Promise<IpcOpenPathResult>,
+		resolvePaths: (paths: string[], tabId?: string) =>
+			call(IPC_COMMANDS.SYSTEM_RESOLVE_PATHS, { paths, tabId }) as Promise<
+				Array<IpcResolvedPath | null>
+			>,
+		revealPath: (path: string) =>
+			call(IPC_COMMANDS.SYSTEM_REVEAL_PATH, path) as Promise<IpcOpenPathResult>,
+		showSaveDialog: (defaultPath?: string, filters?: { name: string; extensions: string[] }[]) =>
+			call(IPC_COMMANDS.SYSTEM_SAVE_DIALOG, { defaultPath, filters }),
+		showOpenDialog: (filters?: { name: string; extensions: string[] }[], options?: { directory?: boolean }) =>
+			call(IPC_COMMANDS.SYSTEM_OPEN_DIALOG, { filters, options }),
+		clipboardRead: () => call(IPC_COMMANDS.SYSTEM_CLIPBOARD_READ),
+		recorderSave: (path: string, data: ArrayBuffer) =>
+			call(IPC_COMMANDS.RECORDER_SAVE, { path, data }) as Promise<{ ok: boolean; error?: string }>,
+		notify: (title: string, body?: string) => {
+			call(IPC_COMMANDS.SYSTEM_NOTIFY, { title, body });
+		},
+	},
+
+	themes: {
+		list: () => call(IPC_COMMANDS.THEMES_LIST) as Promise<IpcCustomThemes>,
+		openFolder: () => call(IPC_COMMANDS.THEMES_OPEN_FOLDER) as Promise<IpcOpenPathResult>,
+		onChanged: callback => subscribe<IpcCustomThemes>(IPC_EVENTS.THEMES_CHANGED, callback),
+	},
+
+	prefs: {
+		onLanguageChanged: callback => subscribe<Language>(IPC_EVENTS.LANGUAGE_CHANGED, callback),
+		get: (key?: string) => call(IPC_COMMANDS.PREFS_GET, { key }),
+		set: (key: string, value: unknown) => call(IPC_COMMANDS.PREFS_SET, { key, value }),
+		updateLaunchProfile: (cwd, patch) => call(IPC_COMMANDS.PREFS_UPDATE_LAUNCH_PROFILE, { cwd, patch }),
+	},
+
+	sidecar: {
+		restart: (payload?: IpcSidecarRestartPayload) => call(IPC_COMMANDS.SIDECAR_RESTART, payload),
+		selectProject: () => call(IPC_COMMANDS.SIDECAR_SELECT_PROJECT),
+		setProject: (cwd: string) => call(IPC_COMMANDS.SIDECAR_SET_PROJECT, { cwd }),
+		defaultWorkspace: () => call(IPC_COMMANDS.SIDECAR_DEFAULT_WORKSPACE) as Promise<string>,
+		getStatus: () => call(IPC_COMMANDS.SIDECAR_STATUS_GET),
+	},
+
+	tray: {
+		pushState: (state: TrayState) => fire(IPC_EVENTS.TRAY_STATE_PUSH, state),
+	},
+
+	progress: {
+		set: (state: RunProgressState) => fire(IPC_EVENTS.PROGRESS_SET, state),
+	},
+
+	models: {
+		listProviders: () => call(IPC_COMMANDS.MODELS_PROVIDERS_LIST) as Promise<CustomProviderView[]>,
+		upsertProvider: (input: CustomProviderInput) =>
+			call(IPC_COMMANDS.MODELS_PROVIDER_UPSERT, input) as Promise<void>,
+		deleteProvider: (id: string) => call(IPC_COMMANDS.MODELS_PROVIDER_DELETE, id) as Promise<void>,
+		openConfig: () =>
+			call(IPC_COMMANDS.MODELS_CONFIG_OPEN) as Promise<{ path: string; opened: boolean }>,
+	},
+
+	fs: {
+		list: (path?: string, maxDepth?: number, maxEntries?: number, tabId?: string) =>
+			call(IPC_COMMANDS.FS_LIST, { path, maxDepth, maxEntries, tabId }) as Promise<IpcFsListResult>,
+		read: (path: string, maxBytes?: number, tabId?: string) =>
+			call(IPC_COMMANDS.FS_READ, { path, maxBytes, tabId }) as Promise<IpcFsReadResult>,
+		readPlan: (payload: IpcFsReadPlanPayload) =>
+			call(IPC_COMMANDS.FS_READ_PLAN, payload) as Promise<IpcFsReadPlanResult>,
+		readImage: (path: string, tabId?: string) =>
+			call(IPC_COMMANDS.FS_READ_IMAGE, { path, tabId }) as Promise<IpcFsReadImageResult>,
+	},
+
+	editor: {
+		openExternal: (content: string) =>
+			call(IPC_COMMANDS.EDITOR_OPEN_EXTERNAL, { content }) as Promise<{
+				ok: boolean;
+				unavailable: boolean;
+				text: string | null;
+				error?: string;
+			}>,
+	},
+};
+
+/**
+ * Publish the bridge on `window.omp` and start tracking dropped files.
+ *
+ * The renderer is reused verbatim from the Electron build, so this is the only place that
+ * knows the host is Tauri instead of Electron.
+ */
+export function installOmpApi(): void {
+	const target = window as unknown as { omp?: OmpApi };
+	target.omp = api;
+	void getCurrentWebview()
+		.onDragDropEvent(event => {
+			if (event.payload.type === "drop") rememberDroppedPaths(event.payload.paths);
+		})
+		.catch(() => {});
+}
+
+/** The bridge object itself, for tests that exercise it without a window. */
+export { api };
+

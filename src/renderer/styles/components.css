@@ -1,0 +1,1875 @@
+/**
+ * Component-level styles: streaming caret, pattern highlights, thinking
+ * shimmer, highlight.js token mapping, and markdown body typography.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Streaming caret
+ *
+ * A thin bar that rides the end of the text still being written. It blinks
+ * softly (opacity only) so it marks the live edge without pulling the eye.
+ * ------------------------------------------------------------------------- */
+.omp-caret,
+.omp-streaming [data-omp-caret]::after {
+	display: inline-block;
+	width: 2px;
+	height: 1.05em;
+	margin-left: 2px;
+	vertical-align: text-bottom;
+	border-radius: 1px;
+	background: var(--omp-streaming-cursor);
+	animation: omp-caret-blink 1.1s ease-in-out infinite; /* motion-ok: caret loop */
+}
+
+.omp-streaming [data-omp-caret]::after {
+	content: "";
+}
+
+@keyframes omp-caret-blink {
+	0%,
+	45% {
+		opacity: 0.9;
+	}
+	70%,
+	100% {
+		opacity: 0.25;
+	}
+}
+
+/* The live tail renders as Markdown with the same typography as promoted
+ * blocks, so a paragraph moving from the tail into a stable block never shifts.
+ * Only an unfinished display-math block stays plain until it closes. */
+.omp-streaming-tail {
+	min-height: 1.5em;
+}
+
+.omp-streaming-plain {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+
+/* ---------------------------------------------------------------------------
+ * Pattern highlight (grep matches, code search hits)
+ * ------------------------------------------------------------------------- */
+.omp-hl {
+	background: var(--omp-accent-dim);
+	color: var(--omp-accent-bright);
+	border-radius: 3px;
+	padding: 0 2px;
+	font-weight: 600;
+}
+
+:root[data-theme="light"] .omp-hl {
+	color: var(--omp-accent-bright);
+}
+
+/* ---------------------------------------------------------------------------
+ * Thinking block live state
+ * ------------------------------------------------------------------------- */
+.omp-thinking-shimmer {
+	color: var(--omp-muted);
+	font-weight: 500;
+	background: linear-gradient(
+		90deg,
+		var(--omp-muted) 0%,
+		var(--omp-muted) 40%,
+		var(--omp-text) 50%,
+		var(--omp-muted) 60%,
+		var(--omp-muted) 100%
+	);
+	background-size: 250% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: omp-shimmer 2.2s linear infinite; /* motion-ok: live reasoning label sweep */
+}
+
+/* ---------------------------------------------------------------------------
+ * highlight.js tokens → design tokens
+ * ------------------------------------------------------------------------- */
+.hljs-comment,
+.hljs-quote {
+	color: var(--omp-syntax-comment);
+	font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-meta,
+.hljs-name,
+.hljs-tag {
+	color: var(--omp-syntax-keyword);
+}
+.hljs-title,
+.hljs-title.function_,
+.hljs-section {
+	color: var(--omp-syntax-function);
+}
+.hljs-variable,
+.hljs-template-variable,
+.hljs-attr,
+.hljs-attribute {
+	color: var(--omp-syntax-variable);
+}
+.hljs-string,
+.hljs-regexp {
+	color: var(--omp-syntax-string);
+}
+.hljs-number,
+.hljs-literal {
+	color: var(--omp-syntax-number);
+}
+.hljs-type,
+.hljs-title.class_,
+.hljs-built_in {
+	color: var(--omp-syntax-type);
+}
+.hljs-operator {
+	color: var(--omp-syntax-operator);
+}
+/* Live thinking tail inherits the thinking body's typography — the reply
+   tail's 14.5px would visibly outweigh promoted paragraphs inside the
+   12px thinking block. */
+.omp-thinking-body .omp-streaming-tail {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-size: inherit;
+	line-height: inherit;
+}
+
+/* Plugin themes may retint punctuation separately (gui.theme
+   syntaxPunctuation); falls back to the operator color when unset. */
+.hljs-punctuation {
+	color: var(--omp-syntax-punctuation, var(--omp-syntax-operator));
+}
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link {
+	color: var(--omp-md-link);
+}
+.hljs-emphasis {
+	font-style: italic;
+}
+.hljs-strong {
+	font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Markdown body typography — strong hierarchy, readable measure
+ * ------------------------------------------------------------------------- */
+.markdown-body {
+	font-size: calc(var(--gui-font-size, 15px) * 15 / 15);
+	line-height: 1.65;
+	color: var(--omp-text);
+	word-break: break-word;
+}
+.markdown-body > :first-child {
+	margin-top: 0;
+}
+.markdown-body > :last-child {
+	margin-bottom: 0;
+}
+.markdown-body p {
+	margin: 0.65em 0;
+}
+.markdown-body .katex-display {
+	max-width: 100%;
+	overflow: auto hidden;
+	padding-block: 0.2em;
+}
+.markdown-body .katex-display > .katex {
+	width: max-content;
+	min-width: 100%;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+	font-family: var(--font-display);
+	font-weight: 600;
+	color: var(--omp-md-heading);
+	margin: 1.4em 0 0.5em;
+	line-height: 1.3;
+	letter-spacing: -0.01em;
+}
+.markdown-body h1 {
+	font-size: 1.45em;
+	letter-spacing: -0.02em;
+	padding-bottom: 0.3em;
+	border-bottom: 1px solid var(--omp-border-muted);
+}
+.markdown-body h2 {
+	font-size: 1.25em;
+}
+.markdown-body h3 {
+	font-size: 1.1em;
+}
+.markdown-body h4 {
+	font-size: 1em;
+	color: var(--omp-text-secondary);
+}
+.markdown-body h5 {
+	font-size: 0.95em;
+	color: var(--omp-text-secondary);
+}
+.markdown-body h6 {
+	font-size: 0.9em;
+	font-weight: 600;
+	color: var(--omp-muted);
+}
+.markdown-body ul {
+	margin: 0.5em 0;
+	padding-left: 1.5em;
+	list-style: disc;
+}
+.markdown-body ol {
+	margin: 0.5em 0;
+	padding-left: 1.5em;
+	list-style: decimal;
+}
+.markdown-body li {
+	margin: 0.25em 0;
+}
+.markdown-body li > ul,
+.markdown-body li > ol {
+	margin: 0.25em 0;
+}
+.markdown-body li::marker {
+	color: var(--omp-md-list-bullet);
+}
+.markdown-body blockquote {
+	margin: 0.85em 0;
+	padding: 0.1em 0 0.1em 1em;
+	border-left: 2px solid var(--omp-md-quote-border);
+	color: var(--omp-md-quote);
+}
+.markdown-body hr {
+	margin: 1.5em 0;
+	border: none;
+	height: 1px;
+	background: var(--omp-md-hr);
+}
+/* Fenced code blocks render through the shared CodeBlock component (badge,
+   copy, gutter), so no raw <pre> box styling lives here. This rule only guards
+   against the inline-code chip leaking into a block. */
+.markdown-body pre code {
+	background: none;
+	border: none;
+	padding: 0;
+	font-size: inherit;
+	color: var(--omp-md-code-block);
+}
+.markdown-body code {
+	font-family: var(--font-mono);
+	font-size: 0.86em;
+	background: var(--omp-selected-bg);
+	border: 0;
+	border-radius: 5px;
+	padding: 0.12em 0.36em;
+	color: var(--omp-md-code);
+}
+.markdown-body table {
+	border-collapse: collapse;
+	margin: 1em 0;
+	font-size: 0.93em;
+	width: auto;
+	max-width: 100%;
+	display: block;
+	overflow-x: auto;
+}
+.markdown-body th,
+.markdown-body td {
+	border: 0;
+	border-bottom: 1px solid var(--omp-border-muted);
+	padding: 0.5em 1.25em 0.5em 0;
+	text-align: left;
+}
+.markdown-body th {
+	background: transparent;
+	font-weight: 600;
+	color: var(--omp-text);
+	border-bottom-color: var(--omp-border);
+}
+.markdown-body tr:last-child td {
+	border-bottom: 0;
+}
+.markdown-body img {
+	max-width: 100%;
+	border-radius: 12px;
+	border: 1px solid var(--omp-border-muted);
+}
+.markdown-body a {
+	color: var(--omp-md-link);
+	text-decoration: none;
+	border-bottom: 1px solid color-mix(in srgb, var(--omp-md-link) 30%, transparent);
+	transition: border-color var(--omp-motion-fast) var(--omp-ease);
+}
+.markdown-body a:hover {
+	border-bottom-color: var(--omp-md-link);
+}
+.markdown-body strong {
+	font-weight: 650;
+	color: var(--omp-text);
+}
+.markdown-body del {
+	color: var(--omp-dim);
+}
+
+/* ---------------------------------------------------------------------------
+ * Diff lines
+ * ------------------------------------------------------------------------- */
+.omp-diff-add {
+	background: var(--omp-diff-added-bg);
+	color: var(--omp-diff-added);
+}
+.omp-diff-del {
+	background: var(--omp-diff-removed-bg);
+	color: var(--omp-diff-removed);
+}
+.omp-diff-ctx {
+	color: var(--omp-diff-context);
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+	.omp-thinking-shimmer {
+		animation: none;
+		background: none;
+		-webkit-text-fill-color: currentColor;
+	}
+	.omp-caret,
+	.omp-streaming [data-omp-caret]::after {
+		animation: none;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Dialog geometry — scale with the window while keeping each dialog archetype
+ * readable. `dvh` prevents controls from falling below the visible desktop
+ * area when the macOS title bar or a compact window reduces usable height.
+ * ------------------------------------------------------------------------- */
+.omp-dialog-panel {
+	min-width: 0;
+	max-width: calc(100vw - 2rem);
+	max-height: calc(100dvh - 2rem);
+}
+
+.omp-dialog-size-sm {
+	width: min(clamp(26rem, 32vw, 30rem), calc(100vw - 2rem));
+	max-height: min(86dvh, 50rem);
+}
+
+.omp-dialog-size-md {
+	width: min(clamp(36rem, 42vw, 46rem), calc(100vw - 2rem));
+	max-height: min(88dvh, 56rem);
+}
+
+.omp-dialog-size-lg {
+	width: min(clamp(48rem, 64vw, 72rem), calc(100vw - 2rem));
+	max-height: min(90dvh, 64rem);
+}
+
+.omp-dialog-size-picker {
+	width: min(clamp(40rem, 48vw, 54rem), calc(100vw - 2rem));
+	max-height: min(76dvh, 56rem);
+}
+
+.omp-dialog-size-full {
+	width: calc(100vw - 2rem);
+	height: calc(100dvh - 2rem);
+}
+
+.omp-command-list {
+	max-height: min(60dvh, 44rem);
+}
+
+.omp-detail-drawer {
+	width: min(clamp(36rem, 40vw, 64rem), calc(100vw - 2rem));
+}
+
+/* ---------------------------------------------------------------------------
+ * Editorial transcript — an open reading rail for long agent sessions.
+ * The existing component chrome remains available outside this scope; this
+ * layer changes only the transcript surface so tool renderers stay intact.
+ * ------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+ * Unified content column — every reading surface (transcript, composer,
+ * settings, management pages) shares one centered, viewport-adaptive column
+ * instead of each page inventing its own width/alignment. The reading column
+ * caps prose surfaces; the workspace column gives management/detail pages
+ * more room. Both center at large sizes and go full-bleed with a fluid
+ * gutter at small sizes.
+ * ------------------------------------------------------------------------- */
+.omp-workspace-main {
+	container: omp-workspace / inline-size;
+	min-width: 0;
+	overflow-x: clip;
+}
+
+.omp-session-pane {
+	container: omp-workspace / inline-size;
+}
+
+.omp-session-pane--active {
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--omp-accent) 62%, transparent);
+}
+
+.omp-split-workspace > .omp-session-pane {
+	animation: omp-fade-in var(--omp-motion-fast) var(--omp-ease) both;
+}
+
+.omp-split-divider::before {
+	content: "";
+	position: absolute;
+	inset: -4px;
+}
+
+.omp-workspace-main,
+.settings-main-canvas {
+	--omp-column-pad: clamp(16px, 3vw, 40px);
+	--omp-column-reading: 48rem; /* ~95 characters of 15px transcript prose */
+	--omp-column-workspace: 104rem;
+}
+
+.omp-column {
+	width: 100%;
+	margin-inline: auto;
+	padding-inline: var(--omp-column-pad);
+}
+
+.omp-column-reading {
+	max-width: calc(var(--omp-column-reading) + 2 * var(--omp-column-pad));
+}
+
+.omp-column-workspace {
+	max-width: calc(var(--omp-column-workspace) + 2 * var(--omp-column-pad));
+}
+
+/* Surface policy card: the single content-card recipe (hairline, no fill). */
+.omp-card {
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 0.75rem;
+	background: transparent;
+}
+
+.omp-transcript-editorial {
+	--omp-editorial-inset: var(--omp-column-pad);
+	--omp-editorial-edge: var(--omp-column-pad);
+}
+
+.omp-transcript-editorial .omp-transcript-content {
+	flex: 1 1 0;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.omp-transcript-editorial .omp-transcript-scroll {
+	scrollbar-gutter: stable;
+	/* TanStack Virtual owns transcript anchoring. Native browser anchoring can
+	   otherwise move the viewport a second time as the live row grows/swaps. */
+	overflow-anchor: none;
+}
+
+/* Turn map: a quiet rail beside the scrollbar — where the eye already goes
+   to ask "where am I" — that comes forward when pointed at. */
+.omp-conversation-nav {
+	position: absolute;
+	z-index: 20;
+	top: 14px;
+	bottom: 18px;
+	right: 14px;
+	opacity: 0.6;
+	transition: opacity var(--omp-motion-fast) var(--omp-ease);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	width: 34px;
+	pointer-events: none;
+}
+
+.omp-conversation-nav:hover,
+.omp-conversation-nav:focus-within {
+	opacity: 1;
+}
+
+.omp-conversation-nav-stack {
+	display: flex;
+	flex-direction: column;
+	gap: clamp(5px, 0.8vh, 8px);
+	width: 100%;
+	max-height: 100%;
+}
+
+.omp-conversation-nav-stack.is-dense {
+	gap: 3px;
+}
+
+.omp-conversation-nav-stack.is-compact {
+	gap: 0;
+}
+
+.omp-conversation-nav-slot {
+	position: relative;
+	flex: 0 1 12px;
+	min-height: 2px;
+	width: 100%;
+}
+
+.omp-conversation-nav-stack.is-compact .omp-conversation-nav-slot {
+	flex-basis: 9px;
+}
+
+.omp-conversation-nav-marker {
+	position: absolute;
+	inset: 0;
+	width: 34px;
+	height: 100%;
+	border: 0;
+	background: transparent;
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.omp-conversation-nav-marker::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: 8px;
+	width: 8px;
+	height: 2px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--omp-muted) 56%, transparent);
+	transform: translateY(-50%);
+	transition: width var(--omp-motion-fast) var(--omp-ease), background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-conversation-nav-marker:hover::after,
+.omp-conversation-nav-marker:focus-visible::after {
+	width: 18px;
+	background: var(--omp-muted);
+}
+
+.omp-conversation-nav-marker.is-active {
+	z-index: 1;
+}
+
+.omp-conversation-nav-marker.is-active::after {
+	width: 28px;
+	height: 3px;
+	background: var(--omp-text);
+}
+
+.omp-conversation-nav-marker:focus-visible {
+	outline: none;
+}
+
+.omp-conversation-nav-marker:focus-visible::before {
+	content: "";
+	position: absolute;
+	inset: 1px -4px 1px -24px;
+	border: 1px solid var(--omp-accent);
+	border-radius: 5px;
+}
+
+.omp-conversation-nav-preview {
+	position: absolute;
+	right: 42px;
+	top: 50%;
+	width: min(360px, calc(100vw - 110px));
+	max-height: 184px;
+	padding: 14px 16px;
+	border: 1px solid var(--omp-border);
+	border-radius: 14px;
+	background: var(--omp-bg-elevated);
+	box-shadow: var(--omp-shadow-lg);
+	transform: translateY(-50%);
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.omp-conversation-nav-slot:nth-child(-n + 5):not(:nth-last-child(-n + 5)) .omp-conversation-nav-preview {
+	top: 0;
+	transform: none;
+}
+
+.omp-conversation-nav-slot:nth-last-child(-n + 5):not(:nth-child(-n + 5)) .omp-conversation-nav-preview {
+	top: auto;
+	bottom: 0;
+	transform: none;
+}
+
+.omp-conversation-nav-preview-kicker {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 7px;
+	color: var(--omp-dim);
+	font-size: calc(var(--gui-font-size, 15px) * 11 / 15);
+	font-weight: 650;
+	letter-spacing: 0.02em;
+}
+
+.omp-conversation-nav-preview-kicker time {
+	font-family: var(--font-mono);
+	font-weight: 500;
+}
+
+.omp-conversation-nav-preview p {
+	display: -webkit-box;
+	margin: 0;
+	overflow: hidden;
+	color: var(--omp-text);
+	font-size: calc(var(--gui-font-size, 15px) * 14 / 15);
+	font-weight: 580;
+	line-height: 1.55;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 4;
+}
+
+.omp-conversation-nav-preview-hint {
+	display: block;
+	margin-top: 8px;
+	color: var(--omp-muted);
+	font-size: calc(var(--gui-font-size, 15px) * 11 / 15);
+}
+
+.omp-transcript-editorial .omp-transcript-row {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+	max-width: min(100%, calc(var(--omp-column-reading) + 2 * var(--omp-column-pad)));
+	margin-inline: auto;
+}
+
+.omp-transcript-editorial [data-transcript-kind] > .omp-transcript-row::before {
+	content: none;
+}
+
+/* Your turn: a soft right-aligned bubble, so who said what never depends on
+   reading a label. The author name stays for assistive technology only. */
+.omp-transcript-editorial .omp-user-turn {
+	align-items: flex-end;
+	/* The reply above already ends in its own (hover) action row: a short top
+	   pad keeps turns one even step apart instead of a double gap. The bottom
+	   pad is the prompt's own action row. */
+	padding: 12px var(--omp-editorial-edge) 2px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-user-bubble.omp-transcript-content {
+	flex: 0 1 auto;
+	width: auto;
+	max-width: min(78%, 42rem);
+}
+
+.omp-transcript-editorial .omp-user-bubble {
+	border: 0;
+	border-radius: 20px;
+	background: var(--omp-transcript-user-bg);
+	box-shadow: none !important;
+	padding: 10px 16px;
+}
+
+.omp-transcript-editorial .omp-user-bubble-layout {
+	display: block;
+}
+
+.omp-transcript-editorial .omp-user-bubble-author {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+.omp-transcript-editorial .omp-user-bubble-content {
+	min-width: 0;
+}
+
+.omp-transcript-editorial .omp-user-bubble-content .markdown-body p:first-child,
+.omp-transcript-editorial .omp-user-bubble-content .markdown-body p:last-child {
+	margin-block: 0;
+}
+
+/* Hover actions sit under the bubble's trailing edge, where a chat app puts
+   them, so they read as the prompt's own controls. The row keeps its height
+   while hidden: appearing on hover must not shift the transcript. */
+.omp-transcript-editorial .omp-user-bubble-actions {
+	margin-top: 4px;
+	justify-content: flex-end;
+	white-space: nowrap;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-transcript-editorial .omp-user-turn:hover .omp-user-bubble-actions,
+.omp-transcript-editorial .omp-user-turn:focus-within .omp-user-bubble-actions {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.omp-transcript-editorial .omp-assistant-turn {
+	padding: 8px var(--omp-editorial-edge) 4px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-assistant-turn--compact {
+	padding: 1px var(--omp-editorial-edge) 1px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-process-group {
+	position: relative;
+	padding-block: 1px 3px;
+}
+
+.omp-execution-group {
+	overflow: visible;
+	border: 0;
+	background: transparent;
+}
+
+.omp-execution-group-header {
+	min-height: 26px;
+	border-radius: 7px;
+	padding: 2px 0;
+	transition: color var(--omp-motion-fast) var(--omp-ease), background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-execution-group-header:hover {
+	color: var(--omp-text);
+}
+
+/* The summary reads as one phrase with its disclosure chevron right after it
+   ("Ran 3 commands ›"), not a full-width row with the chevron at the far edge. */
+.omp-transcript-editorial .omp-execution-group-header {
+	width: auto;
+	max-width: 100%;
+}
+
+.omp-transcript-editorial .omp-execution-group-header .omp-execution-group-summary {
+	flex: 0 1 auto;
+}
+
+.omp-transcript-editorial .omp-execution-group-header:hover .omp-execution-group-summary {
+	color: var(--omp-text);
+}
+
+.omp-execution-group-body {
+	margin-top: 0;
+	padding: 0 0 2px 10px;
+}
+
+.omp-transcript-editorial .omp-execution-group-title {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-execution-group-summary {
+	font-size: calc(var(--gui-font-size, 15px) * 13.5 / 15);
+}
+
+.omp-goal-dock {
+	background: color-mix(in srgb, var(--omp-bg-secondary) 64%, transparent);
+}
+
+.omp-goal-dock-action {
+	display: flex;
+	height: 28px;
+	width: 28px;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	border-radius: 8px;
+	color: var(--omp-muted);
+}
+
+.omp-goal-dock-action:hover {
+	background: var(--omp-selected-bg);
+	color: var(--omp-text);
+}
+
+.omp-goal-dock-action:disabled {
+	cursor: wait;
+	opacity: 0.55;
+}
+
+.omp-transcript-editorial .omp-tool-card {
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent !important;
+	box-shadow: none !important;
+}
+
+.omp-transcript-editorial .omp-tool-card > span[aria-hidden] {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-tool-status-icon {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-tool-header {
+	min-height: 28px;
+	padding: 3px 8px 3px 0;
+	border-radius: 8px;
+	font-size: calc(var(--gui-font-size, 15px) * 12.5 / 15);
+}
+
+.omp-transcript-editorial .omp-tool-header:hover {
+	background: var(--omp-selected-bg);
+}
+
+.omp-transcript-editorial .omp-tool-name {
+	min-width: 40px;
+	font-size: calc(var(--gui-font-size, 15px) * 12.5 / 15);
+	font-weight: 600;
+	letter-spacing: 0;
+}
+
+.omp-transcript-editorial .omp-tool-summary {
+	font-size: calc(var(--gui-font-size, 15px) * 12 / 15);
+	color: var(--omp-muted);
+}
+
+/* Without icons or rail, a failed or interrupted step still has to stand out. */
+.omp-transcript-editorial .omp-tool-card[data-tool-error="true"] .omp-tool-name,
+.omp-transcript-editorial .omp-tool-card[data-tool-error="true"] .omp-tool-summary {
+	color: var(--omp-error);
+}
+
+.omp-transcript-editorial .omp-tool-card[data-tool-status="aborted"] .omp-tool-name,
+.omp-transcript-editorial .omp-tool-card[data-tool-status="aborted"] .omp-tool-summary {
+	color: var(--omp-warning);
+}
+
+.omp-transcript-editorial .omp-tool-duration {
+	min-width: 44px;
+	border-radius: 0;
+	background: transparent;
+	padding: 0;
+	text-align: right;
+	font-size: calc(var(--gui-font-size, 15px) * 11 / 15);
+	color: var(--omp-dim);
+}
+
+.omp-transcript-editorial .omp-tool-chevron {
+	opacity: 0.58;
+}
+
+.omp-transcript-editorial .omp-tool-header:hover .omp-tool-chevron,
+.omp-transcript-editorial .omp-tool-header:focus-visible .omp-tool-chevron {
+	opacity: 0.95;
+}
+
+.omp-transcript-editorial .omp-tool-body {
+	border-top: 0;
+	min-width: 0;
+	max-height: min(18rem, 34vh);
+	overflow: auto;
+	overscroll-behavior: contain;
+	padding: 4px 0 7px 12px;
+}
+
+.omp-transcript-editorial .omp-execution-turn,
+.omp-transcript-editorial .omp-context-turn,
+.omp-transcript-editorial .omp-custom-turn {
+	padding: 12px var(--omp-editorial-edge) 16px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-status-turn {
+	padding: 6px var(--omp-editorial-edge) 14px var(--omp-editorial-inset) !important;
+}
+
+/* The agent is alive but has nothing to show yet: one small breathing dot
+   beside a shimmering label — no spinner, no countdown until it matters. */
+.omp-working-dot {
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 9999px;
+	background: var(--omp-accent);
+	animation: omp-pulse-dot 1.6s ease-in-out infinite; /* motion-ok: waiting signal */
+}
+
+/* A tab whose agent is starting: the logo inside a slowly orbiting arc. */
+@property --omp-loading-angle {
+	syntax: "<angle>";
+	inherits: false;
+	initial-value: 0deg;
+}
+
+@keyframes omp-loading-orbit {
+	to {
+		--omp-loading-angle: 360deg;
+	}
+}
+
+.omp-loading-mark {
+	position: relative;
+	display: flex;
+	width: 72px;
+	height: 72px;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 22px;
+	background: var(--omp-selected-bg);
+	color: var(--omp-accent);
+}
+
+.omp-loading-mark::after {
+	content: "";
+	position: absolute;
+	inset: -7px;
+	padding: 2.5px;
+	border-radius: 28px;
+	background: conic-gradient(
+		from var(--omp-loading-angle),
+		transparent 0 62%,
+		color-mix(in srgb, var(--omp-accent) 55%, transparent) 88%,
+		var(--omp-accent)
+	);
+	-webkit-mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+	animation: omp-loading-orbit 1.8s linear infinite; /* motion-ok: agent starting */
+}
+
+.omp-transcript-loading {
+	animation: omp-fade-in var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+/* The transcript it stands in for, fading out toward the composer. */
+.omp-loading-skeleton {
+	mask-image: linear-gradient(to bottom, #000 30%, transparent);
+}
+
+/* Slow work this window asked for (a manual compaction or handoff). */
+.omp-task-card {
+	border-color: var(--omp-border-muted);
+	background: color-mix(in srgb, var(--omp-accent) 5%, var(--omp-bg-primary));
+	animation: omp-fade-up var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-task-card-track {
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	overflow: hidden;
+	background: color-mix(in srgb, var(--omp-accent) 12%, transparent);
+}
+
+/* A provider failure being retried: tinted, quiet, and actionable. */
+.omp-retry-card {
+	border-color: color-mix(in srgb, var(--omp-warning) 28%, transparent);
+	background: color-mix(in srgb, var(--omp-warning) 6%, transparent);
+}
+
+/* A run's file changes, closing the turn: one line that leads to the review drawer. */
+.omp-turn-changes {
+	border: 1px solid var(--omp-border-muted);
+	transition:
+		border-color var(--omp-motion-fast) var(--omp-ease),
+		background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-turn-changes:hover {
+	border-color: var(--omp-border);
+	background: var(--omp-selected-bg);
+}
+
+.omp-transcript-editorial .omp-execution-turn,
+.omp-transcript-editorial .omp-context-turn,
+.omp-transcript-editorial .omp-custom-turn {
+	display: flex;
+	justify-content: flex-start;
+}
+
+.omp-transcript-editorial .omp-history-expander {
+	margin: 8px var(--omp-editorial-edge) 8px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-read-group {
+	position: relative;
+	padding: 4px var(--omp-editorial-edge) 6px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-read-group-header {
+	min-height: 26px;
+	border: 0 !important;
+	border-radius: 0;
+	background: transparent !important;
+	padding: 3px 0;
+	font-size: calc(var(--gui-font-size, 15px) * 13 / 15);
+}
+
+.omp-transcript-editorial .omp-read-group-header:hover {
+	background: transparent !important;
+}
+
+.omp-transcript-editorial .omp-read-group-body {
+	margin-left: 16px;
+	margin-top: 2px;
+}
+
+.omp-transcript-editorial .omp-streaming-turn > * {
+	flex: 0 0 auto;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.omp-transcript-editorial .omp-thinking-block {
+	margin: 3px 0 9px;
+	border: 0 !important;
+	border-radius: 0;
+	background: transparent !important;
+}
+
+.omp-transcript-editorial .omp-thinking-header {
+	min-height: 26px;
+	padding: 2px 0;
+	font-size: calc(var(--gui-font-size, 15px) * 13.5 / 15);
+}
+
+.omp-transcript-editorial .omp-thinking-header:hover {
+	background: transparent;
+}
+
+.omp-transcript-editorial .omp-thinking-body {
+	max-height: min(12rem, 30vh);
+	margin-left: 0;
+	border-left: 0;
+	padding: 4px 0 6px 12px;
+	font-size: calc(var(--gui-font-size, 15px) * 13 / 15);
+	line-height: 1.55;
+}
+
+.omp-transcript-editorial .omp-thinking-brain,
+.omp-transcript-editorial .omp-thinking-level,
+.omp-transcript-editorial .omp-thinking-gauge,
+.omp-transcript-editorial .omp-thinking-count,
+.omp-transcript-editorial .omp-thinking-duration {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-thinking-state,
+.omp-transcript-editorial .omp-thinking-fold-state {
+	font-weight: 600;
+}
+
+.omp-transcript-editorial .omp-thinking-hint {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-thinking-fold-state {
+	display: none;
+}
+
+.omp-transcript-editorial .omp-thinking-count {
+	display: inline;
+	margin-left: 4px;
+	font-size: calc(var(--gui-font-size, 15px) * 11 / 15);
+	color: var(--omp-dim);
+}
+
+.omp-transcript-editorial .omp-thinking-block--pulse {
+	padding-left: 12px;
+}
+
+.omp-transcript-editorial .omp-assistant-turn .markdown-body,
+.omp-transcript-editorial .omp-assistant-turn .omp-streaming-tail,
+.omp-transcript-editorial .omp-streaming-turn > .markdown-body {
+	font-size: calc(var(--gui-font-size, 15px) * 15 / 15);
+	line-height: 1.65;
+	color: var(--omp-text);
+}
+
+.omp-transcript-editorial .omp-assistant-turn--compact > .min-w-0 > .markdown-body {
+	font-size: calc(var(--gui-font-size, 15px) * 13.5 / 15);
+	line-height: 1.5;
+}
+
+/* Reasoning stays visually subordinate to the assistant response. */
+.omp-transcript-editorial .omp-thinking-body .markdown-body {
+	font-size: calc(var(--gui-font-size, 15px) * 13 / 15);
+	line-height: 1.55;
+	color: var(--omp-dim);
+}
+
+.omp-transcript-editorial .omp-thinking-body .markdown-body :is(h1, h2, h3, h4, h5, h6, strong) {
+	color: var(--omp-dim);
+	font-weight: 400;
+}
+
+.omp-transcript-editorial .omp-thinking-body .markdown-body p {
+	margin: 0.42em 0;
+}
+
+.omp-transcript-editorial .omp-thinking-body .markdown-body :is(table, thead, tbody, tr, th, td) {
+	border: 0;
+	background: transparent;
+}
+
+.omp-transcript-editorial .omp-thinking-body .markdown-body :is(th, td) {
+	padding: 0.2em 0.45em;
+}
+
+.omp-transcript-editorial .markdown-body p {
+	margin: 0.8em 0;
+}
+
+.omp-transcript-editorial .markdown-body h1 {
+	padding-bottom: 0;
+	border-bottom: 0;
+	font-size: 1.4em;
+}
+
+.omp-transcript-editorial .markdown-body pre code {
+	background: transparent;
+}
+
+.omp-transcript-editorial .markdown-body a {
+	border-bottom-color: color-mix(in srgb, var(--omp-md-link) 20%, transparent);
+}
+
+/* A failed reply: a tinted card that says what failed and, when it is the
+   latest turn, how to try again. Error red marks the icon, not the prose. */
+.omp-transcript-editorial .omp-message-error {
+	border-color: color-mix(in srgb, var(--omp-error) 26%, transparent);
+	background: color-mix(in srgb, var(--omp-error) 5%, transparent);
+}
+
+.omp-transcript-editorial .omp-queued-turn {
+	justify-content: flex-end;
+	padding: 10px var(--omp-editorial-edge) 10px var(--omp-editorial-inset) !important;
+}
+
+.omp-transcript-editorial .omp-queued-bubble {
+	border: 1px dashed var(--omp-border-strong);
+	border-radius: 20px;
+	background: transparent;
+	box-shadow: none;
+}
+
+/* The virtualizer recycles rows through the viewport, so an entrance keyed on
+ * mounting would replay on every scroll. Per-row utilities stay off, and
+ * ChatStream instead marks the rows whose content genuinely arrives. */
+.omp-transcript-editorial .omp-fade-up,
+.omp-transcript-editorial .omp-fade-in {
+	animation: none;
+	opacity: 1;
+	transform: none;
+}
+
+/* Marked once per row key, so this never interrupts itself. The motion is on the
+ * row rather than its virtual slot because the slot is positioned with an inline
+ * transform the animation would overwrite. */
+/* A row that genuinely arrives at the tail (sent prompt, new reply) settles in:
+   a short rise with the fade, on the long deceleration curve. */
+.omp-transcript-editorial .omp-row-arrive > .omp-transcript-row {
+	animation: omp-fade-up var(--omp-motion-slow) var(--omp-ease-enter) both;
+}
+
+/* A message opened from search: a brief tint where the eye should land. Color
+ * only — the row never moves. */
+.omp-transcript-editorial .omp-row-found > .omp-transcript-row {
+	border-radius: 14px;
+	animation: omp-row-found 1.8s var(--omp-ease) both; /* motion-ok: color-only locate cue */
+}
+
+/* Find in conversation (⌘F): every match, and a stronger mark on the one the bar points at. */
+/* The find bar sits clear of the conversation navigator rail (14px + 34px). */
+.omp-find-bar {
+	inset-inline-end: 56px;
+}
+
+::highlight(omp-find) {
+	background-color: color-mix(in srgb, var(--omp-warning) 28%, transparent);
+}
+
+::highlight(omp-find-current) {
+	background-color: color-mix(in srgb, var(--omp-warning) 62%, transparent);
+}
+
+@keyframes omp-row-found {
+	0%,
+	40% {
+		background-color: color-mix(in srgb, var(--omp-accent) 11%, transparent);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* No fade: the tint holds while the row is marked, then goes. */
+	.omp-transcript-editorial .omp-row-found > .omp-transcript-row {
+		animation: none !important;
+		background-color: color-mix(in srgb, var(--omp-accent) 11%, transparent);
+	}
+}
+
+.omp-empty-canvas,
+.omp-composer-shell {
+	width: min(100%, calc(var(--omp-column-reading) + 2 * var(--omp-column-pad)));
+	min-width: 0;
+	max-width: 100%;
+	margin-inline: auto;
+	padding-inline: var(--omp-column-pad);
+}
+
+.omp-starter-grid {
+	width: 100%;
+	min-width: 0;
+}
+
+.omp-starter-grid > *,
+.omp-composer-shell > * {
+	min-width: 0;
+	max-width: 100%;
+}
+
+.omp-composer-region {
+	min-width: 0;
+	max-width: 100%;
+	padding-inline: 0;
+}
+
+/* The composer: one soft rounded surface, no inner dividers. Focus deepens
+   the hairline instead of drawing a colored ring. */
+.omp-composer-box {
+	border: 1px solid var(--omp-input-border);
+	border-radius: 24px;
+	background: var(--omp-input-bg);
+	box-shadow: var(--omp-shadow-sm);
+	transition:
+		border-color var(--omp-motion-fast) var(--omp-ease),
+		box-shadow var(--omp-motion-med) var(--omp-ease);
+}
+
+.omp-composer-box:focus-within {
+	border-color: var(--omp-input-focus-border);
+	box-shadow: var(--omp-shadow-md);
+}
+
+/* Dictation line: sits in the composer between the text and the toolbar while the
+   microphone is in use. Recording reads red (the mic button's color); the words
+   being recognized are muted until they settle into the textarea. */
+.omp-dictation {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 2px 12px 4px;
+	padding: 5px 6px 5px 12px;
+	min-height: 36px;
+	overflow: hidden;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 14px;
+	color: var(--omp-muted);
+	font-size: var(--text-omp-md);
+}
+
+.omp-dictation[data-phase="recording"] {
+	border-color: color-mix(in srgb, var(--omp-error) 35%, var(--omp-border-muted));
+}
+
+.omp-dictation-indicator {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 22px;
+	color: var(--omp-dim);
+}
+
+.omp-dictation[data-downloading] .omp-dictation-indicator {
+	color: var(--omp-accent);
+}
+
+.omp-dictation-meter {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 18px;
+}
+
+.omp-dictation-meter > span {
+	width: 3px;
+	height: calc(4px + var(--omp-dictation-level, 0) * var(--omp-dictation-weight, 1) * 14px);
+	border-radius: 2px;
+	background: var(--omp-error);
+	transition: height var(--omp-motion-fast) var(--omp-ease);
+}
+
+/* The newest words stay in view: an RTL box start-aligns overflowing content on the
+   right and ellipsizes on the left, while the inner span keeps the text LTR. */
+.omp-dictation-text {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	direction: rtl;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.omp-dictation-text > span {
+	unicode-bidi: isolate;
+}
+
+.omp-dictation-text--live {
+	color: var(--omp-text);
+	opacity: 0.62;
+}
+
+.omp-dictation-action {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	padding: 0 6px 0 10px;
+	border-radius: 9999px;
+	color: var(--omp-muted);
+	font-size: var(--text-omp-sm);
+	font-weight: 500;
+	transition:
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-dictation-action:hover {
+	background: var(--omp-selected-bg);
+	color: var(--omp-text);
+}
+
+.omp-dictation-action kbd {
+	padding: 0 4px;
+	border: 1px solid var(--omp-border-muted);
+	border-radius: 4px;
+	color: var(--omp-dim);
+	font-family: inherit;
+	font-size: var(--text-omp-xxs);
+	line-height: 15px;
+}
+
+.omp-dictation-progress {
+	position: absolute;
+	inset: auto 0 0;
+	height: 2px;
+	background: var(--omp-accent-dim);
+}
+
+.omp-dictation-progress > span {
+	display: block;
+	height: 100%;
+	background: var(--omp-accent);
+	transition: width var(--omp-motion-med) var(--omp-ease);
+}
+
+.omp-send-button {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 9999px;
+	background: var(--omp-btn-primary-bg);
+	color: var(--omp-btn-primary-text);
+	transition:
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		color var(--omp-motion-fast) var(--omp-ease),
+		transform var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-send-button:hover:not(:disabled) {
+	opacity: 0.88;
+}
+
+.omp-send-button:active:not(:disabled) {
+	transform: scale(0.94);
+}
+
+.omp-send-button:disabled {
+	cursor: not-allowed;
+	background: var(--omp-bg-tertiary);
+	color: var(--omp-dim);
+}
+
+/* Stop, while a typed follow-up owns the primary slot: still one click away,
+   no longer the loudest control. */
+.omp-send-button--secondary {
+	background: transparent;
+	color: var(--omp-muted);
+	box-shadow: inset 0 0 0 1px var(--omp-border);
+}
+
+.omp-send-button--secondary:hover:not(:disabled) {
+	opacity: 1;
+	color: var(--omp-text);
+	background: var(--omp-selected-bg);
+}
+
+/* Send while the follow-up modifier is held: the message queues behind the
+   running turn instead of steering it. */
+.omp-send-button--follow-up {
+	background: color-mix(in srgb, var(--omp-accent) 18%, transparent);
+	color: var(--omp-accent);
+	box-shadow: inset 0 0 0 1px var(--omp-accent);
+}
+
+/* Code blocks: a slim header with the language and a copy control, on the
+   same surface as the code. */
+.omp-code-block-header {
+	border-bottom: 1px solid var(--omp-border-muted);
+}
+
+@container omp-workspace (max-width: 1200px) {
+	.omp-titlebar-secondary {
+		display: none;
+	}
+}
+
+@container omp-workspace (max-width: 900px) {
+	.omp-titlebar-command {
+		display: none;
+	}
+}
+
+/* When the title bar runs short, the session title keeps its room: usage
+   figures step back to the context meter in the composer, and the project
+   shows as its folder icon (full name in the tooltip) instead of "p…". */
+@container omp-workspace (max-width: 760px) {
+	.omp-session-metrics {
+		display: none !important;
+	}
+}
+
+@container omp-workspace (max-width: 700px) {
+	.omp-titlebar-project-name {
+		display: none;
+	}
+}
+
+@container omp-workspace (max-width: 520px) {
+	.omp-titlebar-status {
+		margin-inline: 0;
+		padding-inline: 0.5rem;
+	}
+
+	.omp-titlebar-status-label {
+		display: none;
+	}
+}
+
+@container omp-workspace (min-width: 1900px) {
+	.omp-starter-grid {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+}
+
+/* A narrow conversation keeps every column for reading. */
+@container omp-workspace (max-width: 900px) {
+	.omp-conversation-nav {
+		display: none;
+	}
+
+	.omp-find-bar {
+		inset-inline-end: 16px;
+	}
+}
+
+/* The composer toolbar degrades in steps instead of folding everything into
+   "…" at once: first the control labels go (each keeps its icon and tooltip),
+   and only a toolbar too narrow for the icons folds the run settings. */
+.omp-composer-toolbar {
+	container: omp-composer-toolbar / inline-size;
+}
+
+@container omp-composer-toolbar (max-width: 680px) {
+	.omp-composer-control-label {
+		display: none !important;
+	}
+}
+
+/* The model picker reads as its name; only a toolbar too narrow for any name
+   trades it for an icon — never a bare chevron. */
+.omp-composer-model-icon {
+	display: none;
+}
+
+@container omp-composer-toolbar (max-width: 360px) {
+	.omp-composer-model-label {
+		display: none;
+	}
+
+	.omp-composer-model-icon {
+		display: block;
+	}
+}
+
+/* Context row: the method and threshold give way first when space runs
+   short; the strategy name and the usage reading always stay. */
+@container omp-workspace (max-width: 420px) {
+	.omp-context-bar-detail {
+		display: none;
+	}
+}
+
+@container omp-workspace (max-width: 680px) {
+	.omp-session-pane-cwd {
+		display: none;
+	}
+
+	.omp-starter-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.omp-composer-model-label {
+		max-width: 9rem;
+	}
+}
+
+@media (max-width: 640px) {
+	.omp-dialog-overlay {
+		padding: 0.5rem;
+		padding-top: min(8dvh, 3rem);
+	}
+
+	.omp-dialog-size-sm,
+	.omp-dialog-size-md,
+	.omp-dialog-size-lg,
+	.omp-dialog-size-picker,
+	.omp-dialog-size-full {
+		width: calc(100vw - 1rem);
+		max-width: calc(100vw - 1rem);
+		max-height: calc(100dvh - 1rem);
+	}
+
+	.omp-dialog-size-full {
+		height: calc(100dvh - 1rem);
+	}
+
+	.omp-detail-drawer {
+		width: calc(100vw - 1.5rem);
+	}
+}
+
+@media (max-width: 720px) {
+	.omp-conversation-nav {
+		display: none;
+	}
+
+	.omp-transcript-editorial {
+		--omp-editorial-inset: calc(var(--omp-column-pad) + 24px);
+	}
+	.omp-transcript-editorial .omp-user-bubble-actions {
+		opacity: 1;
+		pointer-events: auto;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+ * Segmented control — a quiet track with a raised thumb for the chosen view.
+ * Dark themes lift the thumb toward the text color; light themes use paper.
+ * ------------------------------------------------------------------------- */
+:root {
+	--omp-segment-track: var(--omp-selected-bg);
+	--omp-segment-thumb: color-mix(in srgb, var(--omp-text) 13%, var(--omp-bg-primary));
+}
+
+:root[data-theme="light"] {
+	--omp-segment-thumb: var(--omp-bg-elevated);
+}
+
+.omp-segmented {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	padding: 2px;
+	border-radius: 10px;
+	background: var(--omp-segment-track);
+}
+
+.omp-segmented > button {
+	border-radius: 8px;
+	color: var(--omp-muted);
+	transition:
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		color var(--omp-motion-fast) var(--omp-ease),
+		box-shadow var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-segmented > button:hover {
+	color: var(--omp-text);
+}
+
+.omp-segmented > button[aria-pressed="true"] {
+	background: var(--omp-segment-thumb);
+	color: var(--omp-text);
+	box-shadow: var(--omp-shadow-sm);
+}
+
+.omp-workspace-main,
+.settings-main-canvas {
+	--omp-column-settings: 46rem;
+}
+
+.omp-column-settings {
+	max-width: calc(var(--omp-column-settings) + 2 * var(--omp-column-pad));
+}
+
+/* Switches glide rather than snap. */
+.omp-switch-track {
+	transition: background-color var(--omp-motion-med) var(--omp-ease);
+}
+
+.omp-switch-thumb {
+	transition: transform var(--omp-motion-med) var(--omp-ease-enter);
+}
+
+/* Inside an expanded step group the turns are already inset by the group;
+   a second editorial inset pushed them ~80px in. One small indent marks the
+   nesting. */
+.omp-transcript-editorial .omp-process-group .omp-assistant-turn,
+.omp-transcript-editorial .omp-process-group .omp-assistant-turn--compact {
+	padding-inline: 0 !important;
+}
+
+.omp-transcript-editorial .omp-execution-group-body {
+	margin-top: 2px;
+	padding-left: 14px;
+	border-left: 1px solid var(--omp-border-muted);
+	margin-left: 2px;
+}
+
+/* ── Workspace drawer ─────────────────────────────────────────────────────
+   File cards: a quiet header row per file, a sticky header while its diff
+   scrolls, and a body that eases open. */
+.omp-diff-card + .omp-diff-card {
+	border-top: 1px solid var(--omp-border-muted);
+}
+
+.omp-diff-card-header {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	background: var(--omp-bg-primary);
+	color: var(--omp-text-secondary);
+	transition: background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-diff-card-header:hover {
+	background: color-mix(in srgb, var(--omp-text) 4%, var(--omp-bg-primary));
+}
+
+.omp-diff-card[data-expanded="true"] > .omp-diff-card-header {
+	color: var(--omp-text);
+	border-bottom: 1px solid var(--omp-border-muted);
+}
+
+.omp-diff-card-body {
+	background: var(--omp-code-bg);
+	animation: omp-fade-in var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-timeline-dot {
+	width: 6px;
+	height: 6px;
+	flex: 0 0 6px;
+	border-radius: 9999px;
+	background: var(--omp-border-strong);
+}
+
+.omp-timeline-dot--error {
+	background: var(--omp-error);
+}
+
+.omp-log-line:hover {
+	background: color-mix(in srgb, var(--omp-text) 4%, transparent);
+}
+
+.omp-log-line[data-level="error"] {
+	background: color-mix(in srgb, var(--omp-error) 7%, transparent);
+}
+
+.omp-panel-empty {
+	animation: omp-fade-up var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+/* Terminal drawer: the xterm (moved in and out of the panel) fills it. */
+.omp-terminal-viewport .omp-terminal-host,
+.omp-terminal-viewport .xterm {
+	height: 100%;
+}
+.omp-terminal-viewport .xterm-viewport {
+	scrollbar-width: thin;
+}
+
+/* Chip strips (session tabs, terminals, browser pages): scroll sideways
+   without a scrollbar track eating the bar; the wheel handler (and, for
+   session tabs, active-tab scrollIntoView) do the moving. */
+.omp-tab-scroller {
+	scrollbar-width: none;
+}
+.omp-tab-scroller::-webkit-scrollbar {
+	display: none;
+}
+
+/* Session tabs (gui#30): the ends of an overflowing strip fade where more
+   chips lie beyond them — sideways for one row, top/bottom when wrapped. */
+.omp-tab-scroller[data-fade-start] {
+	mask-image: linear-gradient(to right, transparent, #000 1.5rem);
+}
+.omp-tab-scroller[data-fade-end] {
+	mask-image: linear-gradient(to left, transparent, #000 1.5rem);
+}
+.omp-tab-scroller[data-fade-start][data-fade-end] {
+	mask-image: linear-gradient(to right, transparent, #000 1.5rem, #000 calc(100% - 1.5rem), transparent);
+}
+.omp-tab-scroller[data-rows="multi"][data-fade-start] {
+	mask-image: linear-gradient(to bottom, transparent, #000 0.75rem);
+}
+.omp-tab-scroller[data-rows="multi"][data-fade-end] {
+	mask-image: linear-gradient(to top, transparent, #000 0.75rem);
+}
+.omp-tab-scroller[data-rows="multi"][data-fade-start][data-fade-end] {
+	mask-image: linear-gradient(to bottom, transparent, #000 0.75rem, #000 calc(100% - 0.75rem), transparent);
+}
+
+/* Where a dragged tab will land: a bar on that side of the chip it is over. */
+.omp-tab-unit[data-drop]::after {
+	content: "";
+	position: absolute;
+	top: 0.375rem;
+	bottom: 0.375rem;
+	width: 2px;
+	border-radius: 1px;
+	background: var(--omp-accent);
+	pointer-events: none;
+}
+.omp-tab-unit[data-drop="before"]::after {
+	left: 0;
+}
+.omp-tab-unit[data-drop="after"]::after {
+	right: 0;
+}
+
+/* ---------------------------------------------------------------------------
+ * Scheduled tasks — Insights bars and meters grow from their baseline once
+ * per mount; the per-bar delay (inline) staggers the chart left to right.
+ * The global reduced-motion rule collapses both to their final frame; the
+ * stagger is dropped there too, or late bars would sit empty until it ends.
+ * ------------------------------------------------------------------------- */
+.omp-insights-bar {
+	transform-origin: bottom;
+	animation: omp-insights-grow-y var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-insights-meter {
+	transform-origin: left;
+	animation: omp-insights-grow-x var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+@keyframes omp-insights-grow-y {
+	from {
+		transform: scaleY(0);
+	}
+	to {
+		transform: scaleY(1);
+	}
+}
+
+@keyframes omp-insights-grow-x {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.omp-insights-bar {
+		animation-delay: 0s !important;
+	}
+}
+
+/* A subagent page's assignment (plan/24 §5.4): three lines of the prompt,
+   faded at the cut, until the reader asks for all of it. */
+.omp-assignment-clamp {
+	max-height: calc(3 * 1.6 * var(--text-omp-xl));
+	overflow: hidden;
+}
+
+.omp-assignment-cut {
+	mask-image: linear-gradient(to bottom, #000 60%, transparent);
+}
+
+/* Agents under their session in the sidebar (plan/24 §5.3): elbow guides from
+   each parent's signal dot, in the border tone the sidebar canvas can show. */
+.omp-sidebar-agent-elbow {
+	position: absolute;
+	top: 0;
+	height: 50%;
+	width: 8px;
+	border-bottom-left-radius: 6px;
+	border-left: 1px solid var(--omp-border);
+	border-bottom: 1px solid var(--omp-border);
+	pointer-events: none;
+}
+
+/* The trunk on to the next sibling starts where the elbow's corner begins to
+   curve, so it runs on unbroken without doubling the elbow's straight part. */
+.omp-sidebar-agent-guide {
+	position: absolute;
+	top: calc(50% - 6px);
+	bottom: 0;
+	border-left: 1px solid var(--omp-border);
+	pointer-events: none;
+}
+
+.omp-sidebar-agent-guide--full {
+	top: 0;
+}
+
+/* Child session rows reuse the guides; their list keeps a 1px gap between
+   rows, which each line reaches up across so the tree reads unbroken. */
+.omp-sidebar-session-row > .omp-sidebar-agent-elbow {
+	top: -1px;
+	height: calc(50% + 1px);
+}
+
+.omp-sidebar-session-row > .omp-sidebar-agent-guide--full {
+	top: -1px;
+}
+
+.omp-sidebar-agent-pill {
+	display: inline-flex;
+	height: 16px;
+	align-items: center;
+	gap: 4px;
+	border: 1px solid var(--omp-border);
+	border-radius: 999px;
+	padding: 0 6px;
+	font-size: var(--text-omp-xxs);
+	font-variant-numeric: tabular-nums;
+	color: var(--omp-muted);
+}
+
+/* A folded family that holds the session on screen. */
+.omp-sidebar-agent-pill[data-holds-active] {
+	border-color: color-mix(in srgb, var(--omp-accent) 45%, transparent);
+	color: var(--omp-accent);
+}

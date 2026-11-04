@@ -1,0 +1,36 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# Local reference material and downloaded payloads (never committed)
+/.research/
+/.resources/
+/resources/omp.exe
+*.vsix
+
+# omp sidecar + generated app data
+/resources/*.exe
+/.trellis/.runtime/
+# Planning-phase probes (scratch artifacts, not source)
+/.probe/
+/replica/screens/
+
+# OS noise
+Thumbs.db
+.DS_Store
+
+# Planning-phase scratch (JSON dumps and file lists from the recon session)
+/jsd.json
+/jsd-oi.json
+/oi-files.txt
+/omp-files.txt
+/ompgui-tree.json
+/ompgui.zip
+
+# tauri-build generated ACL schemas
+/src-tauri/gen/schemas/

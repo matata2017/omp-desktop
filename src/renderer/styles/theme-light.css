@@ -1,0 +1,147 @@
+/* omp GUI — Porcelain. Keep in sync with THEMES.light. */
+
+:root[data-theme="light"] {
+	color-scheme: light;
+
+	--omp-accent: #0b62c4;
+	--omp-accent-bright: #0a539f;
+	--omp-accent-dim: rgba(11, 98, 196, 0.08);
+	--omp-accent-glow: rgba(11, 98, 196, 0.14);
+
+	--omp-border: #e3e3e3;
+	--omp-border-accent: rgba(11, 98, 196, 0.45);
+	--omp-border-muted: #ececec;
+	--omp-border-strong: #c9c9c9;
+	--omp-success: #1a7f45;
+	--omp-success-dim: rgba(26, 127, 69, 0.08);
+	--omp-error: #c0392b;
+	--omp-error-dim: rgba(192, 57, 43, 0.07);
+	--omp-warning: #8a5a00;
+	--omp-warning-dim: rgba(138, 90, 0, 0.08);
+	--omp-info: #0b62c4;
+	--omp-info-dim: rgba(11, 98, 196, 0.07);
+	--omp-text: #0d0d0d;
+	--omp-text-secondary: #404040;
+
+	--omp-bg-primary: #ffffff;
+	--omp-bg-secondary: #f7f7f7;
+	--omp-bg-tertiary: #efefef;
+	--omp-bg-elevated: #ffffff;
+	--omp-selected-bg: rgba(0, 0, 0, 0.05);
+	--omp-user-msg-bg: #f3f3f3;
+	--omp-user-msg-border: #f3f3f3;
+	--omp-custom-msg-bg: #f7f7f7;
+	--omp-code-bg: #f7f7f7;
+
+	--omp-tool-pending-bg: #f7f7f7;
+	--omp-tool-success-bg: rgba(26, 127, 69, 0.04);
+	--omp-tool-error-bg: rgba(192, 57, 43, 0.05);
+	--omp-tool-output: #404040;
+	--omp-tool-rail-running: var(--omp-accent);
+	--omp-tool-rail-done: #1a7f45;
+	--omp-tool-rail-error: #c0392b;
+
+	--omp-md-heading: #0d0d0d;
+	--omp-md-link: #0b62c4;
+	--omp-md-link-url: #5c5c5c;
+	--omp-md-code: #1f1f1f;
+	--omp-md-code-block: #1f1f1f;
+	--omp-md-code-block-border: #e8e8e8;
+	--omp-md-quote: #404040;
+	--omp-md-quote-border: #c9c9c9;
+	--omp-md-hr: #e3e3e3;
+	--omp-md-list-bullet: #6b6b6b;
+
+	--omp-diff-added: #176b3a;
+	--omp-diff-added-bg: rgba(26, 127, 69, 0.08);
+	--omp-diff-removed: #b0352a;
+	--omp-diff-removed-bg: rgba(192, 57, 43, 0.07);
+	--omp-diff-context: #5c5c5c;
+
+	--omp-syntax-comment: #5f6670;
+	--omp-syntax-keyword: #cf222e;
+	--omp-syntax-function: #6639ba;
+	--omp-syntax-variable: #1f1f1f;
+	--omp-syntax-string: #0a3069;
+	--omp-syntax-number: #0550ae;
+	--omp-syntax-type: #953800;
+	--omp-syntax-operator: #404040;
+	--omp-syntax-punctuation: #5c5c5c;
+
+	--omp-thinking-off: #6b6b6b;
+	--omp-thinking-minimal: #5c5c5c;
+	--omp-thinking-low: #404040;
+	--omp-thinking-medium: #0b62c4;
+	--omp-thinking-high: #0a539f;
+	--omp-thinking-xhigh: #0d0d0d;
+
+	--omp-status-bg: #f9f9f9;
+	--omp-status-model: #404040;
+	--omp-status-path: #5c5c5c;
+	--omp-status-git-clean: #1a7f45;
+	--omp-status-git-dirty: #8a5a00;
+	--omp-status-context: #404040;
+	--omp-status-spend: #404040;
+	--omp-status-subagents: var(--omp-accent);
+	--omp-status-muted: #5c5c5c;
+	--omp-status-dim: #6b6b6b;
+	--omp-status-text: #0d0d0d;
+	--omp-status-sep: #e3e3e3;
+
+	--omp-muted: #5c5c5c;
+	--omp-dim: #6b6b6b;
+	--omp-link: #0b62c4;
+	--omp-custom-msg-label: #0b62c4;
+
+	--omp-input-bg: #ffffff;
+	--omp-input-border: #dedede;
+	--omp-input-focus-border: #c2c2c2;
+	--omp-input-glow: rgba(0, 0, 0, 0.02);
+
+	--omp-btn-primary-bg: #0d0d0d;
+	--omp-btn-primary-text: #ffffff;
+	--omp-btn-secondary-bg: #efefef;
+	--omp-btn-secondary-text: #0d0d0d;
+	--omp-btn-danger-bg: var(--omp-error);
+	--omp-btn-danger-text: #ffffff;
+
+	--omp-badge-bg: #efefef;
+	--omp-badge-text: #404040;
+	--omp-badge-accent: var(--omp-accent);
+
+	--omp-overlay-bg: rgba(0, 0, 0, 0.22);
+	--omp-modal-bg: #ffffff;
+	--omp-modal-border: #e3e3e3;
+
+	--omp-toast-bg: #ffffff;
+	--omp-toast-text: #0d0d0d;
+	--omp-toast-border: #e3e3e3;
+
+	--omp-progress-bg: #ececec;
+	--omp-progress-fill: var(--omp-accent);
+
+	--omp-sidebar-bg: #f9f9f9;
+	--omp-sidebar-item-hover: rgba(0, 0, 0, 0.04);
+	--omp-sidebar-item-active: rgba(0, 0, 0, 0.065);
+
+	--omp-selection-bg: rgba(11, 98, 196, 0.18);
+	--omp-selection-text: #0d0d0d;
+
+	--omp-scrollbar-thumb: #cfcfcf;
+	--omp-scrollbar-track: transparent;
+
+	--omp-streaming-cursor: var(--omp-text);
+	--omp-streaming-highlight: rgba(0, 0, 0, 0.02);
+
+	--omp-panel-bg: #fbfbfb;
+	--omp-panel-border: #ececec;
+	--omp-panel-header: #5c5c5c;
+
+	--omp-titlebar-bg: #ffffff;
+	--omp-titlebar-text: #0d0d0d;
+
+	--omp-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+	--omp-shadow-md: 0 6px 20px rgba(0, 0, 0, 0.08);
+	--omp-shadow-lg: 0 18px 50px rgba(0, 0, 0, 0.14);
+	--omp-shadow-glow: 0 0 0 1px var(--omp-border-accent);
+}

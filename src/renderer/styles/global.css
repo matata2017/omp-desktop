@@ -1,0 +1,1006 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+/* ============================================================================
+   Typography — the platform face first (SF Pro on macOS, the way native
+   desktop agents read), Inter where the platform has no matching UI face,
+   PingFang/YaHei for CJK, and the platform monospace for code.
+   ============================================================================ */
+
+@theme {
+	--font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+	--font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+	--font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Cascadia Code", Menlo, monospace;
+
+	/* Unified type scale — UI text uses these steps (text-omp-*), never raw
+	   pixel classes; lint-surfaces.mjs enforces it. Weight conventions: 400
+	   body, 500 labels/rows, 600 section/page titles. */
+	--text-omp-xxs: calc(var(--gui-font-size, 15px) * 11 / 15);
+	--text-omp-xs: calc(var(--gui-font-size, 15px) * 12 / 15);
+	--text-omp-sm: calc(var(--gui-font-size, 15px) * 12.5 / 15);
+	--text-omp-md: calc(var(--gui-font-size, 15px) * 13.5 / 15);
+	--text-omp-lg: calc(var(--gui-font-size, 15px) * 14.5 / 15);
+	--text-omp-xl: calc(var(--gui-font-size, 15px) * 15 / 15);
+
+	/* Modern geometry — one step rounder than the Tailwind defaults, so every
+	   rounded-* call site picks up the softer language from a single place. */
+	--radius-sm: 0.375rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.625rem;
+	--radius-xl: 0.875rem;
+	--radius-2xl: 1.25rem;
+	--radius-3xl: 1.625rem;
+}
+
+/* Shared semantic aliases follow every named theme and system mode. Keeping
+   literal colors here would leak the default palette into custom transcripts. */
+:root {
+	--omp-transcript-rail: var(--omp-border);
+	/* Switch "on" track: dark themes use pale accents, which a white knob
+	   disappears against, so the track is the accent deepened toward black. */
+	--omp-switch-on: color-mix(in srgb, var(--omp-accent) 78%, #000000);
+	--omp-switch-off: var(--omp-border-strong);
+	--omp-transcript-rule: var(--omp-border-muted);
+	--omp-transcript-event: var(--omp-dim);
+	--omp-transcript-event-live: var(--omp-accent);
+	--omp-transcript-launch: var(--omp-accent);
+	--omp-transcript-user-bg: var(--omp-user-msg-bg);
+	--omp-transcript-user-border: var(--omp-user-msg-border);
+	--omp-transcript-code-bg: var(--omp-code-bg);
+	--omp-ansi-black: var(--omp-dim);
+	--omp-ansi-red: var(--omp-error);
+	--omp-ansi-green: var(--omp-success);
+	--omp-ansi-yellow: var(--omp-warning);
+	--omp-ansi-blue: var(--omp-syntax-keyword);
+	--omp-ansi-magenta: var(--omp-syntax-number);
+	--omp-ansi-cyan: var(--omp-syntax-function);
+	--omp-ansi-white: var(--omp-text-secondary);
+	--omp-ansi-bright-black: var(--omp-muted);
+	--omp-ansi-bright-red: var(--omp-error);
+	--omp-ansi-bright-green: var(--omp-success);
+	--omp-ansi-bright-yellow: var(--omp-warning);
+	--omp-ansi-bright-blue: var(--omp-syntax-keyword);
+	--omp-ansi-bright-magenta: var(--omp-syntax-number);
+	--omp-ansi-bright-cyan: var(--omp-syntax-function);
+	--omp-ansi-bright-white: var(--omp-text);
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font-body);
+	font-size: 14px;
+	line-height: 1.55;
+	color: var(--omp-text);
+	background: var(--omp-bg-primary);
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+}
+
+.font-display {
+	font-family: var(--font-display);
+}
+
+code,
+pre,
+kbd,
+.font-mono {
+	font-family: var(--font-mono);
+	font-feature-settings: "liga" 1, "calt" 1;
+	letter-spacing: 0;
+}
+
+/* ============================================================================
+   App surface — keep the workspace flat; depth belongs to actual overlays
+
+   SURFACE POLICY (enforced by scripts/lint-surfaces.mjs):
+   1. Canvas      — this section only: body, workspace main, settings canvas.
+   2. Chrome      — navigation frame tokens (--omp-sidebar-bg, --omp-titlebar-bg).
+   3. Floating    — real overlays: --omp-modal-bg / --omp-overlay-bg /
+                    --omp-toast-bg, dropdown menus (--omp-bg-elevated).
+   4. States      — hover/focus/selected washes and semantic fills (error,
+                    success, warning, info, diff, tool, user/custom message,
+                    badges, buttons), code blocks (--omp-code-bg), and form
+                    fields (--omp-input-bg) keep their paint.
+   5. Content     — COLORLESS. Cards, rows, chips, panels, and page sections
+                    render transparent over the canvas and separate with
+                    hairline borders (.omp-card). Static bg-primary/secondary/
+                    tertiary fills on content surfaces are lint errors.
+   ============================================================================ */
+
+.omp-workspace-main,
+.settings-main-canvas {
+	background: var(--omp-bg-primary);
+}
+
+
+
+/* ============================================================================
+   Scrollbars
+   ============================================================================ */
+
+::-webkit-scrollbar {
+	width: 9px;
+	height: 9px;
+}
+
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	background-color: var(--omp-scrollbar-thumb);
+	border-radius: 99px;
+	border: 2px solid transparent;
+	background-clip: content-box;
+	transition: background-color var(--omp-motion-fast) var(--omp-ease);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background-color: var(--omp-muted);
+}
+
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* ============================================================================
+   Selection & focus
+   ============================================================================ */
+
+::selection {
+	background: var(--omp-selection-bg);
+	color: var(--omp-selection-text);
+}
+
+/* Base layer: Tailwind v4 puts utilities in `@layer utilities`, and unlayered
+   rules beat every layered rule regardless of specificity. Unlayered, this ring
+   overrode each field's own `outline-none` and drew a second ring inside the
+   container's focus border. */
+@layer base {
+	:focus-visible {
+		outline: 2px solid color-mix(in srgb, var(--omp-accent) 75%, transparent);
+		outline-offset: 1px;
+	}
+}
+
+/* ============================================================================
+   Window drag regions
+   ============================================================================ */
+
+.drag-region {
+	-webkit-app-region: drag;
+}
+
+.no-drag {
+	-webkit-app-region: no-drag;
+}
+
+/* ============================================================================
+   Motion system
+
+   One curve, a long gentle deceleration with no overshoot, carries every
+   entrance: overlays (dialogs, menus, popovers, toasts, drawers) settle in
+   from a few pixels and a hair of scale; a turn that genuinely arrives at the
+   transcript tail rises a few pixels as it fades in. Exits are shorter than
+   entrances and never travel. Content already on screen never moves — hover,
+   press and selection change color only, and streamed text grows in place.
+   ============================================================================ */
+
+:root {
+	--omp-motion-instant: 80ms; /* motion-ok: token definition */
+	--omp-motion-fast: 140ms;
+	--omp-motion-med: 220ms;
+	--omp-motion-slow: 320ms; /* motion-ok: token definition */
+	--omp-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+	--omp-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+	--omp-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+	/* Historical name; deliberately no overshoot. */
+	--omp-ease-spring: var(--omp-ease-enter);
+}
+
+@keyframes omp-fade-up {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes omp-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes omp-scale-in {
+	from {
+		opacity: 0;
+		transform: translateY(8px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes omp-toast-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px) scale(0.98);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes omp-pop-in {
+	from {
+		opacity: 0;
+		transform: translateY(4px) scale(0.97);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes omp-slide-in-right {
+	from {
+		opacity: 0;
+		transform: translateX(16px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+@keyframes omp-shimmer {
+	from {
+		background-position: 200% 0;
+	}
+	to {
+		background-position: -200% 0;
+	}
+}
+
+/* Live-work signals: opacity only, slow, low amplitude — no scaling or glow. */
+@keyframes omp-pulse-dot {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.45;
+	}
+}
+
+@keyframes omp-signal-light {
+	0%,
+	100% {
+		opacity: 0.5;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+@keyframes omp-indeterminate-progress {
+	from {
+		transform: translateX(-100%);
+	}
+	to {
+		transform: translateX(334%);
+	}
+}
+
+.omp-fade-up {
+	animation: omp-fade-up var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-fade-in {
+	animation: omp-fade-in var(--omp-motion-fast) var(--omp-ease) both;
+}
+
+/* No forward fill: a filled end state keeps an identity transform on the dialog
+   panel, which makes it the containing block of every `position: fixed`
+   popover inside, so those open in the wrong place, clipped by the panel. */
+.omp-scale-in {
+	animation: omp-scale-in var(--omp-motion-slow) var(--omp-ease-enter) backwards;
+}
+
+.omp-toast-in {
+	animation: omp-toast-in var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+@keyframes omp-toast-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+.omp-toast-out {
+	animation: omp-toast-out var(--omp-motion-fast) var(--omp-ease-exit) both;
+}
+
+.omp-pop-in {
+	animation: omp-pop-in var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-slide-in-right {
+	animation: omp-slide-in-right var(--omp-motion-slow) var(--omp-ease-enter) both;
+}
+
+/* The exit half of the enter utilities above. Keyframes alone are not a class:
+ * an overlay that swaps to `omp-scale-out` gets `animation: none` unless the
+ * utility exists. Exits are shorter than entrances and do not travel. */
+.omp-fade-out {
+	animation: omp-fade-out var(--omp-motion-fast) var(--omp-ease-exit) both;
+}
+
+.omp-scale-out {
+	animation: omp-scale-out var(--omp-motion-fast) var(--omp-ease-exit) both;
+}
+
+@keyframes omp-scale-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.985);
+	}
+}
+
+@keyframes omp-fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+.omp-skeleton {
+	border-radius: var(--radius-md);
+	background: linear-gradient(
+		100deg,
+		var(--omp-bg-tertiary) 40%,
+		var(--omp-bg-elevated) 50%,
+		var(--omp-bg-tertiary) 60%
+	);
+	background-size: 200% 100%;
+	animation: omp-shimmer 1.4s linear infinite; /* motion-ok: loading placeholder sweep */
+}
+
+.omp-pulse-dot {
+	animation: omp-pulse-dot 2s ease-in-out infinite; /* motion-ok: waiting signal */
+}
+
+/* Status reads as a small dot, never as a bar: a bar beside a row reads as
+   selection or quotation. Idle rows show nothing at all. */
+.omp-signal-light {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	flex: 0 0 6px;
+	border-radius: 9999px;
+	background: currentColor;
+}
+
+.omp-signal-light[data-idle] {
+	opacity: 0;
+}
+
+.omp-signal-light--active {
+	animation: omp-signal-light 1.8s ease-in-out infinite; /* motion-ok: slow semantic status signal */
+}
+
+.omp-indeterminate-progress {
+	width: 30%;
+	animation: omp-indeterminate-progress 1.1s cubic-bezier(0.65, 0, 0.35, 1) infinite; /* motion-ok: switching progress */
+}
+
+/* Live work labels ("Thinking", "Running 2 commands") carry a slow light
+   sweep across the glyphs instead of a spinner or a colored label. */
+.omp-shimmer-text {
+	color: var(--omp-muted);
+	background: linear-gradient(
+		90deg,
+		var(--omp-muted) 0%,
+		var(--omp-muted) 40%,
+		var(--omp-text) 50%,
+		var(--omp-muted) 60%,
+		var(--omp-muted) 100%
+	);
+	background-size: 250% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	animation: omp-shimmer 2.2s linear infinite; /* motion-ok: live work label sweep */
+}
+
+.omp-progress-width {
+	transition: width var(--omp-motion-med) var(--omp-ease);
+}
+
+.omp-disclosure-chevron {
+	transition: transform var(--omp-motion-fast) var(--omp-ease);
+}
+
+/* ============================================================================
+   Interactive micro-interactions
+   ============================================================================ */
+
+.omp-pressable {
+	transition:
+		background-color var(--omp-motion-instant) var(--omp-ease),
+		border-color var(--omp-motion-instant) var(--omp-ease),
+		color var(--omp-motion-instant) var(--omp-ease),
+		box-shadow var(--omp-motion-instant) var(--omp-ease);
+}
+
+/* Hover, focus and selection color changes were instant on every control that
+   forgot a transition utility — a tab, a menu item, a settings row — which reads
+   as a flicker rather than a response. Covering the interactive elements once
+   beats a `transition-colors` class at thirty callsites, and stays subordinate:
+   it lives in the base layer, so a callsite's own `transition-*` utility wins. */
+@layer base {
+	button,
+	a[href],
+	summary,
+	[role="button"],
+	[role="menuitem"],
+	[role="menuitemcheckbox"],
+	[role="option"],
+	[role="tab"] {
+		transition:
+			background-color var(--omp-motion-fast) var(--omp-ease),
+			border-color var(--omp-motion-fast) var(--omp-ease),
+			color var(--omp-motion-fast) var(--omp-ease);
+	}
+}
+
+.omp-color-fade {
+	transition:
+		background-color var(--omp-motion-fast) var(--omp-ease),
+		border-color var(--omp-motion-fast) var(--omp-ease),
+		color var(--omp-motion-fast) var(--omp-ease);
+}
+
+/* Hover actions overlay the row. Title width never changes. */
+.omp-sidebar-action {
+	opacity: 1;
+}
+
+.omp-sidebar-session-row,
+.omp-sidebar-workspace-row {
+	position: relative;
+}
+
+.omp-sidebar-session-row[data-switch-pending="true"] {
+	background: var(--omp-sidebar-item-hover);
+}
+
+/* A split pair's sessions (gui#30): one frame around both rows, like the
+   pair's merged tab chip, brighter while the pair is on screen. An outline
+   keeps the rows' own geometry lined up with every other row. */
+.omp-sidebar-pair {
+	border-radius: 0.5rem;
+	outline: 1px solid var(--omp-border-muted);
+	outline-offset: -1px;
+}
+.omp-sidebar-pair[data-on-screen] {
+	outline-color: var(--omp-border);
+}
+
+/* A pair split across sections: hovering one row lights its partner. */
+.omp-sidebar-session-row[data-pair-hover] {
+	background: var(--omp-sidebar-item-hover);
+}
+
+.omp-sidebar-session-actions,
+.omp-sidebar-workspace-actions {
+	position: absolute;
+	top: 50%;
+	right: 4px;
+	z-index: 1;
+	display: flex;
+	visibility: hidden;
+	pointer-events: none;
+	opacity: 0;
+	padding-left: 14px;
+	transform: translateY(-50%);
+	/* Two layers: the opaque rail colour fades in under the row's own tint,
+	   so a long title disappears cleanly behind the actions. */
+	background:
+		linear-gradient(to right, transparent, var(--omp-sidebar-item-hover) 14px),
+		linear-gradient(to right, transparent, var(--omp-sidebar-bg) 14px);
+	transition:
+		opacity var(--omp-motion-fast) var(--omp-ease),
+		visibility 0s linear var(--omp-motion-fast);
+}
+
+.omp-sidebar-session-row[data-has-actions="true"]:hover .omp-sidebar-session-actions,
+.omp-sidebar-session-row[data-has-actions="true"]:is(:focus-visible, :has(:focus-visible)) .omp-sidebar-session-actions,
+.omp-sidebar-session-row[data-actions-open="true"] .omp-sidebar-session-actions,
+.omp-sidebar-workspace-row:hover .omp-sidebar-workspace-actions,
+.omp-sidebar-workspace-row:has(:focus-visible) .omp-sidebar-workspace-actions,
+.omp-sidebar-workspace-row[data-actions-open="true"] .omp-sidebar-workspace-actions {
+	visibility: visible;
+	pointer-events: auto;
+	opacity: 1;
+	transition-delay: 0s;
+}
+
+.omp-sidebar-session-row[data-active="true"] .omp-sidebar-session-actions {
+	background:
+		linear-gradient(to right, transparent, var(--omp-selected-bg) 14px),
+		linear-gradient(to right, transparent, var(--omp-sidebar-bg) 14px);
+}
+
+/* Recency and counts are resting information: they step aside for actions.
+   A row's family count goes too; the chevron in its status slot opens it. */
+.omp-sidebar-time,
+.omp-sidebar-group-count,
+.omp-sidebar-session-row .omp-sidebar-agent-pill {
+	transition: opacity var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-sidebar-session-row[data-has-actions="true"]:hover .omp-sidebar-time,
+.omp-sidebar-session-row[data-has-actions="true"]:is(:focus-visible, :has(:focus-visible)) .omp-sidebar-time,
+.omp-sidebar-session-row[data-actions-open="true"] .omp-sidebar-time,
+.omp-sidebar-session-row[data-has-actions="true"]:hover .omp-sidebar-agent-pill,
+.omp-sidebar-session-row[data-has-actions="true"]:is(:focus-visible, :has(:focus-visible)) .omp-sidebar-agent-pill,
+.omp-sidebar-workspace-row:hover .omp-sidebar-group-count,
+.omp-sidebar-workspace-row:has(:focus-visible) .omp-sidebar-group-count {
+	opacity: 0;
+}
+
+.omp-sidebar-session-row[data-has-actions="true"]:hover .omp-sidebar-agent-pill {
+	pointer-events: none;
+}
+
+/* Group headers show their icon at rest and the disclosure chevron on hover. */
+.omp-sidebar-group-icon > svg {
+	transition:
+		opacity var(--omp-motion-fast) var(--omp-ease),
+		transform var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-sidebar-group-icon > .omp-disclosure-chevron,
+.omp-sidebar-workspace-row:hover .omp-sidebar-group-icon > svg:first-child,
+.omp-sidebar-workspace-row:has(:focus-visible) .omp-sidebar-group-icon > svg:first-child {
+	opacity: 0;
+}
+
+.omp-sidebar-workspace-row:hover .omp-sidebar-group-icon > .omp-disclosure-chevron,
+.omp-sidebar-workspace-row:has(:focus-visible) .omp-sidebar-group-icon > .omp-disclosure-chevron {
+	opacity: 1;
+}
+
+/* A freshly opened group eases its rows in instead of snapping. */
+.omp-sidebar-group[data-state="expanded"] > .omp-sidebar-group-content {
+	animation: omp-fade-in var(--omp-motion-med) var(--omp-ease-enter) both;
+}
+
+.omp-sidebar-group {
+	display: grid;
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition:
+		grid-template-rows var(--omp-motion-med) var(--omp-ease-enter),
+		opacity var(--omp-motion-fast) var(--omp-ease);
+}
+
+.omp-sidebar-group[data-state="collapsed"] {
+	grid-template-rows: 0fr;
+	opacity: 0;
+	pointer-events: none;
+}
+
+.omp-sidebar-group-content {
+	min-height: 0;
+	overflow: hidden;
+	contain: paint;
+}
+
+.omp-lift {
+	transition:
+		border-color var(--omp-motion-instant) var(--omp-ease),
+		background-color var(--omp-motion-instant) var(--omp-ease);
+}
+
+.omp-lift:hover {
+	border-color: var(--omp-border-strong);
+	background-color: var(--omp-bg-tertiary);
+}
+
+/* Empty state: the canvas fades in once as a whole — no per-element cascade. */
+.omp-empty-canvas {
+	animation: omp-fade-up var(--omp-motion-slow) var(--omp-ease-enter) both;
+}
+
+@media (min-width: 1120px) {
+	.omp-session-sidebar {
+		width: 248px;
+	}
+}
+
+/* Tab strip + title bar + composer leave ~480px of canvas at 820px tall, so
+   the compact layout starts there or the welcome card clips under the strip. */
+/* Too short for the placeholder transcript: the mark and its label say enough. */
+@media (max-height: 600px) {
+	.omp-loading-skeleton {
+		display: none;
+	}
+}
+
+@media (max-height: 820px) {
+	.omp-empty-canvas {
+		justify-content: flex-start;
+		padding-top: 1rem;
+		padding-bottom: 1rem;
+	}
+
+	.omp-empty-logo {
+		display: none;
+	}
+
+	.omp-starter-grid {
+		margin-top: 1rem;
+	}
+
+	.omp-starter-card {
+		min-height: 0;
+		padding: 0.75rem;
+	}
+
+	.omp-starter-icon {
+		width: 2rem;
+		height: 2rem;
+	}
+}
+
+/* Compact windows: keep the conversation wide and present the inspector as
+   an explicit overlay when the user opens it. */
+.omp-inspector {
+	container: omp-inspector / inline-size;
+	box-shadow: none;
+	/* As an overlay it covers the title bar: opaque, and its controls clickable
+	   instead of dragging the window. */
+	background: var(--omp-bg-primary);
+	-webkit-app-region: no-drag;
+}
+
+/* Seven views share the header: only the selected one prints its name, and
+   a narrow drawer keeps icons only. */
+.omp-inspector-tab-label {
+	display: none;
+}
+
+[aria-pressed="true"] > .omp-inspector-tab-label {
+	display: inline;
+}
+
+@container omp-inspector (max-width: 400px) {
+	[aria-pressed="true"] > .omp-inspector-tab-label {
+		display: none;
+	}
+}
+
+@media (max-width: 1000px) {
+	.omp-inspector {
+		position: absolute;
+		inset-block: 0;
+		right: 0;
+		z-index: 30;
+		width: min(460px, calc(100vw - 56px)) !important;
+		box-shadow: var(--omp-shadow-lg);
+		animation: omp-slide-in-right var(--omp-motion-slow) var(--omp-ease-enter) both;
+	}
+}
+
+/* ============================================================================
+   Settings workspace — container-driven reflow across every page archetype
+   ============================================================================ */
+
+.settings-sidebar {
+	width: 14rem;
+}
+
+.settings-content {
+	container: settings-content / inline-size;
+}
+
+.settings-capability-grid {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.75rem;
+}
+
+.settings-capability-featured {
+	grid-column: 1 / -1;
+}
+
+.settings-capability-featured > div {
+	max-width: 72rem;
+}
+
+.settings-field-row {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(13rem, 16rem);
+	align-items: start;
+	gap: 1rem;
+	/* Cap the row so the description and its control stay visually paired
+	   instead of stretching apart across wide windows. */
+	max-width: 56rem;
+}
+
+.settings-field-control {
+	min-width: 0;
+	width: 100%;
+}
+
+.settings-embedded-panel {
+	min-height: 0;
+}
+
+.skills-master-detail {
+	display: grid;
+	grid-template-columns: minmax(13.75rem, 17.5rem) minmax(0, 1fr);
+	/* Consume the available settings viewport. The previous 52rem ceiling
+	   left most of high-resolution windows blank, especially below 100% GUI
+	   scale, and made the skill document look like a cropped preview. */
+	height: max(28rem, calc(100dvh - 11.5rem));
+	background: transparent;
+}
+
+.skills-preview-pane {
+	background: transparent;
+}
+
+.skills-list-pane,
+.skills-detail-pane,
+.ssh-list-pane,
+.ssh-detail-pane,
+.security-findings-pane,
+.security-insights-pane {
+	min-height: 0;
+}
+
+.skills-list-pane,
+.ssh-list-pane,
+.security-findings-pane {
+	border-right: 1px solid var(--omp-border-muted);
+}
+
+.ssh-master-detail {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(20rem, 22.5rem);
+	height: clamp(26rem, calc(100dvh - 13rem), 47.5rem);
+}
+
+.security-revision-grid {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.security-master-detail {
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) minmax(14.375rem, 1fr);
+	min-height: 24.375rem;
+}
+
+.security-finding-detail {
+	grid-template-columns: minmax(0, 1.4fr) minmax(13.75rem, 1fr);
+}
+
+.updates-row {
+	display: grid;
+	grid-template-columns: 2rem minmax(0, 1fr) 6.875rem 6.875rem auto;
+}
+
+@container settings-content (max-width: 1600px) {
+	.settings-capability-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+@container settings-content (max-width: 1100px) {
+	.settings-capability-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+@media (max-width: 960px) {
+	.settings-sidebar {
+		width: 11rem;
+	}
+
+	.settings-sidebar > :last-child {
+		padding-inline: 0.5rem;
+	}
+
+	.settings-nav-group {
+		margin-top: 0.5rem;
+	}
+
+	.settings-nav-item {
+		padding-inline: 0.5rem;
+	}
+}
+
+@container settings-content (max-width: 1040px) {
+	.ssh-master-detail {
+		grid-template-columns: minmax(0, 1fr);
+		height: auto;
+	}
+
+	.ssh-list-pane {
+		min-height: 16rem;
+		border-right: 0;
+		border-bottom: 1px solid var(--omp-border-muted);
+	}
+
+	.ssh-detail-pane {
+		max-height: none;
+	}
+}
+
+@container settings-content (max-width: 840px) {
+	.skills-master-detail,
+	.security-master-detail {
+		grid-template-columns: minmax(0, 1fr);
+		height: auto;
+	}
+
+	.skills-list-pane {
+		height: min(17rem, 42dvh);
+		border-right: 0;
+		border-bottom: 1px solid var(--omp-border-muted);
+	}
+
+	.skills-detail-pane {
+		min-height: 24rem;
+	}
+
+	.security-findings-pane {
+		border-right: 0;
+		border-bottom: 1px solid var(--omp-border-muted);
+	}
+
+	.security-insights-pane {
+		min-height: 12rem;
+	}
+}
+
+@container settings-content (max-width: 700px) {
+	.settings-capability-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.settings-field-row,
+	.security-revision-grid,
+	.security-finding-detail {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.updates-row {
+		grid-template-columns: 2rem minmax(0, 1fr);
+		align-items: start;
+	}
+
+	.updates-icon {
+		grid-column: 1;
+		grid-row: 1;
+	}
+
+	.updates-copy,
+	.updates-current,
+	.updates-latest,
+	.updates-action {
+		grid-column: 2;
+	}
+
+	.updates-action {
+		justify-self: start;
+	}
+
+	.settings-management-toolbar {
+		flex-wrap: wrap;
+	}
+}
+
+/* ============================================================================
+   Reduced motion
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+
+	.omp-sidebar-action {
+		transition-delay: 0ms !important;
+	}
+
+	.omp-indeterminate-progress {
+		width: 100%;
+		transform: none;
+		opacity: 0.55;
+	}
+
+	.omp-shimmer-text {
+		animation: none;
+		background: none;
+		-webkit-text-fill-color: currentColor;
+	}
+}
+
+:root[data-theme="light"] {
+	--omp-switch-on: var(--omp-accent);
+	--omp-switch-off: color-mix(in srgb, var(--omp-border-strong) 70%, var(--omp-bg-primary));
+}
+
+/* GUI density changes conversation spacing without scaling text or scroll coordinates. */
+[data-density="tight"] .omp-transcript-editorial .omp-user-turn {
+	padding-block: 10px 0 !important;
+}
+[data-density="tight"] .omp-transcript-editorial .omp-user-bubble {
+	padding: 8px 12px;
+}
+[data-density="tight"] .omp-transcript-editorial .omp-assistant-turn {
+	padding-block: 8px !important;
+}
+[data-density="tight"] .settings-field-row {
+	gap: 0.625rem;
+}
+
+/* GUI color-blind mode — Okabe-Ito color-blind-safe palette for the
+   semantic tokens. !important is required: named themes also set these vars
+   inline on <html>, and a stylesheet rule only wins with !important. */
+:root[data-colorblind="true"] {
+	--omp-accent: #0072b2 !important;
+	--omp-success: #009e73 !important;
+	--omp-warning: #e69f00 !important;
+	--omp-error: #d55e00 !important;
+	--omp-accent-dim: color-mix(in srgb, #0072b2 12%, transparent) !important;
+	--omp-success-dim: color-mix(in srgb, #009e73 12%, transparent) !important;
+	--omp-error-dim: color-mix(in srgb, #d55e00 10%, transparent) !important;
+}
+
+.settings-embedded-panel.settings-plugin-detail-open {
+	min-height: min(65dvh, 640px);
+}
+
+.omp-progress-ring {
+	transition: stroke-dashoffset var(--omp-motion-med) var(--omp-ease);
+}
