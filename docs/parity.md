@@ -153,6 +153,7 @@
 | 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | should | rust | wip：argv 由代码控制（审批模式跟随工具策略，`--approval-mode/--yolo/--tools/--model/...` 从用户 flag 剥离，有单测）；`run-now` 起独立 sidecar + 独立 session-dir + 发 prompt；**监督循环已接**：读 stdout 到 `agent_end`/EOF/超时 → `finish_run(status, report, endedAt)`，report 取 `agent_end.messages` 里最后一条 assistant 文本（单测）。实测：runNow → cancelRun → 记录变成 `status=cancelled` + `endedAt`（不再永远 running）。**未跑过真实完成**（耗额度）；worktree 策略与 verify 未接 |
 | 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | wip：`scheduler:task-runs`/`get-run` 从库读记录，status/endedAt/report 落库已验证（cancel 路径）；UI 未逐项验 |
 | Review 队列：accept / reject + note | should | reuse | todo |
+| Agent 的 `schedule_task` / `manage_scheduled_tasks` host tool：定义下发 + 调用处理 + 回包 | should | rust | wip：`src-tauri/src/host_tools.rs`（定义 + 参数校验 + create/list/pause/resume/update/remove，6 单测）；agent tab ready 时经 `set_host_tools` 下发，`host_tool_call` 在路由层被拦截执行并把 `host_tool_result` 从同一 tab 回送。**实测**：`set_host_tools` 用 `parameters` 字段（不是 `inputSchema`，用错会被 sidecar 拒绝）返回 `success:true`；端到端未验——需要模型真的调用该工具（耗额度）。`extension_ui` 自动批准 scheduler 工具未做 |
 
 ### sessions
 

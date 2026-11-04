@@ -3,6 +3,7 @@
 pub mod bench;
 pub mod builtin_providers;
 pub mod editor;
+pub mod host_tools;
 pub mod ipc;
 pub mod models;
 pub mod scheduler;
@@ -261,12 +262,60 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
     if frame_type == "ready" {
         state.ready_tabs.lock().insert(tab.clone());
         tracing::info!(tab = %tab, "sidecar ready");
+        // Agent tabs get the scheduler tools; a chat tab cannot schedule work.
+        let kind = state.tab_kinds.lock().get(tab).copied().unwrap_or(TabKind::Agent);
+        if kind == TabKind::Agent
+            && let Some(client) = state.clients.lock().get(tab).cloned()
+        {
+            let mut cmd = json!({ "type": "set_host_tools", "tools": crate::host_tools::definitions() });
+            let _ = client.fire(&mut cmd);
+        }
         let _ = app.emit(
             events::SIDECAR_STATUS,
             json!({ "tabId": tab, "payload": { "status": "ready" } }),
         );
         emit_tab_status(app, &state, tab);
         return;
+    }
+
+    // Scheduler tools are performed by the host: the agent asks, the task exists at once, and the
+    // answer goes back over the same side channel. Anything else still reaches the renderer.
+    if frame_type == "host_tool_call" {
+        let tool = frame
+            .get("toolName")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        if crate::host_tools::is_scheduler_tool(&tool) {
+            let args = frame.get("arguments").cloned().unwrap_or(json!({}));
+            let request_id = frame
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            let cwd = state.cwd.clone();
+            let app_for_reply = app.clone();
+            let tab_for_reply = tab.clone();
+            let store = {
+                let path = state.data_dir.join("scheduler.db");
+                omp_scheduler::TaskStore::open(&path).ok()
+            };
+            tauri::async_runtime::spawn(async move {
+                let (text, is_error) = match store {
+                    Some(store) => crate::host_tools::handle(&store, &tool, &args, &cwd),
+                    None => ("scheduler database unavailable".to_owned(), true),
+                };
+                let reply = json!({
+                    "type": "host_tool_result",
+                    "id": request_id,
+                    "result": { "content": [{ "type": "text", "text": text }] },
+                    "isError": is_error,
+                });
+                let app_state = app_for_reply.state::<AppState>();
+                let _ = app_state.pool.dispatch(&tab_for_reply, &reply);
+            });
+            return;
+        }
     }
 
     if let Some((channel, shape)) = dedicated_channel(&frame_type) {
