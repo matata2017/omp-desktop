@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { IpcSessionOwner, SessionInfo } from "../../shared/ipc-types";
 import type { RpcResponse, RpcSessionState } from "../../shared/rpc-types";
 import { useComposerStore } from "../stores/composer";
+import { useExtensionUiStore } from "../stores/extension-ui";
 import { useForkHandoffStore } from "../stores/fork-handoff";
 import { useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
@@ -544,6 +545,48 @@ describe("openSessionFromSidebar (gui#29)", () => {
 
 		expect(omp.rpc.switchSession).toHaveBeenCalledWith("/sessions/a.jsonl");
 		expect(omp.tabs.spawn).not.toHaveBeenCalled();
+	});
+
+	it("switches an un-hydrated ready tab in place", async () => {
+		seedFocusedTab(true);
+		useSessionStore.setState({ sessionId: "", messageCount: 0 });
+		useMessagesStore.getState().reset();
+
+		await openSessionFromSidebar(session("/sessions/a.jsonl"));
+
+		expect(omp.rpc.switchSession).toHaveBeenCalledWith("/sessions/a.jsonl");
+		expect(omp.tabs.spawn).not.toHaveBeenCalled();
+	});
+
+	it("never switches across workspaces", async () => {
+		seedFocusedTab(false);
+
+		await openSessionFromSidebar({ ...session("/sessions/other.jsonl"), cwd: "/other" });
+
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: "/sessions/other.jsonl" }));
+	});
+
+	it("never switches a tab with pending extension UI", async () => {
+		seedFocusedTab(true);
+		useExtensionUiStore.getState().pushRequest({ id: "req-1", method: "confirm", title: "Approve?" } as never);
+
+		await openSessionFromSidebar(session("/sessions/a.jsonl"));
+
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: "/sessions/a.jsonl" }));
+		useExtensionUiStore.getState().clearAll();
+	});
+
+	it("never switches a tab with queued prompts", async () => {
+		seedFocusedTab(true);
+		useQueueStore.setState({ steering: [{ id: "q1", text: "later" } as never], followUp: [] });
+
+		await openSessionFromSidebar(session("/sessions/a.jsonl"));
+
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: "/sessions/a.jsonl" }));
+		useQueueStore.setState({ steering: [], followUp: [] });
 	});
 
 	it("never switches away a tab holding unsent input", async () => {

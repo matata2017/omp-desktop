@@ -239,9 +239,10 @@ export async function switchSessionNow(session: SessionInfo, model?: SessionMode
 }
 
 /**
- * Whether the focused `tab` may switch onto `session` in place for a sidebar
- * open: idle, of the session's kind and workspace, holding no unsent input,
- * and unused — opened from the sidebar with no turn run since, or blank.
+ * Whether the focused `tab` may switch onto `session` in place: the resident
+ * sidecar's thread changes, so the tab must be idle, of the session's kind
+ * and workspace, with no pending approval/extension UI/queue entry and no
+ * unsent composer input.
  */
 function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	if (tab.kind !== (session.kind === "chat" ? "chat" : "agent") || tab.worktree || tab.pendingSessionPath)
@@ -251,19 +252,22 @@ function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	if (session.cwd !== state.cwd && session.cwd !== tab.cwd) return false;
 	const composer = useComposerStore.getState();
 	if (composer.sending || composer.draft.trim() !== "" || composer.images.length > 0) return false;
+	// Never abandon work that is waiting on the user: approvals, extension UI,
+	// queued steer/follow-up prompts, or an in-flight turn.
+	if (useExtensionUiStore.getState().pendingRequests.length > 0) return false;
+	if (usePlanApprovalStore.getState().pending !== null) return false;
+	const queue = useQueueStore.getState();
+	if (queue.steering.length > 0 || queue.followUp.length > 0) return false;
 	// Idle, same-workspace tab: switch the resident sidecar onto the clicked
 	// session instead of booting a new process/tab (Codex-style thread switch).
-	// Streaming, compaction, pending switches and unsent input returned above.
 	return true;
 }
 
 /**
- * Open `session` from the sidebar (gui#29). A new tab boots an omp process for
- * it — instant only when the warm spare is idle, seconds otherwise and tens of
- * seconds on slow Windows hosts — so an unused focused tab switches onto the
- * session in place instead, and browsing history keeps to one tab. Otherwise
- * the session opens in a new tab, which later sidebar opens reuse until a
- * turn runs in it.
+ * Open `session` from the sidebar (gui#29). An idle same-workspace tab switches
+ * its resident sidecar onto the session in place (thread switch, no new
+ * process). Busy tabs, cross-workspace/kind sessions, and tabs holding pending
+ * work open a new tab instead.
  */
 export async function openSessionFromSidebar(session: SessionInfo): Promise<void> {
 	const tabs = useTabsStore.getState();

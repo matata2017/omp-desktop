@@ -39,12 +39,15 @@ pub async fn ipc_invoke(
                 .get("timeoutMs")
                 .and_then(Value::as_u64)
                 .map(std::time::Duration::from_millis);
-            let client = state.rpc()?;
+            let tab = state.active_tab();
+            let client = state.rpc_for(&tab)?;
             let mut cmd = command;
-            client
+            let response = client
                 .command(&mut cmd, timeout)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            sync_switch_binding(&state, &tab, &cmd, &response);
+            Ok(response)
         }
         "rpc:command-for-tab" => {
             let command = payload
@@ -62,10 +65,12 @@ pub async fn ipc_invoke(
                 .unwrap_or_else(|| state.active_tab());
             let client = state.rpc_for(&tab)?;
             let mut cmd = command;
-            client
+            let response = client
                 .command(&mut cmd, timeout)
                 .await
-                .map_err(|e| e.to_string())
+                .map_err(|e| e.to_string())?;
+            sync_switch_binding(&state, &tab, &cmd, &response);
+            Ok(response)
         }
 
         // ---- Side-channel replies (extension UI / host tool / host URI) ------------------
@@ -520,7 +525,6 @@ pub async fn ipc_invoke(
     }
 }
 
-/// Workspace root of a tab, falling back to the window's cwd.
 /// Re-emit the cached ready state when a tab becomes active: the original push may
 /// have arrived while the renderer was still focused on another tab.
 fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
@@ -533,6 +537,37 @@ fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
     }
 }
 
+/// An in-place `switch_session` changes the tab's session file; keep the resume
+/// binding and the pool's ownership map in sync with it.
+fn sync_switch_binding(state: &AppState, tab: &TabId, command: &Value, response: &Value) {
+    if command.get("type").and_then(Value::as_str) != Some("switch_session") {
+        return;
+    }
+    if response.get("success").and_then(Value::as_bool) != Some(true) {
+        return;
+    }
+    if response
+        .get("data")
+        .and_then(|data| data.get("cancelled"))
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        return;
+    }
+    let Some(path) = command
+        .get("sessionPath")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
+    else {
+        return;
+    };
+    if let Some(previous) = state.tab_sessions.lock().insert(tab.clone(), path.clone()) {
+        state.pool.release_session(&previous);
+    }
+    let _ = state.pool.claim_session(tab, &path);
+}
+
+/// Workspace root of a tab, falling back to the window's cwd.
 fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
     tab.and_then(|id| state.tab_cwds.lock().get(id).cloned())
         .unwrap_or_else(|| state.cwd.clone())
