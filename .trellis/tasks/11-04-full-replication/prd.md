@@ -8,7 +8,7 @@
 
 ## 2. 已确认事实
 
-- 上游：`nornzach/oh-my-pi-gui` v0.9.35（MIT），renderer 567 文件，`src/renderer` / `src/shared` 已按 tag 原样拷入；字节级差异仅 `main.tsx`（`installOmpApi()`）与 `index.html`（CSP/入口）。
+- 上游：`nornzach/oh-my-pi-gui` v0.9.35（MIT），renderer 567 文件，`src/renderer` / `src/shared` 已按 tag 原样拷入；字节级差异仅 `main.tsx`（`installOmpApi()`）、`index.html`（CSP/入口）与 `ChatStream.tsx`（transcript 加载门，见 `docs/parity.md`）。
 - 功能账本：`replica/features.csv` 133 行，priority must 23 / should 89 / could 21；`replica/parts/features.md` 为人类可读版；`replica/parts/screens.md` 22 屏 + 54 对话框（76 个可见表面）；`flows.md` 26 流程；`data-model.md` 28 实体 + 197 条 RPC 命令。
 - 状态账本：`docs/parity.md` 逐条记录 `todo/wip/done/degraded/skip`；机器可读源是 `features.csv`。
 - 现有实现：Phase 0–2 代码完成（`crates/omp-core` / `omp-rpc` / `omp-agent`、`src-tauri`、`src/bridge`）；文档记录 59 项 Rust 测试与协议探针通过，但本机当前无 `cargo/rustc/MSVC/node_modules/resources`，无法复现。
@@ -48,7 +48,7 @@
   - `bunx tauri dev` 在 Windows 起窗，完成“发 prompt → 流式回复 → 工具卡 → agent_end”烟测；
   - `bunx tauri build` 产出 NSIS 安装包（Windows x64）。
 - **A4 性能基线**：Windows 记录冷启、ready、USS（无 tab / 1 tab 空闲 / 1 回合 / 2 tab）、空闲 CPU、退出耗时；预算写入 `perf/budgets.json` 并由 CI/脚本门禁。macOS/Linux 基线随后置平台补测。
-- **A5 renderer 一致性**：`src/renderer` 对 tag v0.9.35 的差异仍仅 `main.tsx` / `index.html`；新增改动不进入 renderer。
+- **A5 renderer 一致性**：`src/renderer` 对 tag v0.9.35 的差异仅 `main.tsx` / `index.html` / `ChatStream.tsx`（加载门），且都记录在 `docs/parity.md`；其余文件保持字节级一致。
 - **A6 许可**：发布物附带 MIT/AGPL/Apache 三方声明（按实际依赖补全）。
 
 ## 5. 不做什么

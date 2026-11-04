@@ -289,7 +289,10 @@ function SessionTranscript() {
 	const tabHasHistory = useTabsStore(state =>
 		tabAwaitsTranscript(state.tabs.find(candidate => candidate.id === tabId)),
 	);
-	const awaitingTranscript = status === "starting" && (tabHasHistory || readOnly !== null);
+	const awaitingTranscript =
+		(status === "starting" ||
+			(status === "ready" && tabHasHistory && rows.length === 0 && !isStreaming)) &&
+		(tabHasHistory || readOnly !== null);
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,

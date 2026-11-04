@@ -38,8 +38,9 @@
 
 | 面 | 偏差 | 原因 | 影响 |
 |---|---|---|---|
-| `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 无（其余 renderer 文件字节级一致） |
+| `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 其余 renderer 文件除下表两项外字节级一致 |
 | `src/renderer/index.html` | CSP 增加 `ipc:`/`http://ipc.localhost`/`ws://localhost:*`；入口改 `/main.tsx`；`pre-paint.js` 改绝对路径 | Vite 与 Tauri 的 IPC 需要 | 无 |
+| `src/renderer/components/chat/ChatStream.tsx` | `awaitingTranscript` 增加“status ready 且 tabHasHistory 且 rows===0 且未流式”分支 | sidecar ready 早于首屏 `get_messages`，原逻辑会先渲染空会话页再显示历史（点击会话的三段式闪烁） | 变成“启动/加载骨架 → 内容”，不再闪“想做点什么?”；上游文件不再字节级一致 |
 | `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
 | 内置浏览器 | Phase 8 前一律返回 `unknown channel: browser:*` | 子 webview + CDP 未实现 | Browser 面板在 UI 上会退化为错误提示 |

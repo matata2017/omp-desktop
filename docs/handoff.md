@@ -36,6 +36,8 @@ cargo run -p omp-agent --example probe -- resources/omp.exe
   terminal_list / get_jobs / get_context_report → 全 success=true
 bunx tauri dev                                   → Romp ready；prompt "list files in crates" → 流式回复 + 4 步工具卡 + agent_end
 node scripts/cdp-eval.mjs                        → CDP eval/输入辅助（9222）
+sidecar click 观测                                 → cold 短会话首条 bubble 929ms；warm 切换 653ms；spawn→ready 600–950ms
+                                                   → ChatStream 加载门修复后，cold 打开不再闪“想做点什么?”空会话页
 ```
 
 本机验证的关键启动修复：
@@ -43,6 +45,7 @@ node scripts/cdp-eval.mjs                        → CDP eval/输入辅助（922
 - `ipc_invoke` 的 `payload` 改为 `Option<Value>`：`call()`/`fire()` 省略 payload 时 Tauri 不再拒绝参数。
 - sidecar 改为 `tab:get-all` / `tab:set-active` 时懒启动；`sidecar:status-get` 回放当前状态，避免 ready 事件早于订阅。
 - `runtime.log` 落盘到 `%APPDATA%\dev.romp.desktop\runtime.log`，`scripts/dev.ps1` 自动设置 MSVC/PATH。
+- `ChatStream.tsx` 的 `awaitingTranscript` 增加“ready 且 tab 有历史且 rows===0”分支：sidecar ready 早于 `get_messages` 时继续显示骨架，避免三段式闪烁（已记入 parity 已知偏差）。
 
 最后一条是 Phase 1 的硬门槛：`get_settings_schema` 与 `terminal_list` 在官方 stock 18.15.0 上返回
 `Unknown command`，全 `success:true` 证明 `resources/omp.exe` 是 **fork 版 sidecar**（243.9 MB，
@@ -60,7 +63,7 @@ crates/
                 pool.rs（tab→进程、deferStart、F-OWN 归属、F-UI-ORIGIN 回包路由）
   omp-rpc/examples/probe.rs    协议探针（Phase 1 验收）
 src-tauri/      lib.rs（状态/事件路由）ipc.rs（唯一命令 ipc_invoke）capabilities/ tauri.conf.json
-src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx 与 index.html
+src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx、index.html、ChatStream.tsx（transcript 加载门）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
@@ -188,4 +191,4 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | `.trellis/`、`.omp/skills/trellis-*` | `mindfold-ai/Trellis` 模板 | AGPL-3.0（`LICENSES/trellis-AGPL-3.0.txt`） |
 | `crates/`、`src-tauri/`、`src/bridge/`、`replica/`、`docs/` | 本工程 | MIT（`LICENSE`） |
 
-发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx` 与 `index.html`。
+发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`（加载门），其余保持上游。

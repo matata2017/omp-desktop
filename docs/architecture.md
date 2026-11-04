@@ -11,7 +11,7 @@
 2. **agent 是子进程，不是应用运行时。** 一个活动会话一个 `omp --mode rpc`；回合结束后的空闲宽限期释放；tab 本身不拥有进程。
 3. **tab 是会话的视图。** tab 只在成为活动路由时申请一个 sidecar 槽位；聚焦期间保持 warm，失焦且租约归零后释放。打开/切换时 transcript 先由 Rust 缓存渲染，composer 在 sidecar ready 前保持现有禁用态。
 4. **不让 tab 数进入内存公式。** 进程数 = 活动回合数 + 至多 1 个空闲预热槽；默认并发回合上限 2，超出排队并显示"等待 agent"。
-5. **保留上游 renderer 字节级复用。** 不重写 React、不换纯 Rust UI；所有改动在 Rust 侧与 `src/bridge/omp-api.ts`。
+5. **保留上游 renderer 复用。** 不重写 React、不换纯 Rust UI；所有改动在 Rust 侧与 `src/bridge/omp-api.ts`。唯一例外是已记录的 `ChatStream.tsx` 加载门（ready 但 transcript 未到时继续显示骨架，避免空会话页闪烁）。
 
 ## 1. 从 OpenIDEA 学什么
 
