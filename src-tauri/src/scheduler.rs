@@ -299,9 +299,11 @@ pub async fn supervise_run(
                         }
                         return ("ok", report, true);
                     }
-                    Some("message_update") => {
+                    // `message_update` is delta mode: its `message` carries only the role, so it
+                    // cannot supply a report. `turn_end` carries a whole message and is a usable
+                    // fallback when a run ends without `agent_end`.
+                    Some("turn_end") => {
                         if let Some(message) = frame.get("message")
-                            && message.get("role").and_then(Value::as_str) == Some("assistant")
                             && let Some(text) = last_assistant_text(std::slice::from_ref(message))
                         {
                             report = Some(text);
