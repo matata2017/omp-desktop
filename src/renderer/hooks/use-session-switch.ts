@@ -249,7 +249,9 @@ function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 		return false;
 	const state = useSessionStore.getState();
 	if (tab.status !== "ready" || state.isStreaming || state.isCompacting || state.switchPending) return false;
-	if (session.cwd !== state.cwd && session.cwd !== tab.cwd) return false;
+	// `tab.cwd` is the sidecar's process cwd; `state.cwd` can drift to whatever
+	// session a fresh sidecar auto-resumed, so it must not widen the guard.
+	if (session.cwd !== tab.cwd) return false;
 	const composer = useComposerStore.getState();
 	if (composer.sending || composer.draft.trim() !== "" || composer.images.length > 0) return false;
 	// Never abandon work that is waiting on the user: approvals, extension UI,

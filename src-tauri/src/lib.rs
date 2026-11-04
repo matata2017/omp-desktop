@@ -24,6 +24,7 @@ pub mod events {
     pub const EVENTS_BATCH: &str = "rpc:events";
     pub const SIDECAR_STATUS: &str = "sidecar:status";
     pub const TAB_STATUS: &str = "tab:status";
+    pub const TERMINAL_FRAME: &str = "terminal:frame";
     pub const SESSION_INFO_UPDATE: &str = "session-info:update";
     pub const EXTENSION_UI: &str = "extension-ui:request";
     pub const HOST_TOOL_CALL: &str = "host-tool:call";
@@ -145,16 +146,20 @@ enum PayloadShape {
     Envelope,
     /// `{ request, tabId }` for extension-UI, host-tool and host-URI requests.
     Request,
+    /// `{ tabId, frame }` for terminal frames (IpcTerminalFramePayload).
+    TerminalFrame,
 }
 
 /// Event channels the renderer subscribes to directly instead of through the batched stream.
 fn dedicated_channel(frame_type: &str) -> Option<(&'static str, PayloadShape)> {
-    let envelope = Some((frame_type_channel(frame_type)?, PayloadShape::Envelope));
     match frame_type {
         "extension_ui_request" | "host_tool_call" | "host_uri_request" => {
             Some((frame_type_channel(frame_type)?, PayloadShape::Request))
         }
-        _ => envelope,
+        "terminal_opened" | "terminal_output" | "terminal_exit" | "terminal_closed" => {
+            Some((events::TERMINAL_FRAME, PayloadShape::TerminalFrame))
+        }
+        _ => Some((frame_type_channel(frame_type)?, PayloadShape::Envelope)),
     }
 }
 
@@ -174,6 +179,9 @@ fn frame_type_channel(frame_type: &str) -> Option<&'static str> {
         "live_frame" => events::LIVE_FRAME,
         "dictation_frame" => events::DICTATION_FRAME,
         "btw_frame" => events::BTW_FRAME,
+        "terminal_opened" | "terminal_output" | "terminal_exit" | "terminal_closed" => {
+            events::TERMINAL_FRAME
+        }
         _ => return None,
     })
 }
@@ -181,11 +189,13 @@ fn frame_type_channel(frame_type: &str) -> Option<&'static str> {
 /// Build the payload a given channel's subscription expects.
 ///
 /// The renderer subscribes in two shapes (`src/bridge/omp-api.ts`): an active-tab envelope
-/// `{ tabId, payload }`, or a flat `{ request, tabId }` for extension-UI/host-tool/host-URI.
+/// `{ tabId, payload }`, a flat `{ request, tabId }` for extension-UI/host-tool/host-URI,
+/// or `{ tabId, frame }` for terminal frames.
 /// `commands:update` additionally delivers the inner array, not the raw frame.
 fn event_payload(shape: PayloadShape, frame_type: &str, tab: &TabId, frame: Value) -> Value {
     match shape {
         PayloadShape::Request => json!({ "tabId": tab, "request": frame }),
+        PayloadShape::TerminalFrame => json!({ "tabId": tab, "frame": frame }),
         PayloadShape::Envelope if frame_type == "available_commands_update" => {
             let commands = frame.get("commands").cloned().unwrap_or(json!([]));
             json!({ "tabId": tab, "payload": commands })
@@ -409,7 +419,14 @@ pub(crate) fn ensure_tab_started(
 fn probe_capabilities(binary: &std::path::Path) -> Capabilities {
     let help = run_help(binary, &["--help"]);
     let stats_help = run_help(binary, &["stats", "--help"]);
-    Capabilities::from_help(&help, &stats_help, RpcProbe::default())
+    let mut caps = Capabilities::from_help(&help, &stats_help, RpcProbe::default());
+    // The bundled sidecar is the fork. `--help` omits `--no-auto-resume`, but the
+    // protocol probe spawns with it and reaches ready; without it a fresh tab
+    // silently auto-resumes the most recently used session (cross-workspace bleed).
+    if caps.session_flag && std::env::var_os("ROMP_STOCK_SIDECAR").is_none() {
+        caps.no_auto_resume = true;
+    }
+    caps
 }
 fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     let output = std::process::Command::new(binary)
@@ -565,9 +582,40 @@ mod tests {
             "live_frame",
             "dictation_frame",
             "btw_frame",
+            "terminal_opened",
+            "terminal_output",
+            "terminal_exit",
+            "terminal_closed",
         ] {
             assert!(dedicated_channel(frame_type).is_some(), "{frame_type}");
         }
         assert!(dedicated_channel("message_update").is_none());
+    }
+
+    #[test]
+    fn terminal_frames_use_the_flat_frame_shape() {
+        let tab = TabId::new("tab-1");
+        let frame = json!({
+            "type": "terminal_output",
+            "terminalId": "t1",
+            "data": "hello",
+            "seq": 1,
+        });
+        let payload = event_payload(
+            PayloadShape::TerminalFrame,
+            "terminal_output",
+            &tab,
+            frame.clone(),
+        );
+        assert_eq!(payload["tabId"], "tab-1");
+        assert_eq!(payload["frame"], frame);
+        assert!(payload.get("payload").is_none());
+        for frame_type in ["terminal_opened", "terminal_output", "terminal_exit", "terminal_closed"] {
+            assert_eq!(
+                frame_type_channel(frame_type),
+                Some(events::TERMINAL_FRAME),
+                "{frame_type}"
+            );
+        }
     }
 }

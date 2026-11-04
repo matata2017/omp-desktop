@@ -206,9 +206,9 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 终端面板：每 tab 多 shell、xterm + fit、颜色随 GUI 主题 | should | reuse | todo |
-| Agent `pty:true` bash 接入终端并自动 reveal | should | reuse | todo |
-| 终端生命周期同步：open/input/resize/close/list/snapshot，快照与后续帧用 seq 对齐 | should | hybrid | todo |
+| 终端面板：每 tab 多 shell、xterm + fit、颜色随 GUI 主题 | should | reuse | wip（`terminal_*` RPC 已通；`terminal_opened/output/exit/closed` 现在按 `{tabId, frame}` 路由到 `terminal:frame`，面板 UI 待实测） |
+| Agent `pty:true` bash 接入终端并自动 reveal | should | reuse | wip（`terminal_opened` 已路由，renderer 的 reveal 逻辑原样；待真实 agent bash 验证） |
+| 终端生命周期同步：open/input/resize/close/list/snapshot，快照与后续帧用 seq 对齐 | should | hybrid | wip（RPC 命令走 sidecar，帧路由已补齐；seq 对齐由 renderer 原样处理） |
 | 终端链接与 CLI 转发：识别路径/URL，`terminal_run_cli` / `tui_open` | could | reuse | todo |
 
 ### themes

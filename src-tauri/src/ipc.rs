@@ -540,32 +540,35 @@ fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
 /// An in-place `switch_session` changes the tab's session file; keep the resume
 /// binding and the pool's ownership map in sync with it.
 fn sync_switch_binding(state: &AppState, tab: &TabId, command: &Value, response: &Value) {
-    if command.get("type").and_then(Value::as_str) != Some("switch_session") {
-        return;
-    }
-    if response.get("success").and_then(Value::as_bool) != Some(true) {
-        return;
-    }
-    // `cancelled` must be explicitly false: an absent field means the sidecar did
-    // not confirm the switch, and claiming the path would poison ownership.
-    let cancelled = response
-        .get("data")
-        .and_then(|data| data.get("cancelled"))
-        .and_then(Value::as_bool);
-    if cancelled != Some(false) {
-        return;
-    }
-    let Some(path) = command
-        .get("sessionPath")
-        .and_then(Value::as_str)
-        .map(PathBuf::from)
-    else {
+    let Some(path) = confirmed_switch_path(command, response) else {
         return;
     };
     if let Some(previous) = state.tab_sessions.lock().insert(tab.clone(), path.clone()) {
         state.pool.release_session(&previous);
     }
     let _ = state.pool.claim_session(tab, &path);
+}
+
+/// The session path a sidecar explicitly confirmed it switched to. A vetoed or
+/// unconfirmed response must never update ownership.
+fn confirmed_switch_path(command: &Value, response: &Value) -> Option<PathBuf> {
+    if command.get("type").and_then(Value::as_str) != Some("switch_session") {
+        return None;
+    }
+    if response.get("success").and_then(Value::as_bool) != Some(true) {
+        return None;
+    }
+    let cancelled = response
+        .get("data")
+        .and_then(|data| data.get("cancelled"))
+        .and_then(Value::as_bool);
+    if cancelled != Some(false) {
+        return None;
+    }
+    command
+        .get("sessionPath")
+        .and_then(Value::as_str)
+        .map(PathBuf::from)
 }
 
 /// Workspace root of a tab, falling back to the window's cwd.
@@ -881,5 +884,34 @@ mod tests {
         assert!(!file.exists());
         assert!(!sidecar_dir.exists());
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn switch_binding_requires_explicit_confirmation() {
+        let command = json!({ "type": "switch_session", "sessionPath": "/s.jsonl" });
+        assert_eq!(
+            confirmed_switch_path(
+                &command,
+                &json!({ "success": true, "data": { "cancelled": false } })
+            ),
+            Some(PathBuf::from("/s.jsonl"))
+        );
+        assert!(
+            confirmed_switch_path(
+                &command,
+                &json!({ "success": true, "data": { "cancelled": true } })
+            )
+            .is_none()
+        );
+        assert!(
+            confirmed_switch_path(&command, &json!({ "success": true, "data": {} })).is_none()
+        );
+        assert!(
+            confirmed_switch_path(
+                &json!({ "type": "get_state" }),
+                &json!({ "success": true, "data": { "cancelled": false } })
+            )
+            .is_none()
+        );
     }
 }
