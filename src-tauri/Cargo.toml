@@ -18,6 +18,7 @@ omp-core = { path = "../crates/omp-core" }
 omp-session = { path = "../crates/omp-session" }
 omp-rpc = { path = "../crates/omp-rpc" }
 omp-agent = { path = "../crates/omp-agent" }
+omp-stats = { path = "../crates/omp-stats" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }

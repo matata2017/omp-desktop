@@ -4,6 +4,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use serde_json::{Value, json};
@@ -633,8 +634,41 @@ pub async fn ipc_invoke(
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
         }
 
-        "stats:url" => Ok(json!({ "url": Value::Null, "unavailable": true })),
-        "stats:fetch" => Err("stats server not running".to_owned()),
+        // ---- stats dashboard -------------------------------------------------------------
+        "stats:url" => match state.stats.port() {
+            Some(port) => Ok(json!({ "url": format!("http://127.0.0.1:{port}/") })),
+            None => Ok(json!({ "url": Value::Null, "unavailable": true })),
+        },
+        "stats:fetch" => {
+            let path = payload
+                .get("path")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "stats:fetch requires a path".to_owned())?
+                .to_owned();
+            if !omp_stats::is_valid_path(&path) {
+                return Err(format!("invalid stats path: {path}"));
+            }
+            let params: Vec<(String, String)> = payload
+                .get("params")
+                .and_then(Value::as_object)
+                .map(|map| {
+                    map.iter()
+                        .filter_map(|(key, value)| Some((key.clone(), value.as_str()?.to_owned())))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let port = state.stats.ensure_running().await.map_err(|e| e.to_string())?;
+            let client = {
+                let mut slot = state.stats_client.lock();
+                if slot.as_ref().is_none_or(|c| c.port() != port) {
+                    *slot = Some(Arc::new(
+                        omp_stats::StatsClient::new(port).map_err(|e| e.to_string())?,
+                    ));
+                }
+                slot.clone().expect("just populated")
+            };
+            client.get(&path, &params).await.map_err(|e| e.to_string())
+        }
         "runtime:error-report" => {
             append_log(
                 &state.data_dir.join("runtime.log"),

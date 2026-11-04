@@ -63,6 +63,9 @@ pub struct AppState {
     /// One idle, already-booted sidecar that new tabs can adopt.
     pub spare: Mutex<Option<SpareSidecar>>,
     pub active_tab: Mutex<TabId>,
+    /// The bundled `omp stats` dashboard, started on the first read.
+    pub stats: omp_stats::StatsServer,
+    pub stats_client: Mutex<Option<Arc<omp_stats::StatsClient>>>,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -520,6 +523,9 @@ pub fn run() {
                 launch_cwd
             };
             let first_tab = TabId::new("tab-1");
+            let stats_binary = sidecar_binary
+                .clone()
+                .unwrap_or_else(|| PathBuf::from("omp.exe"));
             let state = AppState {
                 caps,
                 data_dir,
@@ -534,6 +540,10 @@ pub fn run() {
                 tab_activity: Mutex::new(HashMap::new()),
                 spare: Mutex::new(None),
                 active_tab: Mutex::new(first_tab.clone()),
+                stats: omp_stats::StatsServer::new(
+                    stats_binary.clone(),
+                ),
+                stats_client: Mutex::new(None),
                 next_tab: AtomicU64::new(2),
                 cwd: cwd.clone(),
             };
