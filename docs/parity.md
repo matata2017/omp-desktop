@@ -48,6 +48,14 @@
 | `models.yml` 写入 | Rust 侧用 `serde_yaml` 全量重写，**用户手写的注释与键序不保留** | 上游用 `parseDocument`/`setIn` 做文档级合并；Rust 侧没有等价的注释保留 YAML 编辑器 | GUI 一旦保存 provider，文件里的注释会消失；键序仍稳定（映射插入序）。字段级未知键已保留（有单测） |
 | `editor:open-external` | 用 Rust 进程跑 `$VISUAL`/`$EDITOR`（Windows 回退 `notepad`），非零退出返回 `text:null` | 上游 `src/main/editor.ts` 同流程，但其 `resolveEditorCommand` 还会读登录 shell 的 rc 文件 | GUI 进程 env 里没有 `$EDITOR` 时一律走 notepad；登录 shell 里的编辑器设置不生效 |
 
+## 契约门
+
+| 门 | 测试 | 状态 |
+|---|---|---|
+| argv 与能力矩阵一致 | `crates/omp-agent/tests/argv_caps.rs`（5 条：fork 全能力、stock 全降级、单项能力独立门控、用户 flag 不可覆盖 GUI 控制项、scheduled run 额外 denylist） | 通过：`cargo test -p omp-agent --test argv_caps` → 5 passed |
+| stats 路径与 vendor 一致 | 待 `vendor/stats-server.ts` 就位 | 未开始 |
+| 协议类型与 vendor 一致 | 待 `vendor/rpc-types.ts` 就位 | 未开始 |
+
 ## 逐条清单
 
 ### agents

@@ -61,6 +61,8 @@ struct FileRow {
     tail: String,
 }
 
+/// A session file's identity: modification time and size decide when it is read again.
+#[derive(Clone)]
 struct FileInfo {
     signature: String,
     size: u64,
@@ -156,16 +158,17 @@ impl ConversationIndex {
         let files = scan(sessions_root);
         let _ = self.remove_missing(&files);
         let known = self.known_files().unwrap_or_default();
-        let stale: Vec<(&PathBuf, &FileInfo)> = files
+        let stale: Vec<(PathBuf, FileInfo)> = files
             .iter()
             .filter(|(path, info)| known.get(*path).is_none_or(|row| row.signature != info.signature))
+            .map(|(path, info)| (path.clone(), info.clone()))
             .collect();
         let total = stale.len();
         if total > 0 {
             *self.progress.lock() = Some((0, total));
         }
         for (done, (path, info)) in stale.into_iter().enumerate() {
-            let _ = self.index_file(path, info, known.get(path));
+            let _ = self.index_file(&path, &info, known.get(&path));
             if total > 0 {
                 *self.progress.lock() = Some((done + 1, total));
             }
@@ -495,16 +498,18 @@ fn scan(root: &Path) -> HashMap<PathBuf, FileInfo> {
 
 fn file_info(metadata: &fs::Metadata) -> FileInfo {
     let size = metadata.len();
-    let modified = metadata
+    // Nanoseconds: two rewrites inside one millisecond must still read as a change.
+    let elapsed = metadata
         .modified()
         .ok()
-        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0);
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok());
     FileInfo {
-        signature: format!("{modified}:{size}"),
+        signature: format!(
+            "{}:{size}",
+            elapsed.map(|duration| duration.as_nanos()).unwrap_or(0)
+        ),
         size,
-        modified,
+        modified: elapsed.map(|duration| duration.as_millis() as i64).unwrap_or(0),
     }
 }
 
@@ -728,6 +733,7 @@ fn like_pattern(term: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write as _;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use serde_json::json;
@@ -957,22 +963,21 @@ mod tests {
         let index = ConversationIndex::open(&db).unwrap();
         index.sync(&root);
 
-        // Same length but different bytes, so the tail check has to catch the rewrite.
-        fs::write(
-            &path,
-            [
-                title_line("Original"),
-                session_line("sess-a", "D:\\alpha", "chat"),
-                message_line("u3", "user", "carrots and bananas", "2026-01-02T03:04:05.000Z"),
-            ]
-            .join("\n"),
-        )
-        .unwrap();
+        // The rewritten line is longer, so only the tail check can tell this is not an append.
+        let mut rewritten = [
+            title_line("Original"),
+            session_line("sess-a", "D:\\alpha", "chat"),
+            message_line("u3", "user", "grapes and cherries everywhere", "2026-01-02T03:04:05.000Z"),
+        ]
+        .join("\n");
+        rewritten.push('\n');
+        fs::write(&path, rewritten).unwrap();
 
         index.sync(&root);
         assert!(index.search("apples", None, 20).unwrap()["results"].as_array().unwrap().is_empty());
-        let response = index.search("carrots", None, 20).unwrap();
+        let response = index.search("grapes", None, 20).unwrap();
         assert_eq!(response["results"][0]["hits"][0]["entryId"], "u3");
+        assert_eq!(message_count(&index), 1, "the old line was replaced, not kept");
     }
 
     #[test]
@@ -982,7 +987,11 @@ mod tests {
         fs::create_dir_all(&blocked).unwrap();
         assert!(ConversationIndex::open(&blocked).is_err(), "a directory is not a database file");
 
-        let response = ConversationIndex::unavailable();
+        // What the IPC layer answers when the cache cannot be opened.
+        let response = match ConversationIndex::open(&blocked) {
+            Ok(index) => index.search("zanzibar", None, 20).unwrap(),
+            Err(_) => ConversationIndex::unavailable(),
+        };
         assert_eq!(response["results"], json!([]));
         assert_eq!(response["indexed"], 0);
         assert_eq!(response["indexing"], Value::Null);

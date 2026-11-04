@@ -15,6 +15,8 @@ use std::time::UNIX_EPOCH;
 use serde::Serialize;
 use serde_json::Value;
 
+pub mod conversation;
+
 const TITLE_SLOT_BYTES: usize = 256;
 const HEAD_BYTES: usize = 32 * 1024;
 const TAIL_BYTES: usize = 32 * 1024;
