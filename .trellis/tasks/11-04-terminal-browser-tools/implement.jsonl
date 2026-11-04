@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Terminal/browser ownership and tool renderer contracts"}
+{"file":"replica/recon.md","reason":"Terminal/browser/tools/PR/memory surface map"}
+{"file":"docs/handoff.md","reason":"Current implementation state and commands"}

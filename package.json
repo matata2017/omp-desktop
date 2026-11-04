@@ -1,9 +1,9 @@
 {
-  "name": "omp-desktop",
+  "name": "romp-desktop",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "omp desktop \u2014 Rust/Tauri shell around the oh-my-pi GUI renderer",
+  "description": "Romp \u2014 Rust/Tauri desktop shell around the oh-my-pi GUI renderer",
   "scripts": {
     "dev:web": "vite",
     "build:web": "vite build",

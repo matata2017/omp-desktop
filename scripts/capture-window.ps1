@@ -1,8 +1,8 @@
-# Capture the omp window to a PNG for smoke-test evidence.
+# Capture the Romp window to a PNG for smoke-test evidence.
 # Usage: powershell -NoProfile -File scripts/capture-window.ps1 -Out screenshot.png
 param(
-  [string]$ProcessName = "omp-desktop",
-  [string]$Title = "omp",
+  [string]$ProcessName = "romp-desktop",
+  [string]$Title = "Romp",
   [string]$Out = "screenshot.png"
 )
 

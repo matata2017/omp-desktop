@@ -208,8 +208,15 @@ const api: OmpApi = {
 	events: {
 		onBatch: (callback: (events: AgentSessionEvent[]) => void) =>
 			subscribeActiveTab<AgentSessionEvent[]>(IPC_EVENTS.EVENTS_BATCH, callback),
-		onSidecarStatus: (callback: (status: IpcSidecarStatusPayload) => void) =>
-			subscribeActiveTab<IpcSidecarStatusPayload>(IPC_EVENTS.SIDECAR_STATUS, callback),
+		onSidecarStatus: (callback: (status: IpcSidecarStatusPayload) => void) => {
+			const unsubscribe = subscribeActiveTab<IpcSidecarStatusPayload>(IPC_EVENTS.SIDECAR_STATUS, callback);
+			// The sidecar may have reached `ready` before React subscribed; replay the
+			// current state so the composer does not stay disabled behind a missed event.
+			void call(IPC_COMMANDS.SIDECAR_STATUS_GET)
+				.then(status => callback(status as IpcSidecarStatusPayload))
+				.catch(() => undefined);
+			return unsubscribe;
+		},
 		onTabStatus: (callback: (payload: IpcTabStatusPayload) => void) =>
 			subscribe<IpcTabStatusPayload>(IPC_EVENTS.TAB_STATUS, callback),
 		onExtensionUi: (callback: (request: ExtensionUIRequest, tabId: string) => void) =>

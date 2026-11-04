@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use serde_json::{Value, json};
 use tauri::{AppHandle, State};
 
-use crate::AppState;
-use omp_core::TabId;
+use crate::{AppState, ensure_tab_started};
+use omp_core::{TabId, WindowId};
 
 const FS_READ_CAP: u64 = 8 * 1024 * 1024;
 const FS_LIST_MAX_DEPTH: usize = 8;
@@ -19,8 +19,13 @@ pub async fn ipc_invoke(
     app: AppHandle,
     state: State<'_, AppState>,
     channel: String,
-    payload: Value,
+    payload: Option<Value>,
 ) -> Result<Value, String> {
+    let payload = payload.unwrap_or_else(|| json!({}));
+    tracing::info!(channel = %channel, "ipc_invoke");
+    if channel == "runtime:error-report" {
+        tracing::warn!(?payload, "renderer runtime error");
+    }
     match channel.as_str() {
         // ---- RPC: the whole conversation flows through these two -------------------------
         "rpc:command" => {
@@ -60,15 +65,18 @@ pub async fn ipc_invoke(
         // ---- Tabs -----------------------------------------------------------------------
         "tab:get-all" => {
             let active = state.active_tab();
+            ensure_tab_started(&app, &state, &active)?;
+            let ready = state.ready_tabs.lock();
             let tabs: Vec<Value> = state
                 .pool
                 .tabs()
                 .into_iter()
                 .map(|tab| {
+                    let status = if ready.contains(&tab) { "ready" } else { "starting" };
                     json!({
                         "tabId": tab,
                         "cwd": state.cwd.to_string_lossy(),
-                        "status": "ready",
+                        "status": status,
                         "active": tab == active,
                         "visible": tab == active,
                         "kind": "agent",
@@ -78,16 +86,40 @@ pub async fn ipc_invoke(
             Ok(json!(tabs))
         }
         "tab:set-active" => {
-            if let Some(tab) = payload.get("tabId").and_then(Value::as_str) {
-                *state.active_tab.lock() = TabId::new(tab);
-            }
-            Ok(Value::Null)
+            let Some(tab) = payload.get("tabId").and_then(Value::as_str).map(TabId::new) else {
+                return Ok(json!(false));
+            };
+            *state.active_tab.lock() = tab.clone();
+            ensure_tab_started(&app, &state, &tab)?;
+            Ok(json!(true))
         }
         "tab:set-view" => {
-            if let Some(tab) = payload.get("focusedTabId").and_then(Value::as_str) {
-                *state.active_tab.lock() = TabId::new(tab);
+            let Some(focused) = payload
+                .get("focusedTabId")
+                .and_then(Value::as_str)
+                .map(TabId::new)
+            else {
+                return Ok(json!(false));
+            };
+            let visible: Vec<TabId> = payload
+                .get("visibleTabIds")
+                .and_then(Value::as_array)
+                .map(|ids| {
+                    ids.iter()
+                        .filter_map(Value::as_str)
+                        .map(TabId::new)
+                        .collect()
+                })
+                .unwrap_or_else(|| vec![focused.clone()]);
+            *state.active_tab.lock() = focused.clone();
+            state
+                .pool
+                .set_view(&WindowId::new("main"), focused.clone(), &visible)
+                .map_err(|e| e.to_string())?;
+            for tab in &visible {
+                ensure_tab_started(&app, &state, tab)?;
             }
-            Ok(Value::Null)
+            Ok(json!(true))
         }
         "tab:get-session-owner" => {
             let session = payload.get("sessionPath").and_then(Value::as_str);
@@ -99,8 +131,17 @@ pub async fn ipc_invoke(
         }
 
         // ---- Sidecar --------------------------------------------------------------------
-        "sidecar:status-get" => Ok(json!({ "status": "ready", "cwd": state.cwd.to_string_lossy() })),
+        "sidecar:status-get" => {
+            let active = state.active_tab();
+            let ready = state.ready_tabs.lock().contains(&active);
+            Ok(json!({
+                "status": if ready { "ready" } else { "starting" },
+                "cwd": state.cwd.to_string_lossy(),
+            }))
+        }
         "sidecar:restart" => {
+            let active = state.active_tab();
+            state.ready_tabs.lock().remove(&active);
             let client = state.rpc()?;
             client.reject_all("sidecar restarting");
             Ok(json!({ "ok": true }))

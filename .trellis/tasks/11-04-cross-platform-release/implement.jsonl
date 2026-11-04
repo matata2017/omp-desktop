@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Platform extension points and process model"}
+{"file":"replica/recon.md","reason":"Packaging and platform surface map"}
+{"file":"docs/handoff.md","reason":"Current Windows-first implementation state"}

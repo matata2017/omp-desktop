@@ -1,6 +1,6 @@
 # 数据模型 recon — omp-gui v0.9.35
 
-范围：`src/shared/{rpc-types,ipc-types,scheduler-types,stats-types,launch-profile,quotas}.ts`、`src/main/{session-index,models-config,tab-layout}.ts`；落盘证据另引 `src/main/{index,ipc,window,custom-themes,conversation-index,stats-client}.ts` 与 `src/main/scheduler/store.ts`。源码树：`D:/rust-omp/.research/omp-gui-git`（tag v0.9.35，MIT）。
+范围：`src/shared/{rpc-types,ipc-types,scheduler-types,stats-types,launch-profile,quotas}.ts`、`src/main/{session-index,models-config,tab-layout}.ts`；落盘证据另引 `src/main/{index,ipc,window,custom-themes,conversation-index,stats-client}.ts` 与 `src/main/scheduler/store.ts`。源码树：本仓库 `src/renderer` + `src/shared`（tag v0.9.35，MIT）与 `D:/tmp/ompgui-src`（主进程源码）。
 
 约定：
 

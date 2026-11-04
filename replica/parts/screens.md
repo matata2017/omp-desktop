@@ -1,6 +1,6 @@
 # omp GUI 屏与对话框清单（recon slice）
 
-源：`.research/omp-gui-git`（tag v0.9.35），只读。全部结论来自实际读过的文件，路径见文末 `### 证据`。
+源：本仓库 `src/renderer`（上游 `nornzach/oh-my-pi-gui` tag v0.9.35，MIT；与 tag 字节级一致，仅 `main.tsx` / `index.html` 有差异），`src/main/*` 证据相对 `D:/tmp/ompgui-src`。全部结论来自实际读过的文件，路径见文末 `### 证据`。
 
 **计数：22 个 screen（S01–S22），54 个 dialog/overlay（D01–D54）。**
 

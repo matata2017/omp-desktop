@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Tab/session lifecycle and sidecar release rules"}
+{"file":"replica/recon.md","reason":"Recon summary and surface map"}
+{"file":"docs/handoff.md","reason":"Current implementation state and commands"}

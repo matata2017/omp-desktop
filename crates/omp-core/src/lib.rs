@@ -38,7 +38,7 @@ pub mod paths {
         crate::home_dir()
             .join("AppData")
             .join("Roaming")
-            .join("sh.omp.desktop")
+            .join("dev.romp.desktop")
     }
 
     pub fn home_dir() -> PathBuf {

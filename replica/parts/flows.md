@@ -1,6 +1,6 @@
 # 流程清册（F01–F26）
 
-> 源：`D:/rust-omp/.research/omp-gui-git`（tag v0.9.35，只读）。下文路径均相对 `src/`。
+> 源：本仓库 `src/renderer`（上游 tag v0.9.35，MIT）+ `D:/tmp/ompgui-src/src/main`（0.9.35 工作副本）。下文路径均相对 `src/`。
 > 本次实读范围：`src/renderer/App.tsx`、`hooks/`、`stores/`、`lib/`、`components/{layout,chat,dialogs,panels,settings,tasks,stats,tools}/`、`src/shared/{ipc-types,rpc-types,rpc-client,approval-prompt,scheduler-types}.ts`、`src/main/{ipc,updater,deep-link,browser-host}.ts`、`src/main/scheduler/*`。
 > `文件:行` 均为本次实读锚点；未读到的实现只写符号名，不猜行号。
 > 屏幕 ID 由 screens 分册定义，本册用「表面名」指代（TitleBar / Sidebar / ChatStream / InputArea / PanelContainer / 各 Dialog）。步数 = happy path 上用户可见或需一次 await 的步骤数。

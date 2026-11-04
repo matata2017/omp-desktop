@@ -10,8 +10,8 @@
 | `screens.md` | 屏与对话框清册 | 22 screens（S01–S22）+ 54 dialogs（D01–D54） |
 | `flows.md` | 用户流程 + 状态机 | 26 flows（F01–F26）+ 17 个显式状态机 |
 | `data-model.md` | 实体、持久化、RPC 命令面 | 28 实体（E01–E28）+ 197 条 RPC 命令 / 61 前缀 |
-| `features.md` | 功能矩阵 | 100 行（must 23 / should 67 / could 10）+ 11 条 skip |
-| `../features.csv` | 上表的 CSV 版（`feature,area,priority,original,clone,notes`） | 100 行 |
+| `features.md` | 功能矩阵 | 133 行（100 产品级 + 33 surface 级增补；must 23 / should 89 / could 21）+ 11 条 skip |
+| `../features.csv` | 上表的 CSV 版（`feature,area,priority,original,clone,notes`） | 133 行 |
 
 ## 核心回路（F01）
 

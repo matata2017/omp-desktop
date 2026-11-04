@@ -2,6 +2,7 @@
 
 pub mod ipc;
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -50,6 +51,7 @@ pub struct AppState {
     pub batcher: Mutex<Option<EventBatcher>>,
     /// Tab the pending batch belongs to; one batch channel serves the visible tab.
     pub batch_tab: Mutex<TabId>,
+    pub ready_tabs: Mutex<HashSet<TabId>>,
     pub cwd: PathBuf,
 }
 
@@ -140,6 +142,7 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
         .to_owned();
 
     if frame_type == "ready" {
+        state.ready_tabs.lock().insert(tab.clone());
         let _ = app.emit(
             events::SIDECAR_STATUS,
             json!({ "tabId": tab, "payload": { "status": "ready" } }),
@@ -173,6 +176,8 @@ fn start_tab(app: &AppHandle, tab: TabId, cwd: PathBuf) -> Result<(), String> {
         ..LaunchOptions::default()
     };
     let caps = state.caps.clone();
+    let argv = omp_agent::argv::build(&caps, &launch);
+    tracing::info!(tab = %tab, binary = %binary.display(), ?argv, "spawning sidecar");
     let tab_for_frames = tab.clone();
     let app_for_frames = app.clone();
     let on_frame: omp_agent::sidecar::FrameHandler = Arc::new(move |frame: Value| {
@@ -190,8 +195,39 @@ fn start_tab(app: &AppHandle, tab: TabId, cwd: PathBuf) -> Result<(), String> {
     let client = Arc::new(RpcClient::new(sidecar.frame_sink()));
     *state.client.lock() = Some(client);
     state.pool.attach(tab.clone(), sidecar);
-    *state.active_tab.lock() = tab;
     Ok(())
+}
+
+/// Start a tab's sidecar if it is not running yet, emitting the same status events the
+/// renderer expects. Called from `tab:set-active` / `tab:set-view`, never from setup.
+pub(crate) fn ensure_tab_started(
+    app: &AppHandle,
+    state: &AppState,
+    tab: &TabId,
+) -> Result<(), String> {
+    tracing::info!(tab = %tab, "ensure_tab_started");
+    if state.pool.is_started(tab) {
+        return Ok(());
+    }
+    state.ready_tabs.lock().remove(tab);
+    let _ = app.emit(
+        events::SIDECAR_STATUS,
+        json!({
+            "tabId": tab,
+            "payload": { "status": "starting", "cwd": state.cwd.to_string_lossy() }
+        }),
+    );
+    start_tab(app, tab.clone(), state.cwd.clone()).map_err(|err| {
+        state.ready_tabs.lock().remove(tab);
+        let _ = app.emit(
+            events::SIDECAR_STATUS,
+            json!({
+                "tabId": tab,
+                "payload": { "status": "error", "message": err, "cwd": state.cwd.to_string_lossy() }
+            }),
+        );
+        err
+    })
 }
 
 fn probe_capabilities(binary: &std::path::Path) -> Capabilities {
@@ -199,7 +235,6 @@ fn probe_capabilities(binary: &std::path::Path) -> Capabilities {
     let stats_help = run_help(binary, &["stats", "--help"]);
     Capabilities::from_help(&help, &stats_help, RpcProbe::default())
 }
-
 fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     let output = std::process::Command::new(binary)
         .args(args)
@@ -217,10 +252,21 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let log_dir = omp_core::paths::data_dir();
+    std::fs::create_dir_all(&log_dir).ok();
+    let _ = std::fs::write(
+        log_dir.join("startup.log"),
+        format!("start pid={} args={:?}\n", std::process::id(), std::env::args()),
+    );
+    let file_appender = tracing_appender::rolling::never(&log_dir, "runtime.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .with_target(false)
+        .with_writer(non_blocking)
+        .with_ansi(false)
         .init();
+    tracing::info!("romp run() start");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
@@ -253,6 +299,7 @@ pub fn run() {
                 sidecar_binary,
                 pool: SidecarPool::new(),
                 client: Mutex::new(None),
+                ready_tabs: Mutex::new(HashSet::new()),
                 active_tab: Mutex::new(TabId::new("tab-1")),
                 batcher: Mutex::new(None),
                 batch_tab: Mutex::new(TabId::new("tab-1")),
@@ -276,19 +323,14 @@ pub fn run() {
                 }));
                 *app_handle.state::<AppState>().batcher.lock() = Some(batcher);
 
-                if let Err(err) = start_tab(&app_handle, first_tab, cwd) {
-                    tracing::error!("sidecar start failed: {err}");
-                    let _ = app_handle.emit(
-                        events::SIDECAR_STATUS,
-                        json!({ "tabId": "tab-1", "payload": { "status": "error", "message": err } }),
-                    );
-                }
+                // The sidecar starts when the renderer activates tab-1 (tab:set-active /
+                // tab:set-view), so the ready event cannot race the renderer's subscription.
             });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![ipc::ipc_invoke])
         .run(tauri::generate_context!())
-        .expect("error while running omp desktop");
+        .expect("error while running Romp");
 }
 
 #[cfg(test)]

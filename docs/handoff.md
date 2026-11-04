@@ -1,13 +1,14 @@
 # 交接文档（handoff）
 
 最后更新：2026-11-04。目标：把 `nornzach/oh-my-pi-gui`（Electron 35 + React 19，v0.9.35，MIT）
-的功能复刻成 Rust/Tauri 2 桌面应用 `omp desktop`，常驻内存与冷启优于 Electron 版。
+的功能复刻成 Rust/Tauri 2 桌面应用 `Romp`（内部 crate 仍用 `omp-*` 指代上游协议），常驻内存与冷启优于 Electron 版。
 
-权威输入有三份，冲突时按此顺序：
+权威输入有四份，冲突时按此顺序：
 
-1. `replica/recon.md` + `replica/parts/*`（**建什么**：22 屏 / 54 对话框 / 26 流程 / 28 实体 / 100 条功能，逐条带 `文件:行` 证据）
+1. `replica/recon.md` + `replica/parts/*`（**建什么**：22 屏 / 54 对话框 / 26 流程 / 28 实体 / 133 条功能，逐条带 `文件:行` 证据）
 2. `docs/parity.md`（**做到哪**：逐条状态账本，机器可读源 `replica/features.csv`）
 3. 已批准的实施计划（**怎么建**：Phase 0–9 的步骤与验收）
+4. `docs/architecture.md`（**架构怎么选**：Rust 常驻服务 + 可回收 agent；内存/启动预算与迁移顺序）
 
 ---
 
@@ -15,25 +16,31 @@
 
 | Phase | 内容 | 状态 |
 |---|---|---|
-| 0 | 工具链与镜像 | **完成** |
+| 0 | 工具链与镜像 | **完成**：Rust 1.99.1 + MSVC 14.44.35207 + Win11 SDK 26100 + bun 依赖；`scripts/dev.ps1` 可起窗 |
 | 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
-| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（协议门实测通过） |
-| 2 | Tauri 外壳 + `window.omp` shim | 代码完成，**窗口烟测未做** |
+| 1 | Rust workspace + RPC 传输 + sidecar | **完成**（本机 59 项 Rust 测试 + 6 条协议探针全通过） |
+| 2 | Tauri 外壳 + `window.omp` shim | **窗口就绪**（Romp 起窗、状态 ready、Inspector/字典可渲染）；sidebar `sessions:list` 与完整对话烟测待补 |
 | 3–9 | 会话/多标签、对话面、模型设置、统计、定时任务、终端与浏览器、打包 | 未开始 |
 | R | replica 侦察 | **完成** |
 
 ### 已验证的事实（不是推断）
 
-```
-cargo test -p omp-core -p omp-rpc -p omp-agent   → 3 + 23 + 26 = 52 passed
-cargo test -p omp-desktop                        → 7 passed（事件信封形状）
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
+bun run test                                     → 186 files / 1566 passed
+cargo test --workspace                           → 59 passed（9 suites）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
   terminal_list / get_jobs / get_context_report → 全 success=true
+bunx tauri dev                                   → Romp 窗口 ready（截图 `.probe/romp-ready2.png`）
 ```
+
+本机验证的关键启动修复：
+
+- `ipc_invoke` 的 `payload` 改为 `Option<Value>`：`call()`/`fire()` 省略 payload 时 Tauri 不再拒绝参数。
+- sidecar 改为 `tab:get-all` / `tab:set-active` 时懒启动；`sidecar:status-get` 回放当前状态，避免 ready 事件早于订阅。
+- `runtime.log` 落盘到 `%APPDATA%\dev.romp.desktop\runtime.log`，`scripts/dev.ps1` 自动设置 MSVC/PATH。
 
 最后一条是 Phase 1 的硬门槛：`get_settings_schema` 与 `terminal_list` 在官方 stock 18.15.0 上返回
 `Unknown command`，全 `success:true` 证明 `resources/omp.exe` 是 **fork 版 sidecar**（243.9 MB，
@@ -98,7 +105,7 @@ bunx tsc --noEmit
 bunx vite build
 
 # Rust 测试
-cargo test -p omp-core -p omp-rpc -p omp-agent -p omp-desktop
+cargo test -p omp-core -p omp-rpc -p omp-agent -p romp-desktop
 
 # 协议探针（需要 sidecar 二进制）
 cargo run -p omp-agent --example probe -- resources/omp.exe
@@ -126,15 +133,18 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| Phase 2 窗口烟测 | `bunx tauri dev` 尚未跑过；窗口是否起、renderer 是否拿到事件未验证 | **高**：事件信封/权限任一错都会「窗口在但没数据」 |
-| `src-tauri/capabilities/default.json` | 已建（`core:default` 覆盖 event/window/webview/path），但**未在真实运行中验证** | 中 |
-| Phase 3 多标签 | 现在只有一个 sidecar、`rpc:command-for-tab` 忽略 `tabId`；`SidecarPool` 已具备多 tab 能力但 `ipc.rs` 未接 | 中 |
+| Phase 2 对话烟测 | 窗口已 ready，但还没发出第一条 prompt（模型未选择） | 中 |
+| `sessions:list` | sidebar 显示 `unknown channel: sessions:list` | **高**：会话列表为空 |
+| `tab:spawn` / `tab:close` | 未实现；新建/关闭 tab 会报 unknown channel | **高**：多标签不可用 |
+| `rpc:command-for-tab` | 仍落到单一全局 client，未按 tabId 路由 | 中（多 tab 时） |
 | 事件批的 tab 归属 | `batch_tab` 是全局单值，多 tab 时要改成 per-tab batcher | 中 |
 | 未实现通道 | 除 rpc/tab/prefs/fs/system/updater 外一律 `Err("unknown channel")`，渲染层按 try/catch 降级 | 低（可见但会缺功能） |
-| 浏览器/终端 | Phase 8 前不可用 | 低 |
-| `markdown-links.test.tsx` | 从 tsc/vitest 排除：它 import main 进程的 `toAbsolutePath`，main 已由 Rust 接管 | 低 |
-| 打包 | `bundle.resources` 已映射 `omp.exe`，NSIS 未构建 | 低 |
-| 调试器 | codelldb 解到 `C:/Users/666/.omp/tools/codelldb/`，`.omp/dap.json` 已写，未跑过断点 | 低 |
+| 浏览器/终端 | Phase 6 前不可用 | 低 |
+| `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除：它 import main 进程的 `toAbsolutePath` | 低 |
+| 打包 | `bundle.resources` 映射到 `omp.exe`；`Romp.exe` 不再撞名；NSIS 未构建 | 低 |
+| 调试器 | codelldb 解到旧用户目录，`.omp/dap.json` 已写，未跑过断点 | 低 |
+| MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |
+| vitest 配置 | 原仓库缺 `vitest.config.ts` / `scripts/test-locale.ts` | 已修复；1566 测试通过 |
 
 ---
 
@@ -144,7 +154,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - `git clone` 直连会被 reset；走 `-c http.proxy=http://127.0.0.1:7897` 最稳（镜像前缀也能 clone 但慢）。
 - cargo 走 `sparse+https://rsproxy.cn/index/`（`~/.cargo/config.toml` 已配）；npm/bun 走 npmmirror。
 - 7-Zip 在 `C:/7zip/7z.exe`（winget 装 7zip 会卡住，直接用官方 exe 注释式安装）。
-- MSVC：`Microsoft.VisualStudio.2022.BuildTools` 17.14 + Win10 SDK 26100，`cargo run` 已验证。
+- MSVC：Build Tools 17.14.37827.9（MSVC 14.44.35207）+ Win11 SDK 10.0.26100.0 已装；用 `scripts/dev.ps1` 注入 PATH/LIB/INCLUDE。
 - 技能库：`grilling` / `ponytail` / `trellis` / `replica-*`（11 个）/ `doc-drift` 已装，SOP 见 `eng-dev-sop`。
 
 ---

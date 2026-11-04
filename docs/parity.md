@@ -5,30 +5,34 @@
 
 状态词：`todo` 未开始 / `wip` 进行中 / `done` 已实现且有验证 / `degraded` 降级（说明原因）/ `skip` 不复刻。
 
-机器可读的源是 `replica/features.csv`（100 行，priority must 23 / should 67 / could 10）。
+机器可读的源是 `replica/features.csv`（133 行，priority must 23 / should 89 / could 21；其中 33 条 surface 级增补集中在文末「增补」一节）。
 本表按 area 汇总，逐条状态写在下面的清单里。
 
 ## 汇总
 
 | area | 条目 | must | 当前状态 |
 |---|---|---|---|
-| agents | 4 | 0 | 见下 |
+| agents | 7 | 0 | 见下 |
 | browser | 4 | 0 | 见下 |
-| chat | 17 | 8 | 见下 |
+| chat | 20 | 8 | 见下 |
 | files | 5 | 0 | 见下 |
 | i18n | 2 | 0 | 见下 |
-| models | 6 | 3 | 见下 |
+| memory | 1 | 0 | 见文末增补 |
+| models | 7 | 3 | 见下 |
 | packaging | 4 | 2 | 见下 |
-| panels | 5 | 0 | 见下 |
-| scheduler | 4 | 0 | 见下 |
-| sessions | 9 | 3 | 见下 |
-| settings | 5 | 0 | 见下 |
+| panels | 6 | 0 | 见下 |
+| pr | 2 | 0 | 见文末增补 |
+| scheduler | 5 | 0 | 见下 |
+| sessions | 15 | 3 | 见下 |
+| settings | 11 | 0 | 见下 |
 | stats | 5 | 0 | 见下 |
-| system | 7 | 1 | 见下 |
+| system | 13 | 1 | 见下 |
 | tabs | 7 | 1 | 见下 |
 | terminal | 4 | 0 | 见下 |
 | themes | 3 | 0 | 见下 |
-| tools | 9 | 5 | 见下 |
+| tools | 12 | 5 | 见下 |
+
+计数含 33 条 surface 级增补；这些行的逐条状态统一列在文末「增补」一节，均为 `todo`。
 
 ## 已知偏差（与上游行为不同，需持续维护）
 
@@ -226,3 +230,43 @@
 | task 卡：子代理 spawn 进度、日志与结果 | should | reuse | todo |
 | web_search 卡：结果列表、来源链接、查询回显 | should | reuse | todo |
 | 后台协调卡：`wait` job、`proc://` 任务/服务、`agent://` 消息与 hub 进程表 | should | reuse | todo |
+
+## 增补（surface-level 功能点，全部 todo）
+
+由 `replica/parts/screens.md` 的 76 个 S/D 表面反查补齐；主清单的 100 行未覆盖这些整块表面。逐条证据见 `replica/parts/features.md` 与 `replica/parts/screens.md`。
+
+| 功能 | area | 优先级 | 载体 | 状态 |
+|---|---|---|---|---|
+| Agents 面板（roster）：turn/all 范围、list/DAG 双视图、暂停/停止/展开、失败未读点 | agents | should | reuse | todo |
+| 子代理页：顶替对话 / 并排两种布局、只读 transcript、stop/revive、面包屑回会话 | agents | should | reuse | todo |
+| 子代理悬浮卡：400ms 延迟预览状态、now-line、最近 3 步，键盘聚焦同效 | agents | could | reuse | todo |
+| BTW 旁问：面板 + 对话框、线程 running/complete/cancelled/error/interrupted、分支回主会话 | chat | should | reuse | todo |
+| 全屏 composer 编辑器：CodeMirror markdown、外部编辑器往返（$VISUAL/$EDITOR）、未保存丢弃保护 | chat | should | reuse | todo |
+| ask 工具卡：多问题单选/多选/自定义答案，与扩展 UI 队列共用超时与取消 | chat | should | reuse | todo |
+| 会话信息对话框：getSessionStats 的身份、消息/工具计数、token 拆分、premium 请求、成本、上下文 | sessions | could | reuse | todo |
+| Handoff：让 agent 总结当前会话并在新会话继续，保留原会话 | sessions | should | reuse | todo |
+| 分享与导入会话：preview_share_session / share_session 上传链接；Claude/Codex 会话导入为新 OMP 会话 | sessions | could | reuse | todo |
+| 工作区切换器：列已知工作区、跳转或新增目录（原生目录选择） | sessions | should | hybrid | todo |
+| 模型恢复：会话保存的模型不可用时，选择用当前模型打开或留在原地 | sessions | could | reuse | todo |
+| Diff 面板四 scope：repository/current/timeline/artifacts，unified/split、多文件选择、单文件错误隔离 | panels | should | reuse | todo |
+| PR Center：PR 列表 + CI 徽标 + diff 统计、详情 markdown、按文件懒加载 diff、checkout 到 worktree | pr | should | hybrid | todo |
+| AI 起草创建 PR：标题/正文草稿、base/head 选择、提交后刷新列表 | pr | should | hybrid | todo |
+| Memory 窗口：knowledge/skills/sources 三视图、项目选择、纠正/遗忘、自学技能待复习 | memory | should | reuse | todo |
+| Modes 窗口：Vibe / Goal / Loop 三种会话模式 | settings | should | reuse | todo |
+| Extensions 窗口：hooks / MCP / commands 三 tab、行内开关乐观更新失败回滚、MCP 动作菜单 | settings | should | reuse | todo |
+| Inventory 窗口：plugins / marketplaces / prompt templates / memory 报告，插件详情抽屉 | settings | could | reuse | todo |
+| Model compare：全模型矩阵（auth、上下文、$/1M、配额、角色、当前模型），排序过滤与行内 set_model | settings | should | reuse | todo |
+| 快捷键参考 / 改键：可搜索、逐行录制 chord、冲突阻断或警告 | settings | should | reuse | todo |
+| 首次运行引导与设置产品页：无可用 provider 时引导登录/自定义 YAML；Capabilities/Advanced 页 | settings | could | reuse | todo |
+| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷动作与 show/hide + quit | system | should | rust | todo |
+| 诊断面：Debug 控制台（debug RPC）、应用日志（runtime log 追尾）、变更日志 | system | could | hybrid | todo |
+| 会话内工具面板：/tools 活动工具、/jobs 异步任务、/force 强制工具、复制目标选择器 | system | should | reuse | todo |
+| 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |
+| 模型 benchmark：profile / runs / 并行度、结果矩阵、可取消 | system | could | hybrid | todo |
+| sidecar 状态横幅：restarting/error/exited（含 ready 但 sidecarError）+ 重启入口 | system | should | hybrid | todo |
+| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | reuse | todo |
+| 开发/运维工具卡：eval、debug、lsp、ast_grep、resolve/reject、checkpoint/rewind、context_notes/new_context | tools | should | reuse | todo |
+| 协调/代理工具卡：todo/goal/schedule_task/manage_scheduled_tasks、hub/wait、browser/computer/github | tools | should | reuse | todo |
+| 记忆/技能/安全/生成工具卡：retain/recall/reflect/memory_edit、learn/manage_skill、security_scan/ida、vibe_*、generate_image | tools | could | reuse | todo |
+| 会话选择器（resume）：本目录/所有项目 scope、字面+模糊+全文检索、排序与路径显示 | sessions | should | reuse | todo |
+| 侧栏配额摘要：provider 配额窗口条 + 最紧窗口，与 Usage 窗口同源 | models | could | reuse | todo |

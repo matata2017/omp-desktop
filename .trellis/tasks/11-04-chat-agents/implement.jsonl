@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Agent process lifecycle and IPC contracts"}
+{"file":"replica/recon.md","reason":"Core loop and surface map"}
+{"file":"docs/handoff.md","reason":"Current implementation state and commands"}

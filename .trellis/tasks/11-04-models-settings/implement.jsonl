@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Rust services vs sidecar boundaries"}
+{"file":"replica/recon.md","reason":"Settings/model surface map"}
+{"file":"docs/handoff.md","reason":"Current implementation state and commands"}

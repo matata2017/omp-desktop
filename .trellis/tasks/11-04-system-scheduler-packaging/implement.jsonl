@@ -1,0 +1,3 @@
+{"file":"docs/architecture.md","reason":"Tray/updater/scheduler and packaging boundaries"}
+{"file":"replica/recon.md","reason":"System/scheduler/packaging surface map"}
+{"file":"docs/handoff.md","reason":"Current implementation state and packaging commands"}

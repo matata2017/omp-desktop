@@ -1,7 +1,7 @@
 # omp GUI 功能清单（复刻用）
 
-- 来源：`D:/rust-omp/.research/omp-gui-git`（tag v0.9.35，MIT）。全部路径相对该目录。
-- 行数：**100 行功能**（不含 `## skip` 表；分布 must 23 / should 67 / could 10）。每条 feature 只出现一次；同一交互族已合并（例如"KaTeX 公式 + Mermaid 图"合成"Markdown 增强"，因为二者是同一条 markdown 渲染管线的扩展）。
+- 来源：本仓库 `src/renderer` / `src/shared`（上游 `nornzach/oh-my-pi-gui` tag v0.9.35，MIT；renderer 与 tag 字节级一致，仅 `main.tsx` / `index.html` 有差异），`src/main/*` 证据相对 `D:/tmp/ompgui-src`（0.9.35 工作副本）。
+- 行数：**133 行功能**（100 条产品级 + 33 条 surface 级增补，见文末「增补」；不含 `## skip` 表；分布 must 23 / should 89 / could 21）。每条 feature 只出现一次；同一交互族已合并（例如"KaTeX 公式 + Mermaid 图"合成"Markdown 增强"，因为二者是同一条 markdown 渲染管线的扩展）。surface 增补以 `screens.md` 的 S/D 清单为准，保证 76 个可见表面都有对应功能行。
 - 排序：`area` 字母序 → `priority`（must → should → could）→ 逻辑相邻。
 - `priority`：**must** = 没有它核心回路（发 prompt → 流式回复 → 工具卡）无法工作；**should** = 日常主路径；**could** = 可见但非必需。
 - `original`：全部 `yes`（上游已存在，均由本条 `evidence` 的文件证明）。
@@ -55,7 +55,7 @@
 | 工作区抽屉：7 个视图（overview/agents/btw/diff/files/terminal/browser）、宽度拖拽、chat tab 只留 overview/btw/files | panels | should | yes | reuse | 宽度存 `gui.panelWidth`；窄屏（≤1000px）改为覆盖而非停靠。evidence: `src/renderer/components/layout/PanelContainer.tsx:34-50,74-77`, `src/renderer/stores/ui.ts:10,21` |
 | Overview 面板：上下文分类占用、工作区、改动文件、运行中 subagent、MCP 服务器 | panels | should | yes | reuse | 抽屉首个 tab。evidence: `src/renderer/components/panels/OverviewPanel.tsx`, `README.md`（Overview tab 段） |
 | Queue 面板：steering / followUp 两 lane 的编辑、移动、清空、恢复 | panels | should | yes | reuse | `queue_edit` / `queue_move` / `queue_remove` / `queue_clear`。evidence: `src/renderer/components/panels/QueuePanel.tsx`, `src/renderer/stores/queue.ts` |
-| 上下文与用量指示：标题栏 chip、popover、分类 breakdown、compact 策略条 | panels | should | yes | reuse | `get_state.contextUsage` + 本地 journal 统计；模型容量未知时仍显示实测用量。evidence: `src/renderer/components/layout/ContextUsagePopover.tsx`, `ContextBreakdown.tsx`, `ContextStrategyBar.tsx`, `src/renderer/lib/session-metrics.ts` |
+| 上下文与用量指示：标题栏 chip、popover、分类 breakdown、compact 策略条 | panels | should | yes | reuse | `get_state.contextUsage` + 本地 journal 统计；模型容量未知时仍显示实测用量。evidence: `src/renderer/components/layout/ContextUsagePopover.tsx`, `ContextBreakdown.tsx`, `ContextStrategyBar.tsx`, `src/renderer/components/layout/session-metrics.ts` |
 | MCP 管理面板与向导：添加/测试/重连/重授权/启停/删除 | panels | should | yes | reuse | `mcp_add` / `mcp_test` / `mcp_reauth` / `mcp_reauth_cancel` / `mcp_action`。evidence: `src/renderer/components/panels/mcp/McpServerWizard.tsx`, `src/renderer/components/panels/ExtensionsPanel.tsx:1-18` |
 | 定时任务 CRUD：once/cron/interval 编辑器、深度与工具策略、草稿校验、修订历史 | scheduler | should | yes | rust | `scheduler.db` 用 `node:sqlite`；schema 版本比本构建新时抛错而非猜测迁移。evidence: `src/renderer/components/tasks/TaskForm.tsx:27-58,501`, `src/main/scheduler/store.ts:18-35` |
 | 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | scheduler | should | yes | rust | 运行期不依赖窗口，跑完即退出；agent 提出的交互一律答 "no"。evidence: `src/main/scheduler/runner.ts:1-7,201-210,575-597` |
@@ -68,7 +68,7 @@
 | 会话内容搜索：`sessions:search` 多 token 全命中、`mtime:size` 缓存 | sessions | should | yes | rust | 单文件读上限 8 MiB，16 并发，文本缓存 64 MiB。evidence: `src/main/session-index.ts:26-35,179-210` |
 | 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | sessions | should | yes | rust | 400 ms 新鲜度等待、2 s 内复用上轮；每会话最多 3 条命中、最多 60 个会话。evidence: `src/main/conversation-index.ts:33-46,239-262`, `src/renderer/components/dialogs/ConversationSearchDialog.tsx` |
 | 会话树：分层树布局、平移/缩放、过滤模式、标签、切换 leaf、fork 到新窗口 | sessions | should | yes | reuse | 无 `get_session_tree` 时回退 `get_branch_messages` 单链。evidence: `src/renderer/components/dialogs/SessionTreeDialog.tsx:1-22`, `src/renderer/components/dialogs/session-tree-layout.ts` |
-| 从消息 branch / fork / fork_from | sessions | should | yes | reuse | `branch(entryId)`、`fork()`、`fork_from(entryId)`。evidence: `src/renderer/components/dialogs/BranchPickerDialog.tsx`, `src/renderer/lib/fork-handoff.ts`, `src/shared/ipc-types.ts`（`OmpApi.rpc.forkFrom`） |
+| 从消息 branch / fork / fork_from | sessions | should | yes | reuse | `branch(entryId)`、`fork()`、`fork_from(entryId)`。evidence: `src/renderer/components/dialogs/BranchPickerDialog.tsx`, `src/renderer/stores/fork-handoff.ts`, `src/shared/ipc-types.ts`（`OmpApi.rpc.forkFrom`） |
 | 导出 HTML：保存对话框 → `export_html` → toast | sessions | should | yes | reuse | 导出失败抛错，取消返回 false。evidence: `src/renderer/lib/export-session.ts:1-17` |
 | Schema 驱动设置窗口：tabs/groups/controls 来自 `get_settings_schema`，写入 `set_setting` 即时生效 | settings | should | yes | reuse | 三张产品级页（Capabilities / Runtime / GUI）+ 无 UI 元数据的 Advanced。evidence: `src/renderer/components/settings/SettingsWindow.tsx:8-20,286-324`, `src/renderer/components/settings/pages/SchemaTabContent.tsx` |
 | GUI 偏好：主题、密度、字号、通知、tab 宽度/行数、默认面板、面板宽度 | settings | should | yes | hybrid | 落 `<app_data>/prefs.json`，`prefs:get` / `prefs:set`。evidence: `src/renderer/components/settings/SettingsWindow.tsx:1112-1246`, `src/renderer/lib/display-preferences.ts`, `src/shared/ipc-types.ts`（`PREFS_GET` / `PREFS_SET`） |
@@ -110,6 +110,46 @@
 | task 卡：子代理 spawn 进度、日志与结果 | tools | should | yes | reuse | 懒加载 renderer，避免首屏成本。evidence: `src/renderer/components/tools/TaskRenderer.tsx`, `src/renderer/components/tools/task-render-utils.ts` |
 | web_search 卡：结果列表、来源链接、查询回显 | tools | should | yes | reuse | 链接走统一 openLink 路由。evidence: `src/renderer/components/tools/WebSearchRenderer.tsx` |
 | 后台协调卡：`wait` job、`proc://` 任务/服务、`agent://` 消息与 hub 进程表 | tools | should | yes | reuse | 细节可展开、有界；旧 hub transcript 仍可读。evidence: `src/renderer/components/tools/CoordinationRenderer.tsx`, `HubRenderer.tsx`, `README.md`（Background coordination 段） |
+
+## 增补（surface-level 功能点）
+
+下列 33 行由 `replica/parts/screens.md` 的 76 个 S/D 表面反查补齐：原 100 行覆盖核心回路与主路径，但 PR Center、Memory、Modes、BTW、Jobs、Debug、Logs、Tray 等整块表面没有独立行。行格式与主表一致；`features.csv` 是同一份数据的机器可读版。
+
+| feature | area | priority | original | clone | notes |
+|---|---|---|---|---|---|
+| Agents 面板（roster）：turn/all 范围、list/DAG 双视图、暂停/停止/展开、失败未读点 | agents | should | yes | reuse | 抽屉第 5 个视图；行点击打开子代理页。evidence: `src/renderer/components/agents/AgentRoster.tsx:1-93`, `src/renderer/components/panels/SubagentDag.tsx` |
+| 子代理页：顶替对话 / 并排两种布局、只读 transcript、stop/revive、面包屑回会话 | agents | should | yes | reuse | 只读上下文用 `ReadOnlyTranscriptContext`；页面属某个 session，切 session 自动丢弃；面包屑由 TitleBar 的 `AgentCrumbs` 渲染。evidence: `src/renderer/components/agents/AgentPage.tsx:1-63`, `AgentBeside.tsx:1-73`, `AgentTitle.tsx:32`, `src/renderer/components/layout/TitleBar.tsx:406` |
+| 子代理悬浮卡：400ms 延迟预览状态、now-line、最近 3 步，键盘聚焦同效 | agents | could | yes | reuse | 全局单层 portal；150ms 消失；Esc 隐藏。evidence: `src/renderer/components/agents/AgentHoverCard.tsx:1-63`, `src/renderer/App.tsx`（AgentHoverCardLayer） |
+| BTW 旁问：面板 + 对话框、线程 running/complete/cancelled/error/interrupted、分支回主会话 | chat | should | yes | reuse | 同一时刻只允许一个 running；面板内追问 composer；分支按钮。evidence: `src/renderer/components/panels/BtwPanel.tsx:1-63`, `BtwAnswer.tsx`, `src/renderer/components/dialogs/BtwDialog.tsx:1-43` |
+| 全屏 composer 编辑器：CodeMirror markdown、外部编辑器往返（$VISUAL/$EDITOR）、未保存丢弃保护 | chat | should | yes | reuse | ⌃G 打开；外部编辑器写临时文件，exit 非 0 保留草稿。evidence: `src/renderer/components/dialogs/ComposerEditorDialog.tsx:1-20,133-140`, `src/main/editor.ts:18-33` |
+| ask 工具卡：多问题单选/多选/自定义答案，与扩展 UI 队列共用超时与取消 | chat | should | yes | reuse | `AskRenderer` + `ExtensionDialog` 的 ask 渲染；提交帧 `kind=submit`，`results[]` 每项含 `id/question/options/multi/selectedOptions/customInput?/note?`。evidence: `src/renderer/components/tools/AskRenderer.tsx`, `src/renderer/components/dialogs/ExtensionDialog.tsx:280-319` |
+| 会话信息对话框：getSessionStats 的身份、消息/工具计数、token 拆分、premium 请求、成本、上下文 | sessions | could | yes | reuse | 原生渲染，无 markdown。evidence: `src/renderer/components/dialogs/SessionInfoDialog.tsx:1-20` |
+| Handoff：让 agent 总结当前会话并在新会话继续，保留原会话 | sessions | should | yes | reuse | `rpc.handoff(instructions?)`；流式中不可用并 inline 说明。evidence: `src/renderer/components/dialogs/HandoffDialog.tsx:1-30`, `src/shared/ipc-types.ts`（OmpApi.rpc.handoff） |
+| 分享与导入会话：preview_share_session / share_session 上传链接；Claude/Codex 会话导入为新 OMP 会话 | sessions | could | yes | reuse | 分享先预览再上传；导入不改源，多条导入在侧栏新增并计数。evidence: `ShareSessionDialog.tsx:1-60`, `ImportForeignDialog.tsx:1-30,180-186` |
+| 工作区切换器：列已知工作区、跳转或新增目录（原生目录选择） | sessions | should | yes | hybrid | `sidecar.selectProject/setProject`；当前项高亮，空历史。evidence: `WorkspaceDialog.tsx:1-20`, `src/shared/ipc-types.ts`（OmpApi.sidecar） |
+| 模型恢复：会话保存的模型不可用时，选择用当前模型打开或留在原地 | sessions | could | yes | reuse | 不发隐式切换。evidence: `ModelRestoreDialog.tsx:1-25` |
+| Diff 面板四 scope：repository/current/timeline/artifacts，unified/split、多文件选择、单文件错误隔离 | panels | should | yes | reuse | timeline 虚拟化长列表；`ui.openChanges(scope)` 带 scope 打开。evidence: `src/renderer/components/panels/DiffPanel.tsx:1-73`, `RepositoryChanges.tsx` |
+| PR Center：PR 列表 + CI 徽标 + diff 统计、详情 markdown、按文件懒加载 diff、checkout 到 worktree | pr | should | yes | hybrid | `gh` 探测；不可用时给安装提示；行选详情。evidence: `src/renderer/components/panels/PrCenterWindow.tsx:1-215`, `pr/PrDetailPane.tsx` |
+| AI 起草创建 PR：标题/正文草稿、base/head 选择、提交后刷新列表 | pr | should | yes | hybrid | PR Center 的创建入口在 gh 不可用时 disabled 并带原因（title）；草稿生成/提交失败 toast。evidence: `src/renderer/components/panels/PrCenterWindow.tsx:79-132`, `pr/PrCreateDialog.tsx:28-72` |
+| Memory 窗口：knowledge/skills/sources 三视图、项目选择、纠正/遗忘、自学技能待复习 | memory | should | yes | reuse | 状态行 off/reading/consolidating/failed/empty/current；非内置后端显示 OtherBackend。evidence: `src/renderer/components/memory/MemoryWindow.tsx:1-123,336-395`, `KnowledgeView/SourcesView/SkillsView.tsx` |
+| Modes 窗口：Vibe / Goal / Loop 三种会话模式 | settings | should | yes | reuse | 每 tab 首次加载、再激活静默重取；goal_updated / loop_mode_update 事件就地更新。evidence: `src/renderer/components/panels/ModesPanel.tsx:1-60,759-777` |
+| Extensions 窗口：hooks / MCP / commands 三 tab、行内开关乐观更新失败回滚、MCP 动作菜单 | settings | should | yes | reuse | 每 tab 懒加载 + 缓存 + 手动刷新；hook 改动下次启动生效。evidence: `src/renderer/components/panels/ExtensionsPanel.tsx:1-63,982-1000`, `panels/mcp/McpServerCard.tsx` |
+| Inventory 窗口：plugins / marketplaces / prompt templates / memory 报告，插件详情抽屉 | settings | could | yes | reuse | 行开关乐观更新；marketplace 安装；行点击开详情抽屉（features + settings editor）。evidence: `src/renderer/components/panels/InventoryPanel.tsx:1-50,402-442`, `panels/inventory/*` |
+| Model compare：全模型矩阵（auth、上下文、$/1M、配额、角色、当前模型），排序过滤与行内 set_model | settings | should | yes | reuse | roles/usage 拉取失败时降级不丢行。evidence: `src/renderer/components/settings/ModelCompare.tsx:1-21,655-723` |
+| 快捷键参考 / 改键：可搜索、逐行录制 chord、冲突阻断或警告 | settings | should | yes | reuse | 保留 chord 标注；冲突 error 阻断保存。evidence: `HotkeysDialog.tsx:120-140`, `src/renderer/lib/keymap.ts:209-353` |
+| 首次运行引导与设置产品页：无可用 provider 时引导登录/自定义 YAML；Capabilities/Advanced 页 | settings | could | yes | reuse | 可用 provider 已存在则不显示；Advanced 收无 UI 元数据的 key。evidence: `FirstRunOnboardingDialog.tsx:1-60,139-145`, `settings/pages/CapabilitiesHome.tsx`, `AdvancedTab.tsx` |
+| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷动作与 show/hide + quit | system | should | yes | rust | renderer 推 TrayState，主进程仅在可见标签变化时重建菜单；配额环按最满窗口绘制；快捷动作含 usage/new session/open project/handoff。evidence: `src/main/tray.ts:2-7,103-139,162-268`, `tray-labels.ts`, `quota-icon.ts` |
+| 诊断面：Debug 控制台（debug RPC）、应用日志（runtime log 追尾）、变更日志 | system | could | yes | hybrid | Debug 有会话条/动作栏/原始 JSON；Logs 关闭即卸载；Changelog 静态 markdown。evidence: `DebugConsoleDialog.tsx:1-17,595-600`, `LogsDialog.tsx:1-20`, `panels/LogPanel.tsx`, `ChangelogDialog.tsx:1-22` |
+| 会话内工具面板：/tools 活动工具、/jobs 异步任务、/force 强制工具、复制目标选择器 | system | should | yes | reuse | 工具按内置/MCP/扩展分组；jobs running 优先；force 可带 prompt；copy targets 来自服务端。evidence: `ActiveToolsDialog.tsx:12-17,64-70`, `JobsDialog.tsx:22-29,138-145`, `ForceToolDialog.tsx:1-10,119-125`, `CopySelectorDialog.tsx:1-43,101-110` |
+| 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | yes | reuse | 打开浏览器后不自动提交。evidence: `FeedbackDialog.tsx:1-10,81-90` |
+| 模型 benchmark：profile / runs / 并行度、结果矩阵、可取消 | system | could | yes | hybrid | 失败显示 stderr；模型来自 ModelValueSelect。evidence: `BenchmarkDialog.tsx:1-33,84-90`, `src/main/benchmark-runner.ts` |
+| sidecar 状态横幅：restarting/error/exited（含 ready 但 sidecarError）+ 重启入口 | system | should | yes | hybrid | `sidecar:status-get` / `sidecar:restart`；错误时保留窗口并提示。evidence: `src/renderer/components/layout/SidecarBanner.tsx:2-44`, `src-tauri/src/ipc.rs`（sidecar 通道） |
+| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | yes | reuse | 待审直达 review；未读数红点。evidence: `src/renderer/components/layout/NotificationBell.tsx`, `src/renderer/components/tasks/TasksWindow.tsx:1-123` |
+| 开发/运维工具卡：eval、debug、lsp、ast_grep、resolve/reject、checkpoint/rewind、context_notes/new_context | tools | should | yes | reuse | 按 `REGISTRY` 分发；无专用 renderer 时回落 Generic。evidence: `src/renderer/components/tools/EvalRenderer.tsx`, `DebugRenderer.tsx`, `LspRenderer.tsx`, `AstGrepRenderer.tsx`, `ResolveRenderer.tsx`, `index.tsx:113-165` |
+| 协调/代理工具卡：todo/goal/schedule_task/manage_scheduled_tasks、hub/wait、browser/computer/github | tools | should | yes | reuse | 同上，按工具名分发；schedule 卡展示任务与下一次运行。evidence: `TodoRenderer.tsx`, `GoalRenderer.tsx`, `ScheduleTaskRenderer.tsx`, `ManageTasksRenderer.tsx`, `HubRenderer.tsx`, `index.tsx:113-165` |
+| 记忆/技能/安全/生成工具卡：retain/recall/reflect/memory_edit、learn/manage_skill、security_scan/ida、vibe_*、generate_image | tools | could | yes | reuse | 同组分发；图像结果走 ResultImages。evidence: `MemoryRenderer.tsx`, `index.tsx:147-164`, `ImageRenderer.tsx`, `ResultImages.tsx` |
+| 会话选择器（resume）：本目录/所有项目 scope、字面+模糊+全文检索、排序与路径显示 | sessions | should | yes | reuse | 打开历史会话而非新建。evidence: `SessionPickerDialog.tsx:1-47,224-231` |
+| 侧栏配额摘要：provider 配额窗口条 + 最紧窗口，与 Usage 窗口同源 | models | could | yes | reuse | SidebarQuotas；配额数据随 Usage 刷新。evidence: `src/renderer/components/layout/SidebarQuotas.tsx`, `src/shared/quotas.ts:9-34` |
 
 ## skip
 
