@@ -309,7 +309,10 @@ cp .resources/app/resources/omp.exe resources/omp.exe
   单日新增 12 个提交（stats / bench / scheduler / 会话搜索 / 布局恢复 / models / editor / system / argv 契约门）。
 - `.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、`resources/*.exe`、
   `.probe/`、`replica/screens/`、`src-tauri/gen/schemas/`，以及侦察期的 JSON/清单/zip 临时产物。
-- 本机 SSH 认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。
+- 本机 SSH 认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。**2026-11-06 起该路径出现 `Permission denied (publickey)`**，
+  同时 HTTPS 直连被 reset、`schannel` 与 `openssl` 走代理会间歇 `TLS connect error / unexpected eof`。当时可用的一次组合：
+  `GIT_TERMINAL_PROMPT=0 git -c credential.helper=manager -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 push https://github.com/matata2017/omp-desktop.git master:master`
+  （凭据来自 Windows 凭据管理器）。遇到 push 失败先重试该命令，仍不行再查 SSH key / 代理。
 
 许可（本仓库**同时**承载三方代码，必须随附声明）：
 
