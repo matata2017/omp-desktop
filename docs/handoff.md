@@ -34,7 +34,7 @@
 ```
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
-bun run test                                     → 186 files / 1571 passed
+bun run test                                     → 186 files / 1570 passed，1 条抖动（单独跑 25/25 全过）
 cargo test --workspace                           → 142 passed（16 suites，0 failed）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
@@ -241,7 +241,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | 空闲 sidecar 租约矩阵 | 只按上限 LRU 回收；待审批/终端/浏览器/MCP/队列这些"不能回收"的租约未细分 | 中 |
 | 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
 | provider 登录 | `login` RPC 走通用转发，但 OAuth 需要浏览器回调，未做端到端 | 中（需人工点） |
-| 定时任务通知/insights | `scheduler:get-notices` 返回空、insights 是空壳；run 终态与报告已闭环 | 低 |
+| 定时任务通知/insights | **已闭环**：`insights.rs` 派生 12 字段与 `TaskNotice[]`，`scheduler:review` 写回后 `reviewAcceptRate` 由 `null`→`1`（CDP 实测）；铃铛 UI 未逐项点 | 低 |
 | 打包 | NSIS 已构建并验证：`Romp_0.1.0_x64-setup.exe` 里 `omp.exe` 与 `resources/omp.exe` 逐字节相同，安装后 `resolve_sidecar` 的 `exe_dir/omp.exe` 分支可命中。未做：安装→启动冒烟、卸载残留、签名 | 低 |
 | 深链/托盘 | `omp://` 与托盘未接 | 低 |
 | 终端面板 UI | 帧路由已实测（`terminal_opened/output` 以 `{tabId,frame}` 到达），xterm 视觉未人工确认 | 低 |
@@ -272,16 +272,16 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 1. **浏览器 webview host**（Phase 8，最大一块）。契约：`browser:state` / `browser:key` 由 GUI 发出，
    sidecar 只提供 `browser_host_start/stop` 的 relay websocket。要 Tauri 子 webview + 离屏休眠 +
    CDP relay，且 agent 的 `browser_*` 工具要能驱动它、截图要能回传。这是唯一整块缺失的用户面。
-2. **NSIS 打包**（Phase 9）。一次 `cargo tauri build` 会同时暴露 `bundle.resources` 的 `omp.exe` 路径、
-   图标、`externalBin` 与产品名（`Romp.exe`）的问题，比逐个猜便宜。
-3. **定时任务通知 / insights**（Phase 7 收尾）：`scheduler:get-notices` 与 insights 目前是空壳。
-4. **phantom tab**（Phase 3）：日志已就位，等复发时看 `runtime.log` 的 `ensure_tab_started` /
-   `spawning sidecar` 两条来源记录即可定案，不需要再加 instrument。
-5. **sidecar 租约矩阵**（Phase 3）：待审批 / 终端 / 浏览器 / MCP / 队列这些"不能回收"的状态要挡住 LRU。
-6. **会话归档 / 树 / branch-fork / 导出**（Phase 3+4）。
-7. **provider 登录/登出**（Phase 5）：OAuth 需要浏览器回调，要先人工走一遍。
-8. **契约门**（Gates）：`vendor/` 放 fork 的 `rpc-types.ts` 与 `packages/stats/src/server.ts`，
+2. **phantom tab**（Phase 3）：日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session，`spawn sidecar`
+   打完整 launch 形状），等复发时对照即可定案，不需要再加 instrument。
+3. **sidecar 租约矩阵**（Phase 3）：待审批 / 终端 / 浏览器 / MCP / 队列这些"不能回收"的状态要挡住 LRU。
+4. **会话归档 / 树 / branch-fork / 导出**（Phase 3+4）。
+5. **provider 登录/登出**（Phase 5）：OAuth 需要浏览器回调，要先人工走一遍。
+6. **深链（`omp://`）与托盘**（Phase 9）。
+7. **契约门**（Gates）：`vendor/` 放 fork 的 `rpc-types.ts` 与 `packages/stats/src/server.ts`，
    跑 `stats_paths_match_vendor`。`argv_matches_capabilities` 已通过。
+8. **安装后冒烟**：跑一次 NSIS 安装包，确认安装目录下 `omp.exe` 被 `resolve_sidecar` 命中、能起会话，
+   并检查卸载残留与签名（Phase 9 未验项）。
 
 ### 本轮已闭环、无需再查的项
 
@@ -294,7 +294,8 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - 会话搜索 snippet 的 U+0001/U+0002 标记确实穿过 IPC 到达渲染层
 - 退出无 panic、0 孤儿
 - NSIS 安装包：`Romp_0.1.0_x64-setup.exe`（110.6 MiB），包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同
-- dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`，无残留时干净启动
+- 定时任务 insights / notices / review（12 字段 + `TaskNotice[]`，`reviewAcceptRate` 随写操作变化）
+- dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`；有活会话时只抛 `already running`，不动活会话
 
 ---
 

@@ -38,6 +38,7 @@
 
 | 面 | 偏差 | 原因 | 影响 |
 |---|---|---|---|
+| sidecar 环境变量 | 上游用 `OMP_BUNDLED_OMP`，这里用 `OMP_SIDECAR` | 早期实现沿用了 agent 侧的命名，改名会同时动 `scripts/dev.ps1` 与文档 | 只影响外部覆盖路径；默认解析（打包/仓库相对）不受影响 |
 | `src/renderer/main.tsx` | 增加 `installOmpApi()` 一行 | Tauri 侧没有 preload，`window.omp` 由 `src/bridge/omp-api.ts` 注入 | 其余 renderer 文件除下表四项外字节级一致 |
 | `src/renderer/index.html` | CSP 增加 `ipc:`/`http://ipc.localhost`/`ws://localhost:*`；入口改 `/main.tsx`；`pre-paint.js` 改绝对路径 | Vite 与 Tauri 的 IPC 需要 | 无 |
 | `src/renderer/components/chat/ChatStream.tsx` | `awaitingTranscript` 增加“status ready 且 tabHasHistory 且 rows===0 且未流式”分支 | sidecar ready 早于首屏 `get_messages`，原逻辑会先渲染空会话页再显示历史（点击会话的三段式闪烁） | 变成“启动/加载骨架 → 内容”，不再闪“想做点什么?”；上游文件不再字节级一致 |
@@ -130,7 +131,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 内置 sidecar 解析：`OMP_BUNDLED_OMP` → `resources/omp(.exe)`，绝不回退系统 omp | must | rust | todo |
+| 内置 sidecar 解析：`OMP_BUNDLED_OMP` → `resources/omp(.exe)`，绝不回退系统 omp | must | rust | done：`crates/omp-agent/src/argv.rs::resolve_sidecar` 顺序为 env → `exe_dir/resources/omp.exe` → `exe_dir/omp.exe` → dev 仓库 `resources/omp.exe`，**没有** PATH/系统 omp 回退。NSIS 包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同，正好走 `exe_dir/omp.exe` 这一支。环境变量名与上游不同（`OMP_SIDECAR`），见已知偏差 |
 | sidecar 构建：`compileCodingAgent` 单文件、natives 目标架构暂存、stats/collab 资源生成 | must | rust | todo |
 | 图标与平台元数据：icns/ico/png 集合、NSIS 允许改安装目录、Linux `executableName` | should | rust | wip：`src-tauri/icons/` 有 32/128/128@2x/256 的 png 与 `icon.ico`（脚本生成），`bundle.icon` 已指向它们；NSIS 允许改安装目录与 Linux `executableName` 未验（无 Linux 构建） |
 | 安装包目标与 extraResources：dmg/zip、NSIS/portable、AppImage/deb + `omp://` 协议声明 | should | rust | wip：**NSIS x64 安装包已产出** `target/release/bundle/nsis/Romp_0.1.0_x64-setup.exe`（110.6 MiB）；`7z x` 抽出 `omp.exe` 243.9 MB，`cmp` 与 `resources/omp.exe` **逐字节相同**，`romp-desktop.exe` 18.8 MB 同目录 → `resolve_sidecar` 的 `exe_dir/omp.exe` 分支能命中。dmg/AppImage/deb 与 `omp://` 协议声明未做 |
@@ -278,7 +279,7 @@
 | 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |
 | 模型 benchmark：profile / runs / 并行度、结果矩阵、可取消 | system | could | hybrid | todo |
 | sidecar 状态横幅：restarting/error/exited（含 ready 但 sidecarError）+ 重启入口 | system | should | hybrid | todo |
-| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | reuse | done（数据面）：`crates/omp-scheduler/src/insights.rs::derive_notices`（id = `run:${runId}:${tone}`，`review.state=pending` → review、`failed/timed_out/blocked_config` → failed）+ `TaskStore::read_notice_ids`/`mark_notices_read`（meta `notices.read`）+ `scheduler:get-notices`/`mark-notices-read`（后者回推 `scheduler:notices`）。CDP 实测 `notices()` 返回 `TaskNotice[]`、`markNoticesRead([])` 成功；铃铛 UI 未逐项点 |
+| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | reuse | done（数据面）：`crates/omp-scheduler/src/insights.rs::derive_notices`（id = `${runId}:${tone}`，`review.state=pending` → review、`failed/timed_out/blocked_config` → failed）+ `TaskStore::read_notice_ids`/`mark_notices_read`（meta `notices.read`）+ `scheduler:get-notices`/`mark-notices-read`（后者回推 `scheduler:notices`）。CDP 实测 `notices()` 返回 `TaskNotice[]`、`markNoticesRead([])` 成功；铃铛 UI 未逐项点 |
 | Insights 页：周期/成功失败/successRate/复核率/成本/中位时长/按天/按任务/最近失败 | scheduler | should | reuse | done（数据面）：`compute_insights(period_days, now, runs, tasks)` 输出契约的 12 个字段（空历史返回 `null` 而非 0）；`scheduler:insights` 走 `spawn_blocking` + `all_runs(窗口, 5000)`，支持 `taskId` 过滤。CDP 实测：`runs=1`、`medianDurationMs=2032`、`perDay` 1 桶、`costByTask` 1 项，接受 review 后 `reviewAcceptRate` 由 `null` 变 `1`；6 个单测 |
 | 开发/运维工具卡：eval、debug、lsp、ast_grep、resolve/reject、checkpoint/rewind、context_notes/new_context | tools | should | reuse | todo |
 | 协调/代理工具卡：todo/goal/schedule_task/manage_scheduled_tasks、hub/wait、browser/computer/github | tools | should | reuse | todo |
