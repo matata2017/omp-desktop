@@ -250,7 +250,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |
 | `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除（它 import main 进程的 `toAbsolutePath`） | 低 |
 | MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |
-| dev.ps1 端口占用 | 反复起停会留下 vite 占住 1420（`beforeDevCommand` 报错）。先杀端口再起 | 低 |
+| dev.ps1 端口占用 | **已修**：脚本启动前按 `CommandLine` 含 `rust-omp` 且 `vite` 过滤并杀掉占用 1420 的残留进程（实测输出 `stopping stale vite on 1420 (pid 3672)`；无残留时直接起，不再报 `Port 1420 is already in use`） | 已闭环 |
 
 ---
 
@@ -293,6 +293,8 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - 统计服务自愈（杀子进程后 329 ms 换端口）、同窗口数字与 `stats.db` 三项完全一致
 - 会话搜索 snippet 的 U+0001/U+0002 标记确实穿过 IPC 到达渲染层
 - 退出无 panic、0 孤儿
+- NSIS 安装包：`Romp_0.1.0_x64-setup.exe`（110.6 MiB），包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同
+- dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`，无残留时干净启动
 
 ---
 
