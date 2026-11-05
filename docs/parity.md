@@ -168,7 +168,7 @@
 | 跨会话消息搜索：SQLite 索引 + 命中片段 + 打开到指定 entryId | should | rust | done：`crates/omp-session/src/conversation.rs`（FTS5 trigram、`mtime_nanos:size` 签名、追加式增量 + 64B 尾部校验、terms 全 AND、400 行/每会话 3 命中/60 会话、片段用 U+0001/U+0002 标记、库打不开返回 `unavailable`）+ `conversations:search` 通道（懒开索引、`spawn_blocking`）。实测 `indexed:5`，查「复刻」返回 3 个会话带片段；6 个单测 |
 | 会话树：分层树布局、平移/缩放、过滤模式、标签、切换 leaf、fork 到新窗口 | should | reuse | todo |
 | 从消息 branch / fork / fork_from | should | reuse | todo |
-| 导出 HTML：保存对话框 → `export_html` → toast | should | reuse | todo |
+| 导出 HTML：保存对话框 → `export_html` → toast | should | reuse | done：`system:save-dialog`（已接）+ 通用 `rpc:command` 直通。CDP 实测 `export_html(outputPath=…)` → `success:true`，落盘 128 KB 完整 HTML（`.probe/export-test.html`，含 `<!DOCTYPE html>` 与 meta）；`get_branch_messages` 同样 `success:true`（空会话 0 条） |
 
 ### settings
 
@@ -220,7 +220,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 终端面板：每 tab 多 shell、xterm + fit、颜色随 GUI 主题 | should | reuse | wip（`terminal_open` 实测返回 terminalId/pid；`terminal_opened` + `terminal_output` 以 `{tabId,frame}` 到达 renderer，data/seq 正确；xterm 面板 UI 待人工确认） |
+| 终端面板：每 tab 多 shell、xterm + fit、颜色随 GUI 主题 | should | reuse | wip（渲染已验证，多 shell 与主题未验）：CDP 实测点开 Inspector 的「终端」页签后 `.xterm` 挂载、`.xterm-rows` 出现真实提示符 `666@DESKTOP-4KISOR6 MINGW64 D:\rust-omp (master)$`；`terminal_list` 返回 `term-59d4ba17-1`（pid 9864），`terminal_input` 发送 `echo romp-tty-ok` 后输出回显在 xterm 里（PTY→`terminal:frame`→xterm 全链路通）。每 tab 多 shell 与主题联动未逐项验 |
 | Agent `pty:true` bash 接入终端并自动 reveal | should | reuse | wip（`terminal_opened` 已路由，renderer 的 reveal 逻辑原样；待真实 agent bash 验证） |
 | 终端生命周期同步：open/input/resize/close/list/snapshot，快照与后续帧用 seq 对齐 | should | hybrid | wip（RPC 命令走 sidecar，帧路由已补齐；seq 对齐由 renderer 原样处理） |
 | 终端链接与 CLI 转发：识别路径/URL，`terminal_run_cli` / `tui_open` | could | reuse | todo |

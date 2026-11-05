@@ -293,6 +293,8 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - 会话搜索 snippet 的 U+0001/U+0002 标记确实穿过 IPC 到达渲染层
 - 退出无 panic、0 孤儿
 - LRU 租约：活动/流式/待审批/浏览器页面挡住回收；respond（读 `response.id`）、`cancel`、关 tab 都会释放
+- 终端面板：`.xterm` 挂载、真实提示符、`terminal_input` 的命令输出回显（PTY→frame→xterm 全链路）
+- 会话导出：`export_html` 落盘 128 KB 完整 HTML；`get_branch_messages` 通
 - NSIS 安装包：`Romp_0.1.0_x64-setup.exe`（110.6 MiB），包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同
 - 定时任务 insights / notices / review（12 字段 + `TaskNotice[]`，`reviewAcceptRate` 随写操作变化）
 - dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`；有活会话时只抛 `already running`，不动活会话
