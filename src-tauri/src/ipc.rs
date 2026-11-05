@@ -659,6 +659,21 @@ pub async fn ipc_invoke(
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
         }
 
+        // ---- tray ------------------------------------------------------------------------
+        "tray:state-push" => {
+            // The renderer owns the tray model; rebuild the native menu from it so the tray and
+            // the app never disagree about status, language or actions.
+            let state_json = payload.get("state").cloned().unwrap_or(payload.clone());
+            tracing::info!(
+                language = ?state_json.get("language"),
+                status = ?state_json.get("status"),
+                "tray state pushed"
+            );
+            *state.tray_state.lock() = Some(state_json.clone());
+            crate::rebuild_tray(&app, Some(&state_json)).map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
+
         // ---- browser panel ---------------------------------------------------------------
         "browser:get-state" => {
             let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();

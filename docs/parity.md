@@ -274,7 +274,7 @@
 | Model compare：全模型矩阵（auth、上下文、$/1M、配额、角色、当前模型），排序过滤与行内 set_model | settings | should | reuse | todo |
 | 快捷键参考 / 改键：可搜索、逐行录制 chord、冲突阻断或警告 | settings | should | reuse | todo |
 | 首次运行引导与设置产品页：无可用 provider 时引导登录/自定义 YAML；Capabilities/Advanced 页 | settings | could | reuse | todo |
-| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷键 | should | reuse | wip：托盘已建（`TrayIconBuilder` + 菜单「显示 Romp / 退出」，退出走完整 teardown），应用启动不再报错；配额环、运行状态聚合、quick config 子菜单与快捷键未做；关窗仍是退出（未做 close-to-tray） |
+| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷键 | should | reuse | wip：托盘与菜单由渲染层推送的 `TrayState` 驱动——`tray:state-push` 已接（存 state + `rebuild_tray` 用 `language` 本地化「新建会话 / 打开项目… / 设置… / 退出」，有 `status` 时插一条禁用状态项），点击发 `menu:action` 走渲染层既有处理器，退出走完整 teardown；首次启动即建托盘（默认窗口图标）。**未做**：配额环图标、状态聚合细节、quick config 子菜单、close-to-tray；`tray:state-push` 的实机推送未验证（本轮窗口反复被单实例关掉，未取到日志） |
 | 诊断面：Debug 控制台（debug RPC）、应用日志（runtime log 追尾）、变更日志 | system | could | hybrid | todo |
 | 会话内工具面板：/tools 活动工具、/jobs 异步任务、/force 强制工具、复制目标选择器 | system | should | reuse | todo |
 | 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |

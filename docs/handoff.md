@@ -25,7 +25,7 @@
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
 | 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
-| 8 | 终端与浏览器 | **2/4**：**内置浏览器 host 已跑通**（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送实测）；终端面板视觉仍未人工确认；agent relay 与截图未接 |
+| 8 | 终端与浏览器 | **3/4**：内置浏览器 host 已跑通（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送/title 实测）；**终端面板实测出字**（`.xterm` 挂载 + 真实提示符 + `terminal_input` 回显）；剩 agent relay（`browser_host_start/stop` → `agentLinked`）与截图/历史按钮 |
 | 9 | 打包 / 深链 / 托盘 / 性能 | **3/3**：性能实测写进 `docs/perf.md`；NSIS x64 安装包已构建并校验；**`omp://` 深链与单实例转发、托盘（显示/退出）已接**（`omp://new` 实测新建会话） |
 | R | replica 侦察 | **完成** |
 
@@ -239,12 +239,12 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | **浏览器面板** | 宿主已跑通（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送/title 均实测）。仍缺：`browser:capture`、`canGoBack/canGoForward`、页内查找、keymap 回传，以及 sidecar 的 `browser_host_start/stop` relay（`agentLinked` 恒 false） | 中 |
 | phantom tab | 启动后偶发一个无人点击的 tab。来源日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session/tabs，`tab:spawn` 打完整 launch 形状），但本轮 8 次干净启动只出现 `tab-1`，**未复现** | 中（待复发） |
 | 空闲 sidecar 租约矩阵 | **部分**：`is_evictable` 已覆盖流式、阻塞 UI 提示（7 个方法，respond/cancel/关 tab 都会释放）与浏览器页面；终端 / MCP / 队列三类在 Rust 侧没有状态源，未建模 | 低 |
-| 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
+| 会话归档/树 | 重命名/删除/搜索/原地切换/**导出 HTML**（`export_html` 落盘 128 KB）/branch 读取已验；归档是**渲染层 `prefs` 状态**（`sidebar-prefs` 的 `archivedSessions`，`prefs:set` 已通），不需要 Rust 侧通道；fork 与运行中跳过未验 | 中 |
 | provider 登录 | `login` RPC 走通用转发，但 OAuth 需要浏览器回调，未做端到端 | 中（需人工点） |
 | 定时任务通知/insights | **已闭环**：`insights.rs` 派生 12 字段与 `TaskNotice[]`，`scheduler:review` 写回后 `reviewAcceptRate` 由 `null`→`1`（CDP 实测）；铃铛 UI 未逐项点 | 低 |
 | 打包 | NSIS 已构建并验证：`Romp_0.1.0_x64-setup.exe` 里 `omp.exe` 与 `resources/omp.exe` 逐字节相同，安装后 `resolve_sidecar` 的 `exe_dir/omp.exe` 分支可命中。未做：安装→启动冒烟、卸载残留、签名 | 低 |
-| 深链/托盘 | `omp://` 与托盘未接 | 低 |
-| 终端面板 UI | 帧路由已实测（`terminal_opened/output` 以 `{tabId,frame}` 到达），xterm 视觉未人工确认 | 低 |
+| 深链/托盘 | **已接**：`omp://new` 经单实例转发后新建会话（实测）；托盘有 显示/退出 两项、退出走完整 teardown。未做：配额环、运行状态聚合、quick config 子菜单、`tray:state-push` 动态菜单、托盘文案本地化、close-to-tray | 中 |
+| 终端面板 UI | **已验证**：点开 Inspector 的「终端」页签 → `.xterm` 挂载、`.xterm-rows` 出现 `666@DESKTOP-4KISOR6 MINGW64 D:\rust-omp (master)$`，`terminal_input "echo romp-tty-ok"` 的输出回显；每 tab 多 shell 与主题联动未验 | 低 |
 | vendor 契约门 | `argv_matches_capabilities` 已通过（5 条）；`stats_paths_match_vendor` / `rpc-types` 对账需要 fork 的 `packages/stats/src/server.ts` 与 `coding-agent/src/modes/rpc/rpc-types.ts`，本机没有 | 中 |
 | 调试器 | codelldb 已解到 `C:/Users/666/.omp/tools/codelldb/`，`.omp/dap.json` 已写，断点未跑 | 低 |
 | 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |

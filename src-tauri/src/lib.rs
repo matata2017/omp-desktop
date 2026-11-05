@@ -76,6 +76,8 @@ pub struct AppState {
     pub stats_client: Mutex<Option<Arc<omp_stats::StatsClient>>>,
     /// One `omp bench --json` run at a time; `bench:abort` kills it.
     pub bench: crate::bench::BenchRunner,
+    /// Last `TrayState` the renderer pushed; the native menu is rebuilt from it.
+    pub tray_state: Mutex<Option<Value>>,
     /// Lazily-opened FTS index over what was said in sessions (`conversations:search`).
     pub conversations: Mutex<Option<Arc<omp_session::conversation::ConversationIndex>>>,
     /// Scheduled tasks: store opened lazily on first use, plus the live-run registry.
@@ -581,6 +583,94 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     }
 }
 
+/// Menu labels in the three shipped languages; the tray state carries which one to use.
+fn tray_labels(language: Option<&str>) -> [&'static str; 4] {
+    match language {
+        Some("en") => ["New session", "Open project…", "Settings…", "Quit"],
+        Some("ru") => ["Новая сессия", "Открыть проект…", "Настройки…", "Выход"],
+        _ => ["新建会话", "打开项目…", "设置…", "退出"],
+    }
+}
+
+/// Build (or rebuild) the tray menu from the renderer's pushed state. `menu:` ids are the app's
+/// own `MenuAction` names, so a click is the same event the in-app menu sends.
+pub fn rebuild_tray(app: &AppHandle, state: Option<&serde_json::Value>) -> Result<(), String> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let language = state
+        .and_then(|state| state.get("language"))
+        .and_then(serde_json::Value::as_str);
+    let [new_session, open_project, settings, quit] = tray_labels(language);
+
+    let new_item = MenuItem::with_id(app, "new-session", new_session, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let project_item = MenuItem::with_id(app, "open-project", open_project, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let settings_item = MenuItem::with_id(app, "open-settings", settings, true, None::<&str>)
+        .map_err(|e| e.to_string())?;
+    let quit_item =
+        MenuItem::with_id(app, "quit", quit, true, None::<&str>).map_err(|e| e.to_string())?;
+    let separator = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
+
+    let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = vec![&new_item, &project_item, &settings_item];
+    // A live status line, when the renderer sends one, so the tray shows what the app is doing.
+    let status = state
+        .and_then(|state| state.get("status"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned);
+    let status_item = match status {
+        Some(text) => {
+            let item = MenuItem::with_id(app, "status", text, false, None::<&str>)
+                .map_err(|e| e.to_string())?;
+            Some(item)
+        }
+        None => None,
+    };
+    if let Some(item) = &status_item {
+        items.insert(0, item);
+    }
+    items.push(&separator);
+    items.push(&quit_item);
+
+    let menu = Menu::with_items(app, &items).map_err(|e| e.to_string())?;
+
+    if let Some(tray) = app.tray_by_id("romp") {
+        tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    let mut builder = TrayIconBuilder::with_id("romp")
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "quit" => {
+                let state = app.state::<AppState>();
+                state.bench.abort();
+                state.browser.close_all();
+                for tab in state.pool.tabs() {
+                    state.pool.close(&tab);
+                }
+                state.stats.terminate_now();
+                app.exit(0);
+            }
+            // Everything else is an app action the renderer already handles.
+            action => {
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+                let _ = app.emit(crate::events::MENU_ACTION, json!({ "action": action }));
+            }
+        });
+    if let Some(icon) = app.default_window_icon().cloned() {
+        builder = builder.icon(icon);
+    }
+    builder.build(app).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// `omp://new` and `omp://session/<id>` are the only links the renderer understands
 /// (`DeepLinkPayload`); anything else is dropped instead of handing the UI an unusable object.
 pub fn parse_deep_link(url: &str) -> Option<serde_json::Value> {
@@ -801,6 +891,7 @@ pub fn run() {
                 stats: omp_stats::StatsServer::new(stats_binary),
                 stats_client: Mutex::new(None),
                 bench: crate::bench::BenchRunner::new(),
+                tray_state: Mutex::new(None),
                 conversations: Mutex::new(None),
                 scheduler: Mutex::new(None),
                 scheduler_runs: crate::scheduler::SchedulerService::new(),
@@ -810,40 +901,9 @@ pub fn run() {
                 cwd: cwd.clone(),
             };
             app.manage(state);
-            // Tray: the window closes into the tray instead of quitting the agent processes.
-            {
-                use tauri::menu::{Menu, MenuItem};
-                use tauri::tray::TrayIconBuilder;
-                let show = MenuItem::with_id(app, "show", "显示 Romp", true, None::<&str>)?;
-                let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show, &quit])?;
-                let mut builder = TrayIconBuilder::with_id("romp")
-                    .menu(&menu)
-                    .show_menu_on_left_click(true)
-                    .on_menu_event(|app, event| match event.id.as_ref() {
-                        "show" => {
-                            if let Some(window) = app.get_window("main") {
-                                let _ = window.show();
-                                let _ = window.set_focus();
-                            }
-                        }
-                        "quit" => {
-                            let state = app.state::<AppState>();
-                            state.bench.abort();
-                            state.browser.close_all();
-                            for tab in state.pool.tabs() {
-                                state.pool.close(&tab);
-                            }
-                            state.stats.terminate_now();
-                            app.exit(0);
-                        }
-                        _ => {}
-                    });
-                if let Some(icon) = app.default_window_icon().cloned() {
-                    builder = builder.icon(icon);
-                }
-                builder.build(app)?;
-            }
+            // Tray. The renderer owns the real state (`tray:state-push`), so this builds the first
+            // menu and `rebuild_tray` refreshes it whenever that push arrives.
+            crate::rebuild_tray(app.handle(), None)?;
 
             // `omp://…` links: in dev the scheme is registered at runtime so a manual
             // `Start-Process omp://…` reaches the running instance.
