@@ -395,6 +395,101 @@ impl BrowserHost {
         (false, false)
     }
 
+    /// Still image of the active page, as a PNG data URL, for the panel to keep under a dialog.
+    ///
+    /// WebView2 has no synchronous screenshot API: `CapturePreview` writes into an `IStream` and
+    /// fires a completion handler, so the bytes come back over a channel. Runs on the caller's
+    /// thread (an IPC worker) while `with_webview` hops to the UI thread.
+    #[cfg(windows)]
+    pub fn capture(&self, tab: &str) -> Option<String> {
+        use base64::Engine as _;
+        use webview2_com::CapturePreviewCompletedHandler;
+        use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
+        use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
+        use windows::Win32::System::Com::{IStream, STREAM_SEEK_SET};
+
+        let page_id = self.active.lock().get(tab).copied()?;
+        let webview = self
+            .pages
+            .lock()
+            .get(tab)
+            .and_then(|list| list.iter().find(|page| page.id == page_id))
+            .map(|page| page.webview.clone())?;
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let started = webview
+            .with_webview(move |platform| unsafe {
+                let controller = platform.controller();
+                let core = match controller.CoreWebView2() {
+                    Ok(core) => core,
+                    Err(_) => {
+                        let _ = tx.send(None);
+                        return;
+                    }
+                };
+                use windows::Win32::Foundation::HGLOBAL;
+                let stream = match CreateStreamOnHGlobal(HGLOBAL(std::ptr::null_mut()), true.into()) {
+                    Ok(stream) => stream,
+                    Err(_) => {
+                        let _ = tx.send(None);
+                        return;
+                    }
+                };
+                let reader = stream.clone();
+                let done = tx.clone();
+                let handler = CapturePreviewCompletedHandler::create(Box::new(move |result| {
+                    let bytes = if result.is_ok() {
+                        let mut bytes = Vec::new();
+                        if reader.Seek(0, STREAM_SEEK_SET, None).is_ok() {
+                            let mut chunk = vec![0u8; 64 * 1024];
+                            loop {
+                                let mut read = 0u32;
+                                if reader
+                                    .Read(chunk.as_mut_ptr() as *mut _, chunk.len() as u32, Some(&mut read))
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                                if read == 0 {
+                                    break;
+                                }
+                                bytes.extend_from_slice(&chunk[..read as usize]);
+                            }
+                        }
+                        (!bytes.is_empty()).then_some(bytes)
+                    } else {
+                        None
+                    };
+                    let _ = done.send(bytes);
+                    Ok(())
+                }));
+                if core
+                    .CapturePreview(
+                        COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG,
+                        &stream,
+                        &handler,
+                    )
+                    .is_err()
+                {
+                    let _ = tx.send(None);
+                }
+            })
+            .is_ok();
+        if !started {
+            return None;
+        }
+        let bytes = rx.recv_timeout(std::time::Duration::from_secs(5)).ok()??;
+        Some(format!(
+            "data:image/png;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(bytes)
+        ))
+    }
+
+    #[cfg(not(windows))]
+    pub fn capture(&self, _tab: &str) -> Option<String> {
+        None
+    }
+
     /// Refresh the cached navigation flags for one page.
     fn refresh_history(&self, tab: &str, page_id: u64) {
         let webview = {

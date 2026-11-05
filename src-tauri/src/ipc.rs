@@ -724,9 +724,13 @@ pub async fn ipc_invoke(
                 .map_err(|e| e.to_string())?;
             Ok(Value::Null)
         }
-        // Tauri has no screenshot API for a child webview; the renderer falls back to the live
-        // page, which is what the capture is only used to preserve under a dialog anyway.
-        "browser:capture" => Ok(Value::Null),
+        "browser:capture" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();
+            Ok(match state.browser.capture(tab) {
+                Some(data_url) => Value::String(data_url),
+                None => Value::Null,
+            })
+        }
         // Keymap chords are handled by the app window; a child webview keeps its own keys.
         "browser:set-shortcuts" => Ok(Value::Null),
 
