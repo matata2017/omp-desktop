@@ -45,7 +45,7 @@
 | `src/renderer/hooks/use-session-switch.ts` | `canBrowseInPlace` 允许任何空闲、同 workspace/kind 的 tab 原地 `switch_session`（不再要求 blank/browsing） | Codex 式的常驻 agent 线程切换：点击侧栏不应每次新起 244MB sidecar | 同 workspace 点击不再新开 tab/进程；跨 workspace 仍新开；流式/草稿/审批期间不切换 |
 | `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
-| 内置浏览器 | `browser:capture` 恒返回 `null`、页内查找与 keymap 快捷键回传未实现、`canGoBack/canGoForward` 恒 false；agent relay 未接（`agentLinked` 恒 false） | 这三项都需要 `Webview::with_webview` 拿 WebView2 控制器（`CapturePreview`、`CanGoBack/CanGoForward`）或额外的 IPC 通道，均属**未接**而非 API 不存在 | 面板能显示/导航/关闭页面，但截图快照、历史按钮、agent 驱动都缺 |
+| 内置浏览器 | 页内查找与 keymap 快捷键回传未实现；agent relay 未接（`agentLinked` 恒 false） | 前者需要在子 webview 内注入查找逻辑并把 chord 回传，后者是 sidecar `browser_host_*` 的扩展协议 | `browser:capture`（CapturePreview→内存流→data URL）与 `canGoBack/canGoForward`（读控制器）都已实现并实测，面板可截图、历史按钮可用 |
 | `models.yml` 写入 | Rust 侧用 `serde_yaml` 全量重写，**用户手写的注释与键序不保留** | 上游用 `parseDocument`/`setIn` 做文档级合并；Rust 侧没有等价的注释保留 YAML 编辑器 | GUI 一旦保存 provider，文件里的注释会消失；键序仍稳定（映射插入序）。字段级未知键已保留（有单测） |
 | `editor:open-external` | 用 Rust 进程跑 `$VISUAL`/`$EDITOR`（Windows 回退 `notepad`），非零退出返回 `text:null` | 上游 `src/main/editor.ts` 同流程，但其 `resolveEditorCommand` 还会读登录 shell 的 rc 文件 | GUI 进程 env 里没有 `$EDITOR` 时一律走 notepad；登录 shell 里的编辑器设置不生效 |
 
@@ -274,7 +274,7 @@
 | Model compare：全模型矩阵（auth、上下文、$/1M、配额、角色、当前模型），排序过滤与行内 set_model | settings | should | reuse | todo |
 | 快捷键参考 / 改键：可搜索、逐行录制 chord、冲突阻断或警告 | settings | should | reuse | todo |
 | 首次运行引导与设置产品页：无可用 provider 时引导登录/自定义 YAML；Capabilities/Advanced 页 | settings | could | reuse | todo |
-| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷键 | should | reuse | wip：托盘与菜单由渲染层推送的 `TrayState` 驱动——`tray:state-push` 已接（存 state + `rebuild_tray` 用 `language` 本地化「新建会话 / 打开项目… / 设置… / 退出」，有 `status` 时插一条禁用状态项），点击发 `menu:action` 走渲染层既有处理器，退出走完整 teardown；首次启动即建托盘（默认窗口图标）。**未做**：配额环图标、状态聚合细节、quick config 子菜单、close-to-tray；`tray:state-push` 的实机推送未验证（本轮窗口反复被单实例关掉，未取到日志） |
+| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷键 | should | reuse | wip：托盘菜单由渲染层 `tray:state-push` 驱动（**实测已跑通**：`runtime.log` 累计 21 次 `tray state pushed language=Some("zh") status=Some("idle")`，说明渲染层在推、Rust 在收并重建菜单），标签按 language 本地化、有 status 时插禁用状态项、点击发 `menu:action`、退出走完整 teardown；首次启动即建托盘。**未做/未验**：配额环图标、状态聚合细节、quick config 子菜单、close-to-tray，以及菜单内容的人工目视确认 |
 | 诊断面：Debug 控制台（debug RPC）、应用日志（runtime log 追尾）、变更日志 | system | could | hybrid | todo |
 | 会话内工具面板：/tools 活动工具、/jobs 异步任务、/force 强制工具、复制目标选择器 | system | should | reuse | todo |
 | 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |
