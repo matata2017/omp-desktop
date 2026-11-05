@@ -26,7 +26,7 @@
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
 | 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
 | 8 | 终端与浏览器 | 0/4：终端面板视觉未确认；**browser webview host 未实现**（最大的剩余块） |
-| 9 | 打包 / 深链 / 托盘 / 性能 | 1/3：性能已实测写进 `docs/perf.md`；NSIS 未构建，深链/托盘未接 |
+| 9 | 打包 / 深链 / 托盘 / 性能 | **2/3**：性能实测写进 `docs/perf.md`；**NSIS x64 安装包已构建**（110.6 MiB，内含逐字节一致的 `omp.exe`）；深链/托盘未接 |
 | R | replica 侦察 | **完成** |
 
 ### 已验证的事实（不是推断）
@@ -242,7 +242,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
 | provider 登录 | `login` RPC 走通用转发，但 OAuth 需要浏览器回调，未做端到端 | 中（需人工点） |
 | 定时任务通知/insights | `scheduler:get-notices` 返回空、insights 是空壳；run 终态与报告已闭环 | 低 |
-| 打包 | `bundle.resources` 映射 `omp.exe`；NSIS 未构建，`Romp.exe` 命名/图标/资源路径都未在真实安装包上验 | 中 |
+| 打包 | NSIS 已构建并验证：`Romp_0.1.0_x64-setup.exe` 里 `omp.exe` 与 `resources/omp.exe` 逐字节相同，安装后 `resolve_sidecar` 的 `exe_dir/omp.exe` 分支可命中。未做：安装→启动冒烟、卸载残留、签名 | 低 |
 | 深链/托盘 | `omp://` 与托盘未接 | 低 |
 | 终端面板 UI | 帧路由已实测（`terminal_opened/output` 以 `{tabId,frame}` 到达），xterm 视觉未人工确认 | 低 |
 | vendor 契约门 | `argv_matches_capabilities` 已通过（5 条）；`stats_paths_match_vendor` / `rpc-types` 对账需要 fork 的 `packages/stats/src/server.ts` 与 `coding-agent/src/modes/rpc/rpc-types.ts`，本机没有 | 中 |
