@@ -33,7 +33,13 @@ if (-not $env:OMP_SIDECAR) {
 if (-not $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) {
   $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9222"
 }
-# Free port 1420 from a vite left behind by an earlier run. Only processes whose command line
+# Refuse to start twice *before* touching port 1420: with a live dev session the guard would
+# kill that session's vite, which tears the running app down and only then raises this error.
+$running = Get-Process romp-desktop -ErrorAction SilentlyContinue
+if ($running) {
+  throw "romp-desktop is already running (pid $($running.Id -join ',')). Stop it before tauri dev."
+}
+# Free port 1420 from a vite left behind by a *dead* run. Only processes whose command line
 # points at this checkout are touched; the user's own omp install is never a candidate.
 $stale = Get-NetTCPConnection -LocalPort 1420 -State Listen -ErrorAction SilentlyContinue |
   Select-Object -ExpandProperty OwningProcess -Unique
@@ -43,10 +49,6 @@ foreach ($ownerPid in $stale) {
     Write-Host "stopping stale vite on 1420 (pid $ownerPid)"
     Stop-Process -Id $ownerPid -Force -ErrorAction SilentlyContinue
   }
-}
-$running = Get-Process romp-desktop -ErrorAction SilentlyContinue
-if ($running) {
-  throw "romp-desktop is already running (pid $($running.Id -join ',')). Stop it before tauri dev."
 }
 $log = Join-Path $PSScriptRoot "..\.probe\dev.log"
 New-Item -ItemType Directory -Force (Split-Path $log) | Out-Null
