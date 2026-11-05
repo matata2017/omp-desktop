@@ -1,6 +1,7 @@
 //! Application shell: state, sidecar wiring, and the single `ipc_invoke` bridge command.
 
 pub mod bench;
+pub mod browser;
 pub mod builtin_providers;
 pub mod editor;
 pub mod host_tools;
@@ -80,6 +81,8 @@ pub struct AppState {
     /// Scheduled tasks: store opened lazily on first use, plus the live-run registry.
     pub scheduler: Mutex<Option<Arc<omp_scheduler::TaskStore>>>,
     pub scheduler_runs: crate::scheduler::SchedulerService,
+    /// The Browser panel's embedded pages, one set per tab.
+    pub browser: crate::browser::BrowserHost,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -727,6 +730,7 @@ pub fn run() {
                 conversations: Mutex::new(None),
                 scheduler: Mutex::new(None),
                 scheduler_runs: crate::scheduler::SchedulerService::new(),
+                browser: crate::browser::BrowserHost::new(),
                 next_tab: AtomicU64::new(tab_count + 1),
                 cwd: cwd.clone(),
             };
@@ -759,6 +763,7 @@ pub fn run() {
                 let app = window.app_handle();
                 let state = app.state::<AppState>();
                 state.bench.abort();
+                state.browser.close_all();
                 for tab in state.pool.tabs() {
                     state.pool.close(&tab);
                 }

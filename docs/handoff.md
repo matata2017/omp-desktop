@@ -25,7 +25,7 @@
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
 | 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
-| 8 | 终端与浏览器 | 0/4：终端面板视觉未确认；**browser webview host 未实现**（最大的剩余块） |
+| 8 | 终端与浏览器 | **2/4**：**内置浏览器 host 已跑通**（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送实测）；终端面板视觉仍未人工确认；agent relay 与截图未接 |
 | 9 | 打包 / 深链 / 托盘 / 性能 | **2/3**：性能实测写进 `docs/perf.md`；**NSIS x64 安装包已构建**（110.6 MiB，内含逐字节一致的 `omp.exe`）；深链/托盘未接 |
 | R | replica 侦察 | **完成** |
 

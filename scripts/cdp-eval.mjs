@@ -3,7 +3,11 @@
 // Usage: node scripts/cdp-eval.mjs "await window.omp.tabs.list()"
 const expression = process.argv[2] ?? "1 + 1";
 const targets = await (await fetch("http://127.0.0.1:9222/json")).json();
-const target = targets.find(item => item.type === "page");
+// A tab with the Browser panel open has a second page target; drive the app one.
+const target =
+  targets.find(item => item.type === "page" && item.url.includes("localhost:1420")) ??
+  targets.find(item => item.type === "page" && !item.url.startsWith("http")) ??
+  targets.find(item => item.type === "page");
 if (!target) {
   console.error("no page target");
   process.exit(1);

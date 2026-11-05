@@ -198,6 +198,7 @@ pub async fn ipc_invoke(
             state.tab_kinds.lock().remove(&tab);
             state.tab_sessions.lock().remove(&tab);
             state.tab_activity.lock().remove(&tab);
+            state.browser.close_tab(tab.as_str());
             state.ready_tabs.lock().remove(&tab);
             crate::persist_layout(&state);
             Ok(json!(existed))
@@ -651,6 +652,61 @@ pub async fn ipc_invoke(
             let opened = tauri_plugin_opener::open_path(path.as_path(), None::<&str>).is_ok();
             Ok(json!({ "path": path.to_string_lossy(), "opened": opened }))
         }
+
+        // ---- browser panel ---------------------------------------------------------------
+        "browser:get-state" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();
+            Ok(state.browser.state(tab, false))
+        }
+        "browser:open" => {
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "browser:open requires a tabId".to_owned())?
+                .to_owned();
+            let url = payload
+                .get("url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "browser:open requires a url".to_owned())?
+                .to_owned();
+            let window = app
+                .get_window("main")
+                .ok_or_else(|| "main window is gone".to_owned())?;
+            state.browser.open(&app, &window, &tab, &url, "user").map_err(|e| e.to_string())
+        }
+        "browser:action" => {
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "browser:action requires a tabId".to_owned())?
+                .to_owned();
+            let page_id = payload
+                .get("pageId")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| "browser:action requires a pageId".to_owned())?;
+            state
+                .browser
+                .action(Some(&app), &tab, page_id, &payload, false)
+                .map_err(|e| e.to_string())
+        }
+        "browser:set-viewport" => {
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "browser:set-viewport requires a tabId".to_owned())?
+                .to_owned();
+            let bounds = crate::browser::Bounds::from_value(payload.get("bounds"));
+            state
+                .browser
+                .set_viewport(&tab, bounds)
+                .map_err(|e| e.to_string())?;
+            Ok(Value::Null)
+        }
+        // Tauri has no screenshot API for a child webview; the renderer falls back to the live
+        // page, which is what the capture is only used to preserve under a dialog anyway.
+        "browser:capture" => Ok(Value::Null),
+        // Keymap chords are handled by the app window; a child webview keeps its own keys.
+        "browser:set-shortcuts" => Ok(Value::Null),
 
         // ---- scheduled tasks ------------------------------------------------------------
         "scheduler:get-snapshot" => {
