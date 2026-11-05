@@ -250,7 +250,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |
 | `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除（它 import main 进程的 `toAbsolutePath`） | 低 |
 | MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |
-| dev.ps1 端口占用 | **已修**：脚本启动前按 `CommandLine` 含 `rust-omp` 且 `vite` 过滤并杀掉占用 1420 的残留进程（实测输出 `stopping stale vite on 1420 (pid 3672)`；无残留时直接起，不再报 `Port 1420 is already in use`） | 已闭环 |
+| dev.ps1 端口占用 | **已修**：脚本启动前按 `CommandLine` 含 `rust-omp` 且 `vite` 过滤并杀掉占用 1420 的残留进程（实测输出 `stopping stale vite on 1420 (pid 3672)`；无残留时直接起，不再报 `Port 1420 is already in use`。**先查 `romp-desktop` 是否在跑再清端口**——顺序反了会杀掉正在运行的 dev 会话（实测第二次调用：app pid 6684 / vite pid 11620 均保持不变，只抛 `already running`）） | 已闭环 |
 
 ---
 
