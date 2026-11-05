@@ -45,7 +45,7 @@
 | `src/renderer/hooks/use-session-switch.ts` | `canBrowseInPlace` 允许任何空闲、同 workspace/kind 的 tab 原地 `switch_session`（不再要求 blank/browsing） | Codex 式的常驻 agent 线程切换：点击侧栏不应每次新起 244MB sidecar | 同 workspace 点击不再新开 tab/进程；跨 workspace 仍新开；流式/草稿/审批期间不切换 |
 | `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
-| 内置浏览器 | `browser:capture` 恒返回 `null`、页面标题不回填、页内查找与快捷键回传未实现；agent relay 未接（`agentLinked` 恒 false） | Tauri 没有子 webview 的截图/标题事件 API，agent relay 属 sidecar 侧 `browser_host_*` | 面板能看到并操作页面，但截图快照、标题文案、agent 驱动都缺 |
+| 内置浏览器 | `browser:capture` 恒返回 `null`、页内查找与 keymap 快捷键回传未实现、`canGoBack/canGoForward` 恒 false；agent relay 未接（`agentLinked` 恒 false） | 这三项都需要 `Webview::with_webview` 拿 WebView2 控制器（`CapturePreview`、`CanGoBack/CanGoForward`）或额外的 IPC 通道，均属**未接**而非 API 不存在 | 面板能显示/导航/关闭页面，但截图快照、历史按钮、agent 驱动都缺 |
 | `models.yml` 写入 | Rust 侧用 `serde_yaml` 全量重写，**用户手写的注释与键序不保留** | 上游用 `parseDocument`/`setIn` 做文档级合并；Rust 侧没有等价的注释保留 YAML 编辑器 | GUI 一旦保存 provider，文件里的注释会消失；键序仍稳定（映射插入序）。字段级未知键已保留（有单测） |
 | `editor:open-external` | 用 Rust 进程跑 `$VISUAL`/`$EDITOR`（Windows 回退 `notepad`），非零退出返回 `text:null` | 上游 `src/main/editor.ts` 同流程，但其 `resolveEditorCommand` 还会读登录 shell 的 rc 文件 | GUI 进程 env 里没有 `$EDITOR` 时一律走 notepad；登录 shell 里的编辑器设置不生效 |
 
@@ -72,7 +72,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| Browser 面板：地址栏、多页 chip、前进/后退/刷新/停止、DevTools 入口 | should | reuse | wip（宿主已验证，面板特性未齐）：`src-tauri/src/browser.rs` 用 Tauri `Window::add_child` 建**独立子 HWND 的 WebView2**，实现 `browser:open`/`get-state`/`action`（navigate/back/forward/reload/stop/devtools/external/close/select）/`set-viewport`，并在每次变更后 `emit("browser:state")`。实测：`setViewport(420,140,900,620)` + `open https://example.com` → 子窗口几何 `427,170 900x620`、`on_page_load` 把 `loading` 置 false、`navigate` 到 example.org 后 url 跟随、`close` 后 `pages=0/activePageId=null`、`events.onBrowserState` 收到 1 条含 `pages/activePageId` 的推送、进程存活（截图 `.probe/browser4.png`）。**未做**：`canGoBack/canGoForward` 恒 false（WebView2 无返回值 API）、页面标题未回填、`browser:capture` 恒 null、页内查找与 keymap 快捷键回传 |
+| Browser 面板：地址栏、多页 chip、前进/后退/刷新/停止、DevTools 入口 | should | reuse | wip（宿主已验证，面板特性未齐）：`src-tauri/src/browser.rs` 用 Tauri `Window::add_child` 建独立子 HWND 的 WebView2；`browser:open` 返回 **IpcBrowserState**（不是单个 page）、`get-state`/`action`/`set-viewport` 齐全，每次变更 emit `browser:state`，`on_page_load`/`on_navigation`/`on_document_title_changed` 三个回调更新 url/loading/title，open/select 只显示活动页。地址栏裸域名会被补成 `https://`（`normalize_url`，单测覆盖 `example.com`/`localhost:3000`）。实测：`open(example.com)` → 返回 `{pages:[…]}`、url `https://example.com/`、title `Example Domain`（len 14）、loading false、`close` 后 `pages=0`、进程存活、页面上屏。未接：`canGoBack/canGoForward`（可经 `Webview::with_webview` 读 WebView2 的 `CanGoBack/CanGoForward` + HistoryChanged，TODO）、`browser:capture`（WebView2 `CapturePreview`，TODO）、页内查找、keymap 快捷键回传 |
 | Agent 驱动页面：本地 WebSocket relay + 每页 CDP attach/send/createTab + tabSnapshot | should | rust | wip：页面是真实 WebView2，`/json/list` 里能看到 `https://example.com/` 这个 target（title `Example Domain`），但 sidecar 的 `browser_host_start/stop` relay 未接，`agentLinked` 恒 false |
 | 持久登录与页面休眠：`persist:omp-browser` 分区、离屏页面停帧、agent 活跃期唤醒 | should | rust | todo：子 webview 未设 user-data 分区，`set_viewport(null)` 只 `hide()`，没有停帧/唤醒 |
 | 回复内链接路由：普通点击进面板浏览器，⌘/Ctrl-click 与 chat tab 走系统浏览器 | should | reuse | todo |

@@ -55,6 +55,23 @@ pub struct Bounds {
     pub height: f64,
 }
 
+/// The renderer sends the address-bar text verbatim, so a bare host must still parse: anything
+/// without a scheme is treated as `https://`.
+pub fn normalize_url(input: &str) -> String {
+    let text = input.trim();
+    if text.is_empty() {
+        return String::new();
+    }
+    let has_scheme = text
+        .split_once("://")
+        .is_some_and(|(scheme, _)| !scheme.is_empty() && scheme.chars().all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.'));
+    if has_scheme || text.starts_with("about:") || text.starts_with("data:") || text.starts_with("file:") {
+        text.to_owned()
+    } else {
+        format!("https://{text}")
+    }
+}
+
 impl Bounds {
     /// Parse `{x,y,width,height}`; a missing or non-positive box means "hidden".
     pub fn from_value(value: Option<&Value>) -> Option<Self> {
@@ -129,7 +146,8 @@ impl BrowserHost {
         url: &str,
         opened_by: &'static str,
     ) -> Result<Value, String> {
-        let parsed = tauri::Url::parse(url).map_err(|e| format!("invalid url: {e}"))?;
+        let target = normalize_url(url);
+        let parsed = tauri::Url::parse(&target).map_err(|e| format!("invalid url: {e}"))?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
         let bounds = self.viewport.lock().get(tab).copied().unwrap_or(Bounds {
             x: 0.0,
@@ -144,16 +162,44 @@ impl BrowserHost {
         let webview = window
             .add_child(
                 WebviewBuilder::new(label_for(tab, id), WebviewUrl::App("about:blank".into()))
-                    .on_page_load(move |webview, payload| {
-                        let url = payload.url().to_string();
-                        let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
-                        if let Some(list) = loads.lock().get_mut(&tab_for_load)
-                            && let Some(page) = list.iter_mut().find(|page| page.id == id)
-                        {
-                            page.url = url;
-                            page.loading = loading;
+                    .on_page_load({
+                        let loads = loads.clone();
+                        let tab_for_load = tab_for_load.clone();
+                        move |_webview, payload| {
+                            let url = payload.url().to_string();
+                            let loading = matches!(payload.event(), tauri::webview::PageLoadEvent::Started);
+                            if let Some(list) = loads.lock().get_mut(&tab_for_load)
+                                && let Some(page) = list.iter_mut().find(|page| page.id == id)
+                            {
+                                page.url = url;
+                                page.loading = loading;
+                            }
+                            // No `show()` here: the panel owns visibility through set_viewport, and
+                            // re-showing on a load would put the page back over a dialog.
                         }
-                        let _ = webview.show();
+                    })
+                    .on_navigation({
+                        let loads = loads.clone();
+                        let tab_for_nav = tab_for_load.clone();
+                        move |url| {
+                            if let Some(list) = loads.lock().get_mut(&tab_for_nav)
+                                && let Some(page) = list.iter_mut().find(|page| page.id == id)
+                            {
+                                page.url = url.to_string();
+                            }
+                            true
+                        }
+                    })
+                    .on_document_title_changed({
+                        let loads = loads.clone();
+                        let tab_for_title = tab_for_load.clone();
+                        move |_webview, title| {
+                            if let Some(list) = loads.lock().get_mut(&tab_for_title)
+                                && let Some(page) = list.iter_mut().find(|page| page.id == id)
+                            {
+                                page.title = title;
+                            }
+                        }
                     }),
                 LogicalPosition::new(bounds.x, bounds.y),
                 LogicalSize::new(bounds.width, bounds.height),
@@ -177,13 +223,13 @@ impl BrowserHost {
             error: None,
             webview,
         };
-        let value = page.to_value();
         Self::ensure_page(&mut self.pages.lock(), tab).push(page);
         self.active.lock().insert(tab.to_owned(), id);
-        self.navigate_page(tab, id, parsed.to_string())?;
+        self.navigate_page(tab, id, target)?;
         self.show_only(tab, id);
         self.emit(app, tab);
-        Ok(value)
+        // The renderer applies this result as a whole `IpcBrowserState`, not a page.
+        Ok(self.state(tab, false))
     }
 
     /// Navigate an existing page by id.
@@ -234,8 +280,8 @@ impl BrowserHost {
 
         match kind {
             "navigate" => {
-                let url = action.get("url").and_then(Value::as_str).unwrap_or_default();
-                let parsed = tauri::Url::parse(url).map_err(|e| format!("invalid url: {e}"))?;
+                let url = normalize_url(action.get("url").and_then(Value::as_str).unwrap_or_default());
+                let parsed = tauri::Url::parse(&url).map_err(|e| format!("invalid url: {e}"))?;
                 page.webview
                     .navigate(parsed.clone())
                     .map_err(|e| e.to_string())?;
@@ -293,6 +339,9 @@ impl BrowserHost {
 
         let snapshot = page.to_value();
         drop(pages);
+        if let Some(app) = app {
+            self.emit(app, tab);
+        }
         let mut state = self.state(tab, agent_linked);
         state["pages"] = json!(
             state["pages"]
@@ -393,6 +442,16 @@ impl BrowserHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bare_hosts_get_https() {
+        assert_eq!(normalize_url("example.com"), "https://example.com");
+        assert_eq!(normalize_url(" example.com/path "), "https://example.com/path");
+        assert_eq!(normalize_url("localhost:3000"), "https://localhost:3000");
+        assert_eq!(normalize_url("http://a.test"), "http://a.test");
+        assert_eq!(normalize_url("about:blank"), "about:blank");
+        assert_eq!(normalize_url(""), "");
+    }
 
     #[test]
     fn bounds_need_a_positive_box() {

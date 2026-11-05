@@ -236,7 +236,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 | 项 | 说明 | 风险 |
 |---|---|---|
-| **浏览器面板** | `browser:state`/`browser:key` 是 GUI 侧状态；sidecar 只有 `browser_host_start/stop` 的 relay websocket。要实现内置 webview host（离屏 + CDP relay），是 Phase 8 最大的一块，不是接线活 | **高**（唯一整块缺失的用户面） |
+| **浏览器面板** | 宿主已跑通（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送/title 均实测）。仍缺：`browser:capture`、`canGoBack/canGoForward`、页内查找、keymap 回传，以及 sidecar 的 `browser_host_start/stop` relay（`agentLinked` 恒 false） | 中 |
 | phantom tab | 启动后偶发一个无人点击的 tab。来源日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session/tabs，`tab:spawn` 打完整 launch 形状），但本轮 8 次干净启动只出现 `tab-1`，**未复现** | 中（待复发） |
 | 空闲 sidecar 租约矩阵 | 只按上限 LRU 回收；待审批/终端/浏览器/MCP/队列这些"不能回收"的租约未细分 | 中 |
 | 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
@@ -269,9 +269,9 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 
 按价值排（`docs/parity.md` 是逐条账本，完成一条就改该行状态并附证据）：
 
-1. **浏览器 webview host**（Phase 8，最大一块）。契约：`browser:state` / `browser:key` 由 GUI 发出，
-   sidecar 只提供 `browser_host_start/stop` 的 relay websocket。要 Tauri 子 webview + 离屏休眠 +
-   CDP relay，且 agent 的 `browser_*` 工具要能驱动它、截图要能回传。这是唯一整块缺失的用户面。
+1. **浏览器面板剩项**（Phase 8）：宿主已通，缺 ① sidecar `browser_host_start/stop` relay（agent 驱动，`agentLinked`）；
+   ② `browser:capture` 与 `canGoBack/canGoForward`（都走 `Webview::with_webview` 取 WebView2 控制器：
+   `CapturePreview`、`CanGoBack/CanGoForward` + HistoryChanged）；③ 页内查找与 keymap 快捷键回传。
 2. **phantom tab**（Phase 3）：日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session，`spawn sidecar`
    打完整 launch 形状），等复发时对照即可定案，不需要再加 instrument。
 3. **sidecar 租约矩阵**（Phase 3）：待审批 / 终端 / 浏览器 / MCP / 队列这些"不能回收"的状态要挡住 LRU。
