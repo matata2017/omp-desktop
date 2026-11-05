@@ -26,7 +26,7 @@
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
 | 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
 | 8 | 终端与浏览器 | **2/4**：**内置浏览器 host 已跑通**（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送实测）；终端面板视觉仍未人工确认；agent relay 与截图未接 |
-| 9 | 打包 / 深链 / 托盘 / 性能 | **2/3**：性能实测写进 `docs/perf.md`；**NSIS x64 安装包已构建**（110.6 MiB，内含逐字节一致的 `omp.exe`）；深链/托盘未接 |
+| 9 | 打包 / 深链 / 托盘 / 性能 | **3/3**：性能实测写进 `docs/perf.md`；NSIS x64 安装包已构建并校验；**`omp://` 深链与单实例转发、托盘（显示/退出）已接**（`omp://new` 实测新建会话） |
 | R | replica 侦察 | **完成** |
 
 ### 已验证的事实（不是推断）
@@ -295,6 +295,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - LRU 租约：活动/流式/待审批/浏览器页面挡住回收；respond（读 `response.id`）、`cancel`、关 tab 都会释放
 - 终端面板：`.xterm` 挂载、真实提示符、`terminal_input` 的命令输出回显（PTY→frame→xterm 全链路）
 - 会话导出：`export_html` 落盘 128 KB 完整 HTML；`get_branch_messages` 通
+- `omp://` 深链：`omp://new` 经单实例转发后在跑的实例新建会话（无错误 toast）；`omp://session/<id>` 解析同一套单测
 - NSIS 安装包：`Romp_0.1.0_x64-setup.exe`（110.6 MiB），包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同
 - 定时任务 insights / notices / review（12 字段 + `TaskNotice[]`，`reviewAcceptRate` 随写操作变化）
 - dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`；有活会话时只抛 `already running`，不动活会话

@@ -196,7 +196,7 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | 原生应用菜单：File/Edit/View/Window/Help，动作经 `MENU_ACTION` 回渲染层；renderer 拥有的 chord 不设 accelerator | should | rust | todo |
-| `omp://` 深链 + 单实例锁：`new-session` / `switch-session` | should | plugin | todo |
+| `omp://` 深链 + 单实例锁：`new-session` / `switch-session` | should | plugin | done：`tauri-plugin-deep-link` 注册 `omp` scheme（启动日志 `deep link scheme omp registered`），`single-instance` 回调把 argv 里的 `omp://` 转给在跑的实例；`parse_deep_link` 只产出渲染层认得的 `DeepLinkPayload`（`omp://new` → `{action:"new-session"}`、`omp://session/<id>` → `{action:"switch-session",sessionId}`，其余丢弃并 warn），5 条单测。实测 `Start-Process omp://new` → 仍在跑的实例收到并**新建会话**（sessionFile 由 `15-59-59…` 变为 `16-00-34…`，无错误 toast） |
 | 窗口几何持久化：多显示器可达性修正、多窗口级联、最大化状态 | should | rust | todo |
 | 退出守卫：有运行中会话/定时任务时确认；`app:quit` 是唯一退出路径 | should | rust | todo |
 | 系统集成：桌面通知、打开/保存对话框、剪贴板读取、openExternal、录制文件落盘 | must | plugin | wip（4/5 已验证）：`system:notify` / `system:clipboard-read` / `system:open-external` / `recorder:save` 已接并实测（CDP：clipboardRead 260 字符、notify ok、recorderSave 写入 `[1,2,3,250]` 校验通过，字节数组与 base64 两种载荷都有单测）；`system:save-dialog` / `system:open-dialog` 已接（blocking 变体跑在 spawn_blocking，取消返回 null），但需要人工点一次原生选择器才能确认 |
@@ -274,7 +274,7 @@
 | Model compare：全模型矩阵（auth、上下文、$/1M、配额、角色、当前模型），排序过滤与行内 set_model | settings | should | reuse | todo |
 | 快捷键参考 / 改键：可搜索、逐行录制 chord、冲突阻断或警告 | settings | should | reuse | todo |
 | 首次运行引导与设置产品页：无可用 provider 时引导登录/自定义 YAML；Capabilities/Advanced 页 | settings | could | reuse | todo |
-| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷动作与 show/hide + quit | system | should | rust | todo |
+| 系统托盘：配额环图标、聚合运行状态、quick config（fast/thinking/approval/language）、快捷键 | should | reuse | wip：托盘已建（`TrayIconBuilder` + 菜单「显示 Romp / 退出」，退出走完整 teardown），应用启动不再报错；配额环、运行状态聚合、quick config 子菜单与快捷键未做；关窗仍是退出（未做 close-to-tray） |
 | 诊断面：Debug 控制台（debug RPC）、应用日志（runtime log 追尾）、变更日志 | system | could | hybrid | todo |
 | 会话内工具面板：/tools 活动工具、/jobs 异步任务、/force 强制工具、复制目标选择器 | system | should | reuse | todo |
 | 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |

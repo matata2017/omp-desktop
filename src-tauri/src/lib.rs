@@ -581,6 +581,20 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     }
 }
 
+/// `omp://new` and `omp://session/<id>` are the only links the renderer understands
+/// (`DeepLinkPayload`); anything else is dropped instead of handing the UI an unusable object.
+pub fn parse_deep_link(url: &str) -> Option<serde_json::Value> {
+    let rest = url.strip_prefix("omp://")?;
+    let rest = rest.trim_end_matches('/');
+    match rest {
+        "new" => Some(json!({ "action": "new-session" })),
+        _ => {
+            let id = rest.strip_prefix("session/")?.trim();
+            (!id.is_empty()).then(|| json!({ "action": "switch-session", "sessionId": id }))
+        }
+    }
+}
+
 /// UI methods whose request waits for the user's answer (mirrors `BLOCKING_UI_METHODS`).
 const BLOCKING_UI_METHODS: [&str; 7] = [
     "select",
@@ -674,9 +688,22 @@ pub fn run() {
     tracing::info!("romp run() start");
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            // A second launch (including an `omp://…` link) lands here: focus the window and
+            // forward every URL the launcher handed us.
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
                 let _ = window.set_focus();
+            }
+            for arg in argv.iter().filter(|arg| arg.starts_with("omp://")) {
+                match parse_deep_link(arg) {
+                    Some(payload) => {
+                        tracing::info!(url = %arg, "deep link via second instance");
+                        let _ = app.emit(crate::events::DEEP_LINK, payload);
+                    }
+                    None => tracing::warn!(url = %arg, "deep link ignored: unknown target"),
+                }
             }
         }))
         .plugin(tauri_plugin_window_state::Builder::default().build())
@@ -783,6 +810,68 @@ pub fn run() {
                 cwd: cwd.clone(),
             };
             app.manage(state);
+            // Tray: the window closes into the tray instead of quitting the agent processes.
+            {
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::TrayIconBuilder;
+                let show = MenuItem::with_id(app, "show", "显示 Romp", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show, &quit])?;
+                let mut builder = TrayIconBuilder::with_id("romp")
+                    .menu(&menu)
+                    .show_menu_on_left_click(true)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => {
+                            if let Some(window) = app.get_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "quit" => {
+                            let state = app.state::<AppState>();
+                            state.bench.abort();
+                            state.browser.close_all();
+                            for tab in state.pool.tabs() {
+                                state.pool.close(&tab);
+                            }
+                            state.stats.terminate_now();
+                            app.exit(0);
+                        }
+                        _ => {}
+                    });
+                if let Some(icon) = app.default_window_icon().cloned() {
+                    builder = builder.icon(icon);
+                }
+                builder.build(app)?;
+            }
+
+            // `omp://…` links: in dev the scheme is registered at runtime so a manual
+            // `Start-Process omp://…` reaches the running instance.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    for url in event.urls() {
+                        let Some(payload) = parse_deep_link(url.as_str()) else {
+                            tracing::warn!(%url, "deep link ignored: unknown target");
+                            continue;
+                        };
+                        tracing::info!(%url, "deep link");
+                        if let Some(window) = handle.get_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        let _ = handle.emit(crate::events::DEEP_LINK, payload);
+                    }
+                });
+                #[cfg(any(windows, target_os = "linux"))]
+                if let Err(err) = app.deep_link().register("omp") {
+                    tracing::warn!("deep link scheme not registered: {err}");
+                } else {
+                    tracing::info!("deep link scheme omp registered");
+                }
+            }
+
             // The dashboard is spawned on app start and killed on quit (blueprint:
             // stats-server.ts), so opening the stats panel never races a cold start.
             {
@@ -827,6 +916,20 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deep_links_parse_into_the_payload_the_renderer_handles() {
+        assert_eq!(parse_deep_link("omp://new"), Some(json!({ "action": "new-session" })));
+        assert_eq!(parse_deep_link("omp://new/"), Some(json!({ "action": "new-session" })));
+        assert_eq!(
+            parse_deep_link("omp://session/abc-123"),
+            Some(json!({ "action": "switch-session", "sessionId": "abc-123" }))
+        );
+        // Unknown targets and malformed links are dropped, never forwarded as raw strings.
+        assert_eq!(parse_deep_link("omp://hello/world"), None);
+        assert_eq!(parse_deep_link("omp://session/"), None);
+        assert_eq!(parse_deep_link("https://example.com"), None);
+    }
 
     #[test]
     fn blocking_methods_match_the_renderer_list() {
