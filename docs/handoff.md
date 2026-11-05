@@ -17,7 +17,7 @@
 | Phase | 内容 | 状态 |
 |---|---|---|
 | 0 | 工具链与镜像 | **完成**：Rust 1.99.1 + MSVC 14.44.35207 + Win11 SDK 26100 + bun 依赖；`scripts/dev.ps1` 可起窗 |
-| 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
+| 0.5 | LSP + 调试器 | **适配器已验证**：codelldb 与 debugpy 的 DAP `initialize` 都返回 `success:true`（codelldb: configurationDone/函数断点/条件断点；debugpy: configurationDone/setVariable）；断点续跑的完整会话未做 |
 | 1 | Rust workspace + RPC 传输 + sidecar | **完成**（6 条协议探针全 success，证明是 fork 版） |
 | 2 | Tauri 外壳 + `window.omp` shim | **完成**：起窗、ready、会话列表、完整 prompt→流式→工具卡→agent_end；终端帧路由实测 |
 | 3 | 会话 / 多标签 | **3/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、布局持久化与重启恢复、**LRU 回收的租约判定**（活动/流式/待审批/浏览器页面 均挡住回收）已完成；剩 phantom tab、会话归档/树/branch-fork |
@@ -246,7 +246,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | 深链/托盘 | **已接**：`omp://new` 经单实例转发后新建会话（实测）；托盘有 显示/退出 两项、退出走完整 teardown。未做：配额环、运行状态聚合、quick config 子菜单、`tray:state-push` 动态菜单、托盘文案本地化、close-to-tray | 中 |
 | 终端面板 UI | **已验证**：点开 Inspector 的「终端」页签 → `.xterm` 挂载、`.xterm-rows` 出现 `666@DESKTOP-4KISOR6 MINGW64 D:\rust-omp (master)$`，`terminal_input "echo romp-tty-ok"` 的输出回显；每 tab 多 shell 与主题联动未验 | 低 |
 | vendor 契约门 | `argv_matches_capabilities` 已通过（5 条）；`stats_paths_match_vendor` / `rpc-types` 对账需要 fork 的 `packages/stats/src/server.ts` 与 `coding-agent/src/modes/rpc/rpc-types.ts`，本机没有 | 中 |
-| 调试器 | codelldb 已解到 `C:/Users/666/.omp/tools/codelldb/`，`.omp/dap.json` 已写，断点未跑 | 低 |
+| 调试器 | 两个适配器都能完成 DAP 握手（codelldb 4.1 MB、debugpy 1.8.22 @ py3.14.7），`.omp/dap.json` 两个条目可用；**未跑过带断点的完整 launch 会话** | 低 |
 | 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |
 | `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除（它 import main 进程的 `toAbsolutePath`） | 低 |
 | MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |

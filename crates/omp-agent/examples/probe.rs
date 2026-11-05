@@ -76,6 +76,7 @@ async fn main() -> Result<()> {
         "terminal_list",
         "get_jobs",
         "get_context_report",
+        "browser_host_start",
     ];
     let mut failures = 0;
     for name in commands {
@@ -87,7 +88,11 @@ async fn main() -> Result<()> {
                 if !ok {
                     failures += 1;
                 }
-                println!("{name}: success={ok}");
+                if name == "browser_host_start" {
+                    println!("{name}: success={ok} data={}", response.get("data").cloned().unwrap_or_default());
+                } else {
+                    println!("{name}: success={ok}");
+                }
             }
             Err(err) => {
                 failures += 1;
