@@ -20,7 +20,7 @@
 | 0.5 | LSP + 调试器 | 配置完成，调试会话未验证 |
 | 1 | Rust workspace + RPC 传输 + sidecar | **完成**（6 条协议探针全 success，证明是 fork 版） |
 | 2 | Tauri 外壳 + `window.omp` shim | **完成**：起窗、ready、会话列表、完整 prompt→流式→工具卡→agent_end；终端帧路由实测 |
-| 3 | 会话 / 多标签 | **2/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、LRU 回收、**布局持久化 + 重启恢复**已完成；剩 phantom tab 定位、租约矩阵、归档/树/branch-fork |
+| 3 | 会话 / 多标签 | **3/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、布局持久化与重启恢复、**LRU 回收的租约判定**（活动/流式/待审批/浏览器页面 均挡住回收）已完成；剩 phantom tab、会话归档/树/branch-fork |
 | 4 | 对话面与系统通道 | **4/5**：模型指示器、system 对话框/剪贴板/通知、`editor:open-external`、**会话搜索（FTS5）**已完成；剩会话树/分支/导出 |
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
@@ -238,7 +238,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 |---|---|---|
 | **浏览器面板** | 宿主已跑通（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送/title 均实测）。仍缺：`browser:capture`、`canGoBack/canGoForward`、页内查找、keymap 回传，以及 sidecar 的 `browser_host_start/stop` relay（`agentLinked` 恒 false） | 中 |
 | phantom tab | 启动后偶发一个无人点击的 tab。来源日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session/tabs，`tab:spawn` 打完整 launch 形状），但本轮 8 次干净启动只出现 `tab-1`，**未复现** | 中（待复发） |
-| 空闲 sidecar 租约矩阵 | 只按上限 LRU 回收；待审批/终端/浏览器/MCP/队列这些"不能回收"的租约未细分 | 中 |
+| 空闲 sidecar 租约矩阵 | **部分**：`is_evictable` 已覆盖流式、阻塞 UI 提示（7 个方法，respond/cancel/关 tab 都会释放）与浏览器页面；终端 / MCP / 队列三类在 Rust 侧没有状态源，未建模 | 低 |
 | 会话归档/树 | 重命名/删除/搜索/原地切换已验；归档、批量、运行中跳过、branch/fork、导出未接 | 中 |
 | provider 登录 | `login` RPC 走通用转发，但 OAuth 需要浏览器回调，未做端到端 | 中（需人工点） |
 | 定时任务通知/insights | **已闭环**：`insights.rs` 派生 12 字段与 `TaskNotice[]`，`scheduler:review` 写回后 `reviewAcceptRate` 由 `null`→`1`（CDP 实测）；铃铛 UI 未逐项点 | 低 |
@@ -274,13 +274,12 @@ cp .resources/app/resources/omp.exe resources/omp.exe
    `CapturePreview`、`CanGoBack/CanGoForward` + HistoryChanged）；③ 页内查找与 keymap 快捷键回传。
 2. **phantom tab**（Phase 3）：日志已就位（`ensure_tab_started` 打 origin/cwd/kind/session，`spawn sidecar`
    打完整 launch 形状），等复发时对照即可定案，不需要再加 instrument。
-3. **sidecar 租约矩阵**（Phase 3）：待审批 / 终端 / 浏览器 / MCP / 队列这些"不能回收"的状态要挡住 LRU。
-4. **会话归档 / 树 / branch-fork / 导出**（Phase 3+4）。
-5. **provider 登录/登出**（Phase 5）：OAuth 需要浏览器回调，要先人工走一遍。
-6. **深链（`omp://`）与托盘**（Phase 9）。
-7. **契约门**（Gates）：`vendor/` 放 fork 的 `rpc-types.ts` 与 `packages/stats/src/server.ts`，
+3. **会话归档 / 树 / branch-fork / 导出**（Phase 3+4）。
+4. **provider 登录/登出**（Phase 5）：OAuth 需要浏览器回调，要先人工走一遍。
+5. **深链（`omp://`）与托盘**（Phase 9）。
+6. **契约门**（Gates）：`vendor/` 放 fork 的 `rpc-types.ts` 与 `packages/stats/src/server.ts`，
    跑 `stats_paths_match_vendor`。`argv_matches_capabilities` 已通过。
-8. **安装后冒烟**：跑一次 NSIS 安装包，确认安装目录下 `omp.exe` 被 `resolve_sidecar` 命中、能起会话，
+7. **安装后冒烟**：跑一次 NSIS 安装包，确认安装目录下 `omp.exe` 被 `resolve_sidecar` 命中、能起会话，
    并检查卸载残留与签名（Phase 9 未验项）。
 
 ### 本轮已闭环、无需再查的项
@@ -293,6 +292,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - 统计服务自愈（杀子进程后 329 ms 换端口）、同窗口数字与 `stats.db` 三项完全一致
 - 会话搜索 snippet 的 U+0001/U+0002 标记确实穿过 IPC 到达渲染层
 - 退出无 panic、0 孤儿
+- LRU 租约：活动/流式/待审批/浏览器页面挡住回收；respond（读 `response.id`）、`cancel`、关 tab 都会释放
 - NSIS 安装包：`Romp_0.1.0_x64-setup.exe`（110.6 MiB），包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同
 - 定时任务 insights / notices / review（12 字段 + `TaskNotice[]`，`reviewAcceptRate` 随写操作变化）
 - dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`；有活会话时只抛 `already running`，不动活会话

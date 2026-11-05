@@ -212,7 +212,7 @@
 | Tab 条：拖拽排序、状态 chip、运行中关闭内联确认、右键菜单、⌘1–9 / ⌃Tab | should | reuse | wip（renderer 原样；`setOrder` 仅回 true，未持久化） |
 | 双栏拆分：左右/上下、拖拽 ratio、键盘调整、拖 tab 到边缘成对 | should | reuse | wip（`setView` 已接 pool；groups/ratio 持久化未做） |
 | Tab 布局持久化与延迟启动恢复：tabs + activeIndex + groups | should | rust | done：`src-tauri/src/tab_layout.rs` 落 `<app_data>/tab-layout.json`（原子写；加载丢弃 workspace 已不存在或 session 已删的 tab，activeIndex 越界归零）；`tab:spawn/close/set-active/set-view/set-order` 后持久化；启动按布局注册全部 tab、只启 active 的。实测开 2 个 tab 重启后仍 2 个、activeIndex 一致；`tab:spawn` 的持久化已挪到 active 切换之后（否则存的是旧 active），`pool.tabs()` 改为按数字后缀排序（此前是 HashMap 随机序，`tab:get-all` 吐给渲染层的顺序不稳）。注意 sidecar 退出会删除无消息的空会话，这类 tab 恢复成同 workspace 的新会话；groups 分屏比例未存 |
-| 空闲 sidecar 回收的租约矩阵：待审批/终端/浏览器/MCP/队列期间不得回收 | should | rust | done（租约判定）：`src-tauri/src/ipc.rs::is_evictable(EvictionFacts)` 把规则抽成纯函数（非活动、有 client、有落盘 session、未流式、无阻塞 UI 请求、浏览器页面数为 0），6 条断言覆盖每种租约；阻塞请求按 `BLOCKING_UI_METHODS` 的 7 个方法（select/confirm/askDialog/ask/input/editor/open_url）逐请求登记，`extension-ui:respond`（读 `response.id`）与 `cancel` 帧的 `targetId` 都会释放，tab 关闭时整条丢弃 —— 不会泄漏成永久不可回收。终端/MCP/队列三类租约仍未建模（无对应状态源） |
+| 空闲 sidecar 回收的租约矩阵：待审批/终端/浏览器/MCP/队列期间不得回收 | should | rust | wip（判定机制完成，终端/MCP/队列无状态源未建模）：`src-tauri/src/ipc.rs::is_evictable(EvictionFacts)` 把规则抽成纯函数（非活动、有 client、有落盘 session、未流式、无阻塞 UI 请求、浏览器页面数为 0），6 条断言覆盖每种租约；阻塞请求按 `BLOCKING_UI_METHODS` 的 7 个方法（select/confirm/askDialog/ask/input/editor/open_url）逐请求登记，`extension-ui:respond`（读 `response.id`）与 `cancel` 帧的 `targetId` 都会释放，tab 关闭时整条丢弃 —— 不会泄漏成永久不可回收。终端/MCP/队列三类租约仍未建模（无对应状态源） |
 | 多窗口：每窗口独立 tabs，会话可"在新窗口打开"，重复打开聚焦 owner | should | rust | todo |
 | Worktree tab：创建/删除 worktree、tab cwd 绑定 worktree、关闭时提示 | could | hybrid | todo |
 
