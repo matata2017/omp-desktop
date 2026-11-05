@@ -122,7 +122,7 @@
 |---|---|---|---|
 | 模型选择器：按 provider 分组、搜索、目录增量刷新 | must | reuse | wip：`get_providers`(89)/`get_available_models`(8) 与模型指示器已通（CDP 实测 composer 显示 `group/never-stuck · 超高 · 快速`），分组/搜索 UI 未逐项验 |
 | 模型与推理控制：`set_model` / `cycle_model`（⌃P 前后）/ thinking level / fast / slow | must | reuse | todo |
-| Provider 管理：认证状态、OAuth / API key 登录登出、多账号选择 | must | reuse | todo |
+| Provider 管理：认证状态、OAuth / API key 登录登出、多账号选择 | must | reuse | wip：`get_login_providers`（7.5 KB provider 目录）、`get_providers`（89 个）、`get_usage`、`list_reset_credits` 经通用 `rpc:command` 均已跑通（CDP 实测 `success:true`）；`models:*` 的 provider 增删改查另见 models 行。**未验**：交互式 OAuth（`login` 会拉起浏览器回调，需要人工走一遍）、登出后的状态刷新、多账号切换 |
 | 自定义 provider：`models.yml` 保序原子读写、模型编辑器（context/limits/cost/thinking）、删除 | should | hybrid | done：`src-tauri/src/models.rs`（list/upsert/delete/ensure，apiKey 掩码尾 4 位、未知字段保留、内置 id 拒改、tmp+rename 原子写、7 单测）。CDP 实测 `models.listProviders()` 返回 1 条、首启阻塞弹窗与“无法读取自定义模型文件”黄条同时消失（`cad8df1`）；注释保留见已知偏差 |
 | 模型角色分配：role → model + thinking，按 metadata 校验 | should | reuse | todo |
 | Provider 用量窗口：配额窗口条 + 本地 token/cost 统计 + reset credit | should | reuse | todo |
