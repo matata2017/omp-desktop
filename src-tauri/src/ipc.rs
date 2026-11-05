@@ -725,14 +725,100 @@ pub async fn ipc_invoke(
             let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
             Ok(json!(state.scheduler_runs.cancel(run_id)))
         }
-        "scheduler:insights" => Ok(json!({
-            "successRate": Value::Null,
-            "runs": 0,
-            "failures": 0,
-            "averageCost": Value::Null,
-        })),
-        "scheduler:get-notices" => Ok(json!([])),
-        "scheduler:mark-notices-read" => Ok(Value::Null),
+        "scheduler:insights" => {
+            let days = payload
+                .get("periodDays")
+                .and_then(Value::as_u64)
+                .unwrap_or(7)
+                .clamp(1, 365);
+            let only_task = payload.get("taskId").and_then(Value::as_str).map(str::to_owned);
+            let store = scheduler_store(&state)?;
+            let now = chrono::Utc::now().timestamp_millis();
+            tauri::async_runtime::spawn_blocking(move || {
+                let mut runs = store
+                    .all_runs(now - (days as i64) * 86_400_000, 5000)
+                    .map_err(|e| e.to_string())?;
+                let mut tasks = store.list(true).map_err(|e| e.to_string())?;
+                if let Some(task_id) = &only_task {
+                    runs.retain(|run| {
+                        run.get("taskId").and_then(Value::as_str) == Some(task_id.as_str())
+                    });
+                    tasks.retain(|task| {
+                        task.get("id").and_then(Value::as_str) == Some(task_id.as_str())
+                    });
+                }
+                Ok(omp_scheduler::compute_insights(days, now, &runs, &tasks))
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+        "scheduler:get-notices" => {
+            let store = scheduler_store(&state)?;
+            let now = chrono::Utc::now().timestamp_millis();
+            tauri::async_runtime::spawn_blocking(move || notifications(&store, now))
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        "scheduler:mark-notices-read" => {
+            let ids: Option<Vec<String>> = payload
+                .get("ids")
+                .and_then(Value::as_array)
+                .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect());
+            let store = scheduler_store(&state)?;
+            let now = chrono::Utc::now().timestamp_millis();
+            let app_for_notices = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let current = notifications(&store, now)?;
+                let unread: Vec<String> = current
+                    .as_array()
+                    .map(|list| {
+                        list.iter()
+                            .filter(|notice| notice.get("read").and_then(Value::as_bool) == Some(false))
+                            .filter_map(|notice| notice.get("id").and_then(Value::as_str).map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                store
+                    .mark_notices_read(ids.as_deref(), &unread)
+                    .map_err(|e| e.to_string())?;
+                let refreshed = notifications(&store, now)?;
+                let _ = app_for_notices.emit(crate::events::SCHEDULER_NOTICES, refreshed);
+                Ok(Value::Null)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
+        "scheduler:review" => {
+            let run_id = payload
+                .get("runId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "review requires a runId".to_owned())?
+                .to_owned();
+            let decision = payload
+                .get("decision")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            if decision != "accepted" && decision != "rejected" {
+                return Err(format!("decision must be accepted or rejected, not {decision}"));
+            }
+            let note = payload.get("note").and_then(Value::as_str).map(str::to_owned);
+            let store = scheduler_store(&state)?;
+            let now = chrono::Utc::now().timestamp_millis();
+            let run_id_for_read = run_id.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                store
+                    .review_run(&run_id, &decision, note.as_deref(), now)
+                    .map_err(|e| e.to_string())?;
+                let runs = store.all_runs(0, 500).map_err(|e| e.to_string())?;
+                Ok(runs
+                    .into_iter()
+                    .find(|run| run.get("id").and_then(Value::as_str) == Some(run_id_for_read.as_str()))
+                    .unwrap_or(Value::Null))
+            })
+            .await
+            .map_err(|e| e.to_string())?
+        }
         "scheduler:get-run" => {
             let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
             let store = scheduler_store(&state)?;
@@ -1230,6 +1316,19 @@ fn dialog_filters(payload: &Value) -> Vec<(String, Vec<String>)> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// The bell's current notices: runs waiting on a person plus runs that broke.
+fn notifications(
+    store: &omp_scheduler::TaskStore,
+    now: i64,
+) -> Result<Value, String> {
+    let runs = store
+        .all_runs(now - 7 * 86_400_000, 200)
+        .map_err(|e| e.to_string())?;
+    let tasks = store.list(true).map_err(|e| e.to_string())?;
+    let read = store.read_notice_ids().map_err(|e| e.to_string())?;
+    Ok(json!(omp_scheduler::derive_notices(&runs, &tasks, &read, 20)))
 }
 
 /// Open the scheduler database on first use; an unreadable one disables the feature rather than

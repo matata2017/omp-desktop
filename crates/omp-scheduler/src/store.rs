@@ -332,6 +332,72 @@ impl TaskStore {
         }
         Ok(revisions)
     }
+    /// Runs across every task started at or after `since_ms`, newest first. Insights and the
+    /// notice bell both need cross-task history, which `runs(task_id, …)` cannot give them.
+    pub fn all_runs(&self, since_ms: i64, limit: usize) -> Result<Vec<Value>> {
+        let db = self.db.lock();
+        let mut statement = db
+            .prepare(
+                "SELECT id, task_id, status, started_at, ended_at, session_path, report, review, cost
+                 FROM runs WHERE started_at >= ?1
+                 ORDER BY started_at DESC, rowid DESC LIMIT ?2",
+            )
+            .map_err(db_error)?;
+        let rows = statement
+            .query_map(params![since_ms, limit as i64], |row| {
+                Ok(RunRow {
+                    id: row.get(0)?,
+                    task_id: row.get(1)?,
+                    status: row.get(2)?,
+                    started_at: row.get(3)?,
+                    ended_at: row.get(4)?,
+                    session_path: row.get(5)?,
+                    report: row.get(6)?,
+                    review: row.get(7)?,
+                    cost: row.get(8)?,
+                })
+            })
+            .map_err(db_error)?;
+        let mut runs = Vec::new();
+        for row in rows {
+            runs.push(row.map_err(db_error)?.into_value()?);
+        }
+        Ok(runs)
+    }
+
+    /// Notice ids the user already dismissed, persisted so the bell does not reopen them.
+    pub fn read_notice_ids(&self) -> Result<std::collections::HashSet<String>> {
+        let raw = self.get_meta("notices.read")?.unwrap_or_default();
+        Ok(serde_json::from_str::<Vec<String>>(&raw)
+            .unwrap_or_default()
+            .into_iter()
+            .collect())
+    }
+
+    /// Mark notices read. `None` marks everything currently unread, which is what "clear all" does.
+    pub fn mark_notices_read(&self, ids: Option<&[String]>, unread: &[String]) -> Result<()> {
+        let mut known = self.read_notice_ids()?;
+        match ids {
+            Some(ids) => known.extend(ids.iter().cloned()),
+            None => known.extend(unread.iter().cloned()),
+        }
+        let mut sorted: Vec<String> = known.into_iter().collect();
+        sorted.sort();
+        self.set_meta("notices.read", &serde_json::to_string(&sorted)?)
+    }
+
+    /// Record a run's review decision.
+    pub fn review_run(&self, run_id: &str, decision: &str, note: Option<&str>, at: i64) -> Result<()> {
+        let review = serde_json::json!({ "state": decision, "note": note, "at": at });
+        let db = self.db.lock();
+        db.execute(
+            "UPDATE runs SET review = ?2 WHERE id = ?1",
+            params![run_id, review.to_string()],
+        )
+        .map_err(db_error)?;
+        Ok(())
+    }
+
 }
 
 struct RunRow {

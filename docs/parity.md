@@ -151,7 +151,7 @@
 |---|---|---|---|
 | 定时任务 CRUD：once/cron/interval 编辑器、深度与工具策略、草稿校验、修订历史 | should | rust | wip：`crates/omp-scheduler` 四表 schema + user_version 迁移、CRUD 与修订链、5 段 cron（vixie day OR、DST、拒绝 6 段）、23 单测；`scheduler:get-snapshot/create/update/set-enabled/archive/delete/task-runs/revisions/set-paused` 已接。经 bridge 实测建任务→列表 1 条(tools=read_only,rev=1)→update rev=2 且标题生效。validate 仍返回空 problems |
 | 后台运行：独立 headless sidecar、read_only / worktree 策略、超时、报告采集、worktree 提交或清理 | should | rust | wip：argv 由代码控制（审批模式跟随工具策略，`--approval-mode/--yolo/--tools/--model/...` 从用户 flag 剥离，有单测）；`run-now` 起独立 sidecar + 独立 session-dir + 发 prompt；**监督循环已接**：读 stdout 到 `agent_end`/EOF/超时 → `finish_run(status, report, endedAt)`，report 取 `agent_end.messages` 里最后一条 assistant 文本（单测）。实测：runNow → cancelRun → 记录变成 `status=cancelled` + `endedAt`（不再永远 running）。**未跑过真实完成**（耗额度）；worktree 策略与 verify 未接 |
-| 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | wip：`scheduler:task-runs`/`get-run` 从库读记录，status/endedAt/report 落库已验证（cancel 路径）；UI 未逐项验 |
+| 运行历史与详情：state / 耗时 / usage / changes / verify 徽章与逐次回放 | should | reuse | wip：`scheduler:task-runs`/`get-run` 从库读记录；status/endedAt/report 落库已验证（cancel 路径）；`scheduler:review` 端到端实测（accepted 写回并读回 `review.state=accepted`，随后 insights 的 `reviewAcceptRate` 变 1）；UI 未逐项验 |
 | Review 队列：accept / reject + note | should | reuse | todo |
 | Agent 的 `schedule_task` / `manage_scheduled_tasks` host tool：定义下发 + 调用处理 + 回包 | should | rust | wip：定义由 `scripts/extract-host-tools.mjs` 从上游 TS 生成到 `host_tools_defs.json`（schema 不再手抄），`set_host_tools` 用 `parameters` 字段（用 `inputSchema` 会被 sidecar 拒），实测返回 `success:true`；`host_tool_call` 在路由层被宿主执行并回送 `host_tool_result`；参数映射照上游（`scheduleKind`+`cron`/`everyMinutes`/`at`，`depth`+`rounds`），7 单测。**端到端未验**——需要模型真的调用工具（耗额度） |
 
@@ -278,7 +278,8 @@
 | 反馈对话框：GitHub issue 预填（标题/正文/labels）+ 诊断信息预览 | system | could | reuse | todo |
 | 模型 benchmark：profile / runs / 并行度、结果矩阵、可取消 | system | could | hybrid | todo |
 | sidecar 状态横幅：restarting/error/exited（含 ready 但 sidecarError）+ 重启入口 | system | should | hybrid | todo |
-| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | reuse | todo |
+| 通知铃：未读定时任务运行、按运行打开、全部已读 | scheduler | should | reuse | done（数据面）：`crates/omp-scheduler/src/insights.rs::derive_notices`（id = `run:${runId}:${tone}`，`review.state=pending` → review、`failed/timed_out/blocked_config` → failed）+ `TaskStore::read_notice_ids`/`mark_notices_read`（meta `notices.read`）+ `scheduler:get-notices`/`mark-notices-read`（后者回推 `scheduler:notices`）。CDP 实测 `notices()` 返回 `TaskNotice[]`、`markNoticesRead([])` 成功；铃铛 UI 未逐项点 |
+| Insights 页：周期/成功失败/successRate/复核率/成本/中位时长/按天/按任务/最近失败 | scheduler | should | reuse | done（数据面）：`compute_insights(period_days, now, runs, tasks)` 输出契约的 12 个字段（空历史返回 `null` 而非 0）；`scheduler:insights` 走 `spawn_blocking` + `all_runs(窗口, 5000)`，支持 `taskId` 过滤。CDP 实测：`runs=1`、`medianDurationMs=2032`、`perDay` 1 桶、`costByTask` 1 项，接受 review 后 `reviewAcceptRate` 由 `null` 变 `1`；6 个单测 |
 | 开发/运维工具卡：eval、debug、lsp、ast_grep、resolve/reject、checkpoint/rewind、context_notes/new_context | tools | should | reuse | todo |
 | 协调/代理工具卡：todo/goal/schedule_task/manage_scheduled_tasks、hub/wait、browser/computer/github | tools | should | reuse | todo |
 | 记忆/技能/安全/生成工具卡：retain/recall/reflect/memory_edit、learn/manage_skill、security_scan/ida、vibe_*、generate_image | tools | could | reuse | todo |

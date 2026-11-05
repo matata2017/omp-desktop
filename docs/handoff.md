@@ -24,7 +24,7 @@
 | 4 | 对话面与系统通道 | **4/5**：模型指示器、system 对话框/剪贴板/通知、`editor:open-external`、**会话搜索（FTS5）**已完成；剩会话树/分支/导出 |
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
-| 7 | 定时任务 | **3/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；剩通知/insights |
+| 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
 | 8 | 终端与浏览器 | 0/4：终端面板视觉未确认；**browser webview host 未实现**（最大的剩余块） |
 | 9 | 打包 / 深链 / 托盘 / 性能 | 1/3：性能已实测写进 `docs/perf.md`；NSIS 未构建，深链/托盘未接 |
 | R | replica 侦察 | **完成** |
@@ -54,6 +54,8 @@ stats:url / stats:fetch                           → 服务 setup 即起（port
 stats 对账                                         → 同窗口 requests=32 / in=2,782,801 / out=40,291 与 stats.db 完全一致
 scheduler:*                                       → 建任务→列表(tools=read_only,rev=1)→update rev=2 且标题生效
 scheduler run 终态                                 → runNow→cancelRun→记录 status=cancelled + endedAt（不再永远 running）
+scheduler insights/notices                        → insights 12 字段齐（runs=1, median=2032ms）；notices() 返回数组；
+                                                   review(run,'accepted') 写回后 reviewAcceptRate 由 null → 1
 set_host_tools                                    → 用 parameters 字段返回 success:true（inputSchema 会被拒）
 tab 布局恢复                                       → 开 2 tab 重启后仍 2 tab、activeIndex 一致；tabs 按数字后缀排序
 app:quit                                          → 应用退出、D:\rust-omp 孤儿进程 0 个、runtime.log 无 panic

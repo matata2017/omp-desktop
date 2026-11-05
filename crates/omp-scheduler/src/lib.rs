@@ -4,8 +4,10 @@
 //! a window or an agent: the clock arithmetic (`cron`) and the durable ledger (`db`, `store`).
 
 pub mod cron;
+pub mod insights;
 pub mod db;
 pub mod store;
 
 pub use cron::CronSchedule;
 pub use db::TaskStore;
+pub use insights::{compute_insights, derive_notices};

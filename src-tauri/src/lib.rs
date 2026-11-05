@@ -50,6 +50,7 @@ pub mod events {
     pub const DEEP_LINK: &str = "deep-link";
     pub const SCHEDULER_PROGRESS: &str = "scheduler:progress";
     pub const SCHEDULER_SNAPSHOT: &str = "scheduler:snapshot";
+    pub const SCHEDULER_NOTICES: &str = "scheduler:notices";
 }
 
 pub struct AppState {
