@@ -78,6 +78,11 @@ pub async fn ipc_invoke(
         // ---- Side-channel replies (extension UI / host tool / host URI) ------------------
         "extension-ui:respond" => {
             route_side_channel(&state, &payload, "response", true)?;
+            // The prompt is answered: the tab is a candidate for eviction again. The renderer
+            // sends `{ response: { type, id, … } }`, so the id lives one level down.
+            if let Some(request_id) = response_request_id(&payload) {
+                crate::release_blocking_request(&state, request_id);
+            }
             Ok(Value::Null)
         }
         "host-tool:result" => {
@@ -199,6 +204,7 @@ pub async fn ipc_invoke(
             state.tab_sessions.lock().remove(&tab);
             state.tab_activity.lock().remove(&tab);
             state.browser.close_tab(tab.as_str());
+            state.blocking_requests.lock().remove(&tab);
             state.ready_tabs.lock().remove(&tab);
             crate::persist_layout(&state);
             Ok(json!(existed))
@@ -1196,6 +1202,31 @@ fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
         .unwrap_or_else(|| state.cwd.clone())
 }
 
+/// What the eviction sweep needs to know about one tab. Split out from the sweep so the rules can
+/// be exercised without an app handle: releasing a sidecar discards whatever it was holding.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EvictionFacts {
+    pub is_active: bool,
+    pub has_client: bool,
+    /// A tab whose session is not on disk yet cannot resume after being released.
+    pub has_session: bool,
+    pub streaming: bool,
+    /// A tool call is waiting for the user's answer.
+    pub pending_approval: bool,
+    /// The Browser panel has pages in this tab; those pages live in the sidecar's browser host.
+    pub browser_pages: usize,
+}
+
+/// A sidecar may only be released when nothing in it would be lost.
+pub(crate) fn is_evictable(facts: &EvictionFacts) -> bool {
+    !facts.is_active
+        && facts.has_client
+        && facts.has_session
+        && !facts.streaming
+        && !facts.pending_approval
+        && facts.browser_pages == 0
+}
+
 /// Upper bound on live sidecars; every one of them is a full agent process.
 pub(crate) fn max_sidecars() -> usize {
     std::env::var("ROMP_MAX_SIDECARS")
@@ -1222,7 +1253,19 @@ pub(crate) fn evict_idle_sidecar(app: &AppHandle, state: &AppState) -> bool {
                 .get(&tab)
                 .map(|info| (info.last_frame_ms, info.streaming))
                 .unwrap_or((0, false));
-            if streaming {
+            let facts = EvictionFacts {
+                is_active: false,
+                has_client: true,
+                has_session: true,
+                streaming,
+                pending_approval: state
+                    .blocking_requests
+                    .lock()
+                    .get(&tab)
+                    .is_some_and(|ids| !ids.is_empty()),
+                browser_pages: state.browser.page_count(tab.as_str()),
+            };
+            if !is_evictable(&facts) {
                 continue;
             }
             let candidate = (last_frame_ms, tab.clone());
@@ -1345,6 +1388,15 @@ fn decode_bytes(value: &Value) -> Result<Vec<u8>, String> {
         out.push(byte as u8);
     }
     Ok(out)
+}
+
+/// The request id an `extension-ui:respond` payload answers.
+fn response_request_id(payload: &Value) -> Option<&str> {
+    payload
+        .get("response")
+        .and_then(|response| response.get("id"))
+        .and_then(Value::as_str)
+        .or_else(|| payload.get("requestId").and_then(Value::as_str))
 }
 
 /// `[{ name, extensions: string[] }]` as the dialog plugin wants it.
@@ -1524,6 +1576,50 @@ fn delete_session_file(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn free_tab() -> EvictionFacts {
+        EvictionFacts {
+            is_active: false,
+            has_client: true,
+            has_session: true,
+            streaming: false,
+            pending_approval: false,
+            browser_pages: 0,
+        }
+    }
+
+    #[test]
+    fn an_idle_tab_with_a_session_is_evictable() {
+        assert!(is_evictable(&free_tab()));
+    }
+
+    #[test]
+    fn every_lease_blocks_eviction() {
+        let cases: [(&str, EvictionFacts); 4] = [
+            ("active", EvictionFacts { is_active: true, ..free_tab() }),
+            ("streaming", EvictionFacts { streaming: true, ..free_tab() }),
+            ("awaiting approval", EvictionFacts { pending_approval: true, ..free_tab() }),
+            ("browser pages", EvictionFacts { browser_pages: 1, ..free_tab() }),
+        ];
+        for (name, facts) in cases {
+            assert!(!is_evictable(&facts), "{name} must block eviction");
+        }
+        // A tab without a client or a session is not a candidate at all.
+        assert!(!is_evictable(&EvictionFacts { has_client: false, ..free_tab() }));
+        assert!(!is_evictable(&EvictionFacts { has_session: false, ..free_tab() }));
+    }
+
+
+    #[test]
+    fn respond_payload_id_is_read_from_the_nested_response() {
+        assert_eq!(
+            response_request_id(&json!({ "response": { "type": "confirm", "id": "req-7", "value": true } })),
+            Some("req-7")
+        );
+        // Legacy flat shape still resolves, and a payload without an id does not panic.
+        assert_eq!(response_request_id(&json!({ "requestId": "req-8" })), Some("req-8"));
+        assert_eq!(response_request_id(&json!({ "response": { "type": "confirm" } })), None);
+    }
 
     #[test]
     fn merge_json_overrides_only_present_keys() {

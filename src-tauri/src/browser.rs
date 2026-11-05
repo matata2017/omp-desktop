@@ -419,6 +419,11 @@ impl BrowserHost {
         }
     }
 
+    /// How many pages this tab has; a non-zero count is a lease that blocks sidecar eviction.
+    pub fn page_count(&self, tab: &str) -> usize {
+        self.pages.lock().get(tab).map(|list| list.len()).unwrap_or(0)
+    }
+
     /// Close every page a tab owned; called when the tab closes or the app quits.
     pub fn close_tab(&self, tab: &str) {
         let removed = self.pages.lock().remove(tab);

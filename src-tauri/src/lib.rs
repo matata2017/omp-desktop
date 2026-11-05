@@ -83,6 +83,9 @@ pub struct AppState {
     pub scheduler_runs: crate::scheduler::SchedulerService,
     /// The Browser panel's embedded pages, one set per tab.
     pub browser: crate::browser::BrowserHost,
+    /// Blocking `extension_ui_request`s per tab, by request id. Only methods that wait on the
+    /// user belong here: notify/setStatus/setWidget never get a response and would pin a tab.
+    pub blocking_requests: Mutex<std::collections::HashMap<TabId, std::collections::HashSet<String>>>,
     pub next_tab: AtomicU64,
     pub cwd: PathBuf,
 }
@@ -342,6 +345,26 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
         }
     }
 
+    // A blocking UI request pins the sidecar that is asking (src/shared/rpc-types.ts
+    // BLOCKING_UI_METHODS); a `cancel` frame for that request releases it early.
+    if frame_type == "extension_ui_request" {
+        let method = frame.get("method").and_then(Value::as_str).unwrap_or_default();
+        if is_blocking_ui_method(method)
+            && let Some(id) = frame.get("id").and_then(Value::as_str)
+        {
+            state
+                .blocking_requests
+                .lock()
+                .entry(tab.clone())
+                .or_default()
+                .insert(id.to_owned());
+        }
+    } else if frame_type == "cancel"
+        && let Some(target) = frame.get("targetId").and_then(Value::as_str)
+    {
+        release_blocking_request(&state, target);
+    }
+
     if let Some((channel, shape)) = dedicated_channel(&frame_type) {
         let _ = app.emit(channel, event_payload(shape, &frame_type, tab, frame));
         return;
@@ -558,6 +581,30 @@ fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
     }
 }
 
+/// UI methods whose request waits for the user's answer (mirrors `BLOCKING_UI_METHODS`).
+const BLOCKING_UI_METHODS: [&str; 7] = [
+    "select",
+    "confirm",
+    "askDialog",
+    "ask",
+    "input",
+    "editor",
+    "open_url",
+];
+
+pub(crate) fn is_blocking_ui_method(method: &str) -> bool {
+    BLOCKING_UI_METHODS.contains(&method)
+}
+
+/// Forget a blocking request once it has been answered or cancelled.
+pub(crate) fn release_blocking_request(state: &AppState, request_id: &str) {
+    let mut map = state.blocking_requests.lock();
+    map.retain(|_, ids| {
+        ids.remove(request_id);
+        !ids.is_empty()
+    });
+}
+
 /// Numeric suffix of `tab-N`, used to keep the strip order stable across restarts.
 fn tab_order(id: &TabId) -> u64 {
     id.as_str()
@@ -731,6 +778,7 @@ pub fn run() {
                 scheduler: Mutex::new(None),
                 scheduler_runs: crate::scheduler::SchedulerService::new(),
                 browser: crate::browser::BrowserHost::new(),
+                blocking_requests: Mutex::new(std::collections::HashMap::new()),
                 next_tab: AtomicU64::new(tab_count + 1),
                 cwd: cwd.clone(),
             };
@@ -779,6 +827,17 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blocking_methods_match_the_renderer_list() {
+        for method in ["select", "confirm", "askDialog", "ask", "input", "editor", "open_url"] {
+            assert!(is_blocking_ui_method(method), "{method}");
+        }
+        for method in ["notify", "setStatus", "setWidget", "setTitle", "cancel"] {
+            assert!(!is_blocking_ui_method(method), "{method} must not pin a tab");
+        }
+    }
+
 
     #[test]
     fn envelope_shape_matches_subscribe_active_tab() {
