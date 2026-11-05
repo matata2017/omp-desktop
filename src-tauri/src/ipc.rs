@@ -677,6 +677,7 @@ pub async fn ipc_invoke(
         // ---- browser panel ---------------------------------------------------------------
         "browser:get-state" => {
             let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();
+            state.browser.refresh_active_history(tab);
             Ok(state.browser.state(tab, false))
         }
         "browser:open" => {

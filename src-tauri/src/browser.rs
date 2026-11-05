@@ -339,6 +339,7 @@ impl BrowserHost {
 
         let snapshot = page.to_value();
         drop(pages);
+        self.refresh_history(tab, page_id);
         if let Some(app) = app {
             self.emit(app, tab);
         }
@@ -357,6 +358,63 @@ impl BrowserHost {
                 .unwrap_or_default()
         );
         Ok(state)
+    }
+
+    /// `history.back()`/`forward()` change whether those are possible, and nothing in the Tauri
+    /// API reports it: read the controller's own flags. Called off the main thread (IPC handlers
+    /// land on the runtime), which is what `with_webview` needs.
+    #[cfg(windows)]
+    fn history_state(webview: &tauri::Webview<Wry>) -> (bool, bool) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let sent = webview
+            .with_webview(move |platform| {
+                let controller = platform.controller();
+                let state = match unsafe { controller.CoreWebView2() } {
+                    Ok(core) => unsafe {
+                        // The bindings expect the `windows-result` BOOL; let inference pick it.
+                        let mut back = std::mem::zeroed();
+                        let mut forward = std::mem::zeroed();
+                        let read_back = core.CanGoBack(&mut back).is_ok();
+                        let read_forward = core.CanGoForward(&mut forward).is_ok();
+                        (read_back && back.as_bool(), read_forward && forward.as_bool())
+                    },
+                    Err(_) => (false, false),
+                };
+                let _ = tx.send(state);
+            })
+            .is_ok();
+        if !sent {
+            return (false, false);
+        }
+        rx.recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap_or((false, false))
+    }
+
+    #[cfg(not(windows))]
+    fn history_state(_webview: &tauri::Webview<Wry>) -> (bool, bool) {
+        (false, false)
+    }
+
+    /// Refresh the cached navigation flags for one page.
+    fn refresh_history(&self, tab: &str, page_id: u64) {
+        let webview = {
+            let pages = self.pages.lock();
+            pages
+                .get(tab)
+                .and_then(|list| list.iter().find(|page| page.id == page_id))
+                .map(|page| page.webview.clone())
+        };
+        let Some(webview) = webview else { return };
+        let (back, forward) = Self::history_state(&webview);
+        if let Some(page) = self
+            .pages
+            .lock()
+            .get_mut(tab)
+            .and_then(|list| list.iter_mut().find(|page| page.id == page_id))
+        {
+            page.can_go_back = back;
+            page.can_go_forward = forward;
+        }
     }
 
     /// Raise one page and hide its siblings, so multi-page chips never stack webviews.
@@ -416,6 +474,14 @@ impl BrowserHost {
                 }
                 Ok(())
             }
+        }
+    }
+
+    /// Refresh the active page's navigation flags. Called from `browser:get-state`, which runs off
+    /// the main thread, because history only settles once a load has finished.
+    pub fn refresh_active_history(&self, tab: &str) {
+        if let Some(page_id) = self.active.lock().get(tab).copied() {
+            self.refresh_history(tab, page_id);
         }
     }
 
