@@ -1,0 +1,3 @@
+{"file": "docs/perf.md", "reason": "verify reported numbers and units"}
+{"file": "docs/architecture.md", "reason": "verify cap/lifecycle decisions match the measured matrix"}
+{"file": ".trellis/spec/guides/index.md", "reason": "cross-layer consistency gate"}

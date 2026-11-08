@@ -18,7 +18,9 @@
   "commit": null,
   "pr_url": null,
   "subtasks": [],
-  "children": [],
+  "children": [
+    "11-08-perf-sidecar-deep"
+  ],
   "parent": null,
   "relatedFiles": [],
   "notes": "",

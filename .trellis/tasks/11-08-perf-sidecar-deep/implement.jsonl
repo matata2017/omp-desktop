@@ -1,0 +1,6 @@
+{"file": "docs/perf.md", "reason": "measurement methodology, budgets, and known pitfalls"}
+{"file": "docs/architecture.md", "reason": "sidecar lifecycle, cap decision, and process model"}
+{"file": "docs/perf-baseline.json", "reason": "current release baseline numbers the gate compares against"}
+{"file": ".trellis/spec/omp-agent/backend/index.md", "reason": "backend conventions for the host-side sidecar pool"}
+{"file": ".trellis/spec/guides/index.md", "reason": "cross-layer reuse checks before changing shared budgets"}
+{"file": ".trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md", "reason": "verified binary identity, measured sidecar costs, and instrument pitfalls"}

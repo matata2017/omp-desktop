@@ -1,0 +1,1626 @@
+{
+  "generatedAt": "2026-11-08T14:50:06.268Z",
+  "docs": [
+    {
+      "path": "CHANGELOG.md",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "line": 415,
+          "files": [
+            "src/renderer/locales/en.ts",
+            "src/renderer/locales/locales.test.ts",
+            "src/renderer/locales/ru.test.ts",
+            "src/renderer/locales/ru.ts",
+            "src/renderer/locales/zh.ts"
+          ],
+          "anchors": [
+            "locales/"
+          ]
+        },
+        {
+          "heading": "Added",
+          "line": 942,
+          "files": [
+            "src/renderer/lib/queue-input.ts"
+          ],
+          "anchors": [
+            "queue-input.ts"
+          ]
+        },
+        {
+          "heading": "Changed",
+          "line": 1024,
+          "files": [
+            "src/shared/rpc-types.ts"
+          ],
+          "anchors": [
+            "rpc-types.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/architecture.md",
+      "sections": [
+        {
+          "heading": "0. 五条决定",
+          "line": 8,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts"
+          ],
+          "anchors": [
+            "src/bridge/omp-api.ts",
+            "ChatStream.tsx",
+            "use-session-switch.ts"
+          ]
+        },
+        {
+          "heading": "5. IPC 与类型",
+          "line": 94,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/shared/ipc-types.ts"
+          ],
+          "anchors": [
+            "src/bridge/omp-api.ts",
+            "src/shared/ipc-types.ts"
+          ]
+        },
+        {
+          "heading": "2026-11-06：共享 sidecar 否决",
+          "line": 135,
+          "files": [
+            "scripts/perf/probe-shared.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/probe-shared.mjs"
+          ]
+        },
+        {
+          "heading": "2026-11-08：stats 服务懒启动（刻意偏离蓝图）",
+          "line": 148,
+          "files": [
+            "src/renderer/hooks/use-stats.ts",
+            "src/renderer/lib/stats-sync.ts"
+          ],
+          "anchors": [
+            "stats-sync.ts",
+            "use-stats.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/handoff.md",
+      "sections": [
+        {
+          "heading": "已验证的事实（不是推断；含 11-05 快照，本轮最终数字见 8.1 与 docs/perf.md）",
+          "line": 32,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx"
+          ],
+          "anchors": [
+            "ChatStream.tsx"
+          ]
+        },
+        {
+          "heading": "4. 关键设计决策",
+          "line": 137,
+          "files": [
+            "src/shared/ipc-types.ts",
+            "src/shared/rpc-client.ts"
+          ],
+          "anchors": [
+            "src/shared/rpc-client.ts",
+            "src/shared/ipc-types.ts"
+          ]
+        },
+        {
+          "heading": "6. 未完成与风险",
+          "line": 237,
+          "files": [
+            "src/renderer/lib/markdown-links.test.tsx",
+            "vitest.config.ts"
+          ],
+          "anchors": [
+            "markdown-links.test.tsx",
+            "vitest.config.ts"
+          ]
+        },
+        {
+          "heading": "8. 建议的下一步顺序",
+          "line": 270,
+          "files": [
+            "src/shared/rpc-types.ts"
+          ],
+          "anchors": [
+            "rpc-types.ts"
+          ]
+        },
+        {
+          "heading": "预算门：回归 >10% 或 ready 超时 exit 1",
+          "line": 316,
+          "files": [
+            "scripts/perf/drive.mjs",
+            "scripts/perf/probe-shared.mjs",
+            "scripts/perf/profile-stream.mjs",
+            "src/renderer/components/layout/ContextUsagePopover.test.tsx"
+          ],
+          "anchors": [
+            "drive.mjs",
+            "profile-stream.mjs",
+            "probe-shared.mjs",
+            "ContextUsagePopover.test.tsx"
+          ]
+        },
+        {
+          "heading": "9. Git 与许可",
+          "line": 328,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/components/common/LangSwitcher.tsx",
+            "src/renderer/components/layout/ContextStrategyBar.tsx",
+            "src/renderer/components/layout/ContextUsagePopover.test.tsx",
+            "src/renderer/components/layout/ContextUsagePopover.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/locales/en.ts",
+            "src/renderer/locales/ru.ts",
+            "src/renderer/locales/zh.ts",
+            "src/renderer/main.tsx",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/shared",
+            "src/bridge/",
+            "main.tsx",
+            "ChatStream.tsx",
+            "use-session-switch.ts",
+            "common/LangSwitcher.tsx",
+            "layout/ContextStrategyBar.tsx",
+            "layout/ContextUsagePopover.tsx",
+            "layout/ContextUsagePopover.test.tsx",
+            "locales/en.ts",
+            "locales/zh.ts",
+            "locales/ru.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/parity.md",
+      "sections": [
+        {
+          "heading": "已知偏差（与上游行为不同，需持续维护）",
+          "line": 37,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/lib/markdown-links.test.tsx",
+            "src/renderer/main.tsx",
+            "src/renderer/public/pre-paint.js",
+            "vitest.config.ts"
+          ],
+          "anchors": [
+            "src/renderer/main.tsx",
+            "src/bridge/omp-api.ts",
+            "pre-paint.js",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/lib/markdown-links.test.tsx",
+            "vitest.config.ts"
+          ]
+        },
+        {
+          "heading": "scheduler",
+          "line": 149,
+          "files": [
+            "scripts/extract-host-tools.mjs"
+          ],
+          "anchors": [
+            "scripts/extract-host-tools.mjs"
+          ]
+        },
+        {
+          "heading": "stats",
+          "line": 183,
+          "files": [
+            "src/renderer/lib/stats-sync.ts"
+          ],
+          "anchors": [
+            "stats-sync.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "docs/perf.md",
+      "sections": [
+        {
+          "heading": "性能实测",
+          "line": 1,
+          "files": [
+            "scripts/perf/drive.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/drive.mjs"
+          ]
+        },
+        {
+          "heading": "方法",
+          "line": 11,
+          "files": [
+            "scripts/perf/drive.mjs"
+          ],
+          "anchors": [
+            "drive.mjs"
+          ]
+        },
+        {
+          "heading": "stats 改为懒启动",
+          "line": 49,
+          "files": [
+            "src/renderer/hooks/use-stats.ts",
+            "src/renderer/lib/stats-sync.ts"
+          ],
+          "anchors": [
+            "stats-sync.ts",
+            "use-stats.ts"
+          ]
+        },
+        {
+          "heading": "流式渲染 profile",
+          "line": 84,
+          "files": [
+            "scripts/perf/profile-stream.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/profile-stream.mjs"
+          ]
+        },
+        {
+          "heading": "共享 sidecar 实验（否决）",
+          "line": 99,
+          "files": [
+            "scripts/perf/probe-shared.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/probe-shared.mjs"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "README.md",
+      "sections": [
+        {
+          "heading": "架构",
+          "line": 13,
+          "files": [
+            "scripts/perf/probe-shared.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/probe-shared.mjs"
+          ]
+        },
+        {
+          "heading": "测试与工具",
+          "line": 76,
+          "files": [
+            "scripts/cdp-eval.mjs",
+            "scripts/perf/drive.mjs",
+            "scripts/perf/probe-shared.mjs",
+            "scripts/perf/profile-stream.mjs",
+            "scripts/ui/audit.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/",
+            "drive.mjs",
+            "profile-stream.mjs",
+            "probe-shared.mjs",
+            "scripts/ui/audit.mjs",
+            "scripts/cdp-eval.mjs"
+          ]
+        },
+        {
+          "heading": "许可",
+          "line": 99,
+          "files": [
+            "scripts/cdp-cmd.mjs",
+            "scripts/cdp-eval.mjs",
+            "scripts/extract-host-tools.mjs",
+            "scripts/measure-click.mjs",
+            "scripts/perf/drive.mjs",
+            "scripts/perf/probe-shared.mjs",
+            "scripts/perf/profile-stream.mjs",
+            "scripts/test-locale.ts",
+            "scripts/ui/audit.mjs",
+            "src/bridge/omp-api.ts",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/bridge/",
+            "scripts/",
+            "src/shared/"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "replica/parts/data-model.md",
+      "sections": [
+        {
+          "heading": "数据模型 recon — omp-gui v0.9.35",
+          "line": 1,
+          "files": [
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/shared",
+            "shared/",
+            "src/shared/"
+          ]
+        },
+        {
+          "heading": "1.2 窗口与标签（E09–E13）",
+          "line": 29,
+          "files": [
+            "src/renderer/lib/themes.ts"
+          ],
+          "anchors": [
+            "renderer/lib/themes.ts"
+          ]
+        },
+        {
+          "heading": "1.3 配置、模型与主题（E14–E21）",
+          "line": 39,
+          "files": [
+            "src/renderer/lib/themes.ts"
+          ],
+          "anchors": [
+            "renderer/lib/themes.ts"
+          ]
+        },
+        {
+          "heading": "4. 复刻要点与陷阱（全部有上文证据）",
+          "line": 377,
+          "files": [
+            "src/shared/ipc-types.ts",
+            "src/shared/quotas.ts"
+          ],
+          "anchors": [
+            "shared/quotas.ts",
+            "shared/ipc-types.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "replica/parts/features.md",
+      "sections": [
+        {
+          "heading": "omp GUI 功能清单（复刻用）",
+          "line": 1,
+          "files": [
+            "src/renderer/components/agents/SidebarAgents.tsx",
+            "src/renderer/components/agents/agent-activity.ts",
+            "src/renderer/components/chat/transcript-find.ts",
+            "src/renderer/components/common/LinkMenu.tsx",
+            "src/renderer/components/dialogs/ApprovalDialog.tsx",
+            "src/renderer/components/dialogs/BranchPickerDialog.tsx",
+            "src/renderer/components/dialogs/CollabDialog.tsx",
+            "src/renderer/components/dialogs/CommandPalette.tsx",
+            "src/renderer/components/dialogs/ConversationSearchDialog.tsx",
+            "src/renderer/components/dialogs/LiveVoiceDialog.tsx",
+            "src/renderer/components/dialogs/ModelPicker.tsx",
+            "src/renderer/components/dialogs/PlanApprovalDialog.tsx",
+            "src/renderer/components/dialogs/SessionSwitchDialog.tsx",
+            "src/renderer/components/dialogs/ThemePickerDialog.tsx",
+            "src/renderer/components/dialogs/WorkspaceDirsDialog.tsx",
+            "src/renderer/components/dialogs/WorktreeCloseDialog.tsx",
+            "src/renderer/components/dialogs/WorktreeDialog.tsx",
+            "src/renderer/components/dialogs/session-tree-layout.ts",
+            "src/renderer/components/layout/ApprovalControl.tsx",
+            "src/renderer/components/layout/ContextBreakdown.tsx",
+            "src/renderer/components/layout/ContextStrategyBar.tsx",
+            "src/renderer/components/layout/ContextUsagePopover.tsx",
+            "src/renderer/components/layout/DictationStrip.tsx",
+            "src/renderer/components/layout/InputArea.tsx",
+            "src/renderer/components/layout/TabBar.tsx",
+            "src/renderer/components/layout/ThinkingControl.tsx",
+            "src/renderer/components/layout/session-metrics.ts",
+            "src/renderer/components/layout/use-completion-menu.ts",
+            "src/renderer/components/layout/use-composer-submit.ts",
+            "src/renderer/components/layout/use-dictation.ts",
+            "src/renderer/components/panels/OverviewPanel.tsx",
+            "src/renderer/components/panels/QueuePanel.tsx",
+            "src/renderer/components/panels/RepositoryChanges.tsx",
+            "src/renderer/components/panels/SubagentTranscript.tsx",
+            "src/renderer/components/panels/agent-hub-settings.ts",
+            "src/renderer/components/panels/mcp/McpServerWizard.tsx",
+            "src/renderer/components/settings/ModelRolesWindow.tsx",
+            "src/renderer/components/settings/ProviderConfigDialog.tsx",
+            "src/renderer/components/settings/SecuritySettingsPage.tsx",
+            "src/renderer/components/settings/SkillsSettingsPage.tsx",
+            "src/renderer/components/settings/SshSettingsPage.tsx",
+            "src/renderer/components/settings/UpdatesSettingsPage.tsx",
+            "src/renderer/components/settings/pages/SchemaTabContent.tsx",
+            "src/renderer/components/settings/providers/ModelEditor.tsx",
+            "src/renderer/components/stats/CostsRoute.tsx",
+            "src/renderer/components/stats/ErrorsRoute.tsx",
+            "src/renderer/components/stats/FrustrationRoute.tsx",
+            "src/renderer/components/stats/GainRoute.tsx",
+            "src/renderer/components/stats/ModelsRoute.tsx",
+            "src/renderer/components/stats/OverviewRoute.tsx",
+            "src/renderer/components/stats/ProjectsRoute.tsx",
+            "src/renderer/components/stats/ProvidersRoute.tsx",
+            "src/renderer/components/stats/RequestsRoute.tsx",
+            "src/renderer/components/stats/ToolsRoute.tsx",
+            "src/renderer/components/tools/AstEditRenderer.tsx",
+            "src/renderer/components/tools/BashRenderer.tsx",
+            "src/renderer/components/tools/CoordinationRenderer.tsx",
+            "src/renderer/components/tools/EditRenderer.tsx",
+            "src/renderer/components/tools/FindRenderer.tsx",
+            "src/renderer/components/tools/GenericRenderer.tsx",
+            "src/renderer/components/tools/GlobRenderer.tsx",
+            "src/renderer/components/tools/GrepRenderer.tsx",
+            "src/renderer/components/tools/HubRenderer.tsx",
+            "src/renderer/components/tools/PathLink.tsx",
+            "src/renderer/components/tools/ReadGroupCard.tsx",
+            "src/renderer/components/tools/ReadRenderer.tsx",
+            "src/renderer/components/tools/TaskRenderer.tsx",
+            "src/renderer/components/tools/WebSearchRenderer.tsx",
+            "src/renderer/components/tools/WriteRenderer.tsx",
+            "src/renderer/components/tools/task-render-utils.ts",
+            "src/renderer/hooks/use-working-tree-changes.ts",
+            "src/renderer/lib/diff.tsx",
+            "src/renderer/lib/display-preferences.ts",
+            "src/renderer/lib/markdown-sanitize.test.tsx",
+            "src/renderer/lib/messages.ts",
+            "src/renderer/lib/paste-blobs.ts",
+            "src/renderer/lib/read-group.ts",
+            "src/renderer/lib/remark-dollar-guard.ts",
+            "src/renderer/lib/streaming-markdown.ts",
+            "src/renderer/lib/tab-close.ts",
+            "src/renderer/lib/terminal-links.ts",
+            "src/renderer/locales/en.ts",
+            "src/renderer/locales/ru.ts",
+            "src/renderer/locales/zh.ts",
+            "src/renderer/main.tsx",
+            "src/renderer/public/pre-paint.js",
+            "src/renderer/stores/fork-handoff.ts",
+            "src/renderer/stores/input-history.ts",
+            "src/renderer/stores/model.ts",
+            "src/renderer/stores/queue.ts",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/shared",
+            "main.tsx",
+            "src/renderer/components/panels/agent-hub-settings.ts",
+            "src/renderer/components/panels/SubagentTranscript.tsx",
+            "src/shared/ipc-types.ts",
+            "src/renderer/components/agents/SidebarAgents.tsx",
+            "src/renderer/components/agents/agent-activity.ts",
+            "src/renderer/components/dialogs/CollabDialog.tsx",
+            "src/renderer/lib/streaming-markdown.ts",
+            "src/renderer/components/layout/use-composer-submit.ts",
+            "src/renderer/lib/messages.ts",
+            "src/renderer/components/layout/InputArea.tsx",
+            "src/renderer/lib/markdown-sanitize.test.tsx",
+            "src/renderer/components/dialogs/ApprovalDialog.tsx",
+            "src/shared/approval-prompt.ts",
+            "src/renderer/lib/remark-dollar-guard.ts",
+            "src/renderer/lib/paste-blobs.ts",
+            "src/renderer/components/layout/use-completion-menu.ts",
+            "src/renderer/stores/input-history.ts",
+            "src/renderer/components/dialogs/PlanApprovalDialog.tsx",
+            "src/renderer/components/chat/transcript-find.ts",
+            "src/renderer/components/layout/use-dictation.ts",
+            "src/renderer/components/layout/DictationStrip.tsx",
+            "src/renderer/components/dialogs/LiveVoiceDialog.tsx",
+            "src/renderer/components/tools/PathLink.tsx",
+            "src/renderer/components/common/LinkMenu.tsx",
+            "src/renderer/components/panels/RepositoryChanges.tsx",
+            "src/renderer/hooks/use-working-tree-changes.ts",
+            "src/renderer/components/dialogs/WorkspaceDirsDialog.tsx",
+            "src/renderer/locales/en.ts",
+            "src/renderer/locales/zh.ts",
+            "src/renderer/locales/ru.ts",
+            "src/renderer/components/dialogs/ModelPicker.tsx",
+            "src/renderer/stores/model.ts",
+            "src/renderer/components/layout/ThinkingControl.tsx",
+            "src/renderer/components/settings/ProviderConfigDialog.tsx",
+            "src/renderer/components/settings/providers/ModelEditor.tsx",
+            "src/renderer/components/settings/ModelRolesWindow.tsx",
+            "src/renderer/components/panels/OverviewPanel.tsx",
+            "src/renderer/components/panels/QueuePanel.tsx",
+            "src/renderer/stores/queue.ts",
+            "src/renderer/components/layout/ContextUsagePopover.tsx",
+            "ContextBreakdown.tsx",
+            "ContextStrategyBar.tsx",
+            "src/renderer/components/layout/session-metrics.ts",
+            "src/renderer/components/panels/mcp/McpServerWizard.tsx",
+            "src/renderer/components/dialogs/SessionSwitchDialog.tsx",
+            "src/renderer/components/dialogs/ConversationSearchDialog.tsx",
+            "src/renderer/components/dialogs/session-tree-layout.ts",
+            "src/renderer/components/dialogs/BranchPickerDialog.tsx",
+            "src/renderer/stores/fork-handoff.ts",
+            "src/renderer/components/settings/pages/SchemaTabContent.tsx",
+            "src/renderer/lib/display-preferences.ts",
+            "src/renderer/components/layout/ApprovalControl.tsx",
+            "src/renderer/components/settings/SecuritySettingsPage.tsx",
+            "SkillsSettingsPage.tsx",
+            "SshSettingsPage.tsx",
+            "UpdatesSettingsPage.tsx",
+            "src/renderer/components/stats/OverviewRoute.tsx",
+            "src/renderer/components/stats/ModelsRoute.tsx",
+            "src/renderer/components/stats/CostsRoute.tsx",
+            "ErrorsRoute.tsx",
+            "RequestsRoute.tsx",
+            "ProvidersRoute.tsx",
+            "ToolsRoute.tsx",
+            "FrustrationRoute.tsx",
+            "GainRoute.tsx",
+            "ProjectsRoute.tsx",
+            "src/renderer/components/dialogs/CommandPalette.tsx",
+            "src/renderer/components/layout/TabBar.tsx",
+            "src/renderer/lib/tab-close.ts",
+            "src/renderer/components/dialogs/WorktreeDialog.tsx",
+            "WorktreeCloseDialog.tsx",
+            "src/renderer/lib/terminal-links.ts",
+            "src/renderer/components/dialogs/ThemePickerDialog.tsx",
+            "src/renderer/public/pre-paint.js",
+            "src/renderer/components/tools/ReadRenderer.tsx",
+            "ReadGroupCard.tsx",
+            "src/renderer/lib/read-group.ts",
+            "src/renderer/components/tools/WriteRenderer.tsx",
+            "src/renderer/components/tools/EditRenderer.tsx",
+            "AstEditRenderer.tsx",
+            "src/renderer/lib/diff.tsx",
+            "src/renderer/components/tools/BashRenderer.tsx",
+            "src/renderer/components/tools/GenericRenderer.tsx",
+            "src/renderer/components/tools/GrepRenderer.tsx",
+            "GlobRenderer.tsx",
+            "FindRenderer.tsx",
+            "src/renderer/components/tools/TaskRenderer.tsx",
+            "src/renderer/components/tools/task-render-utils.ts",
+            "src/renderer/components/tools/WebSearchRenderer.tsx",
+            "src/renderer/components/tools/CoordinationRenderer.tsx",
+            "HubRenderer.tsx"
+          ]
+        },
+        {
+          "heading": "增补（surface-level 功能点）",
+          "line": 114,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/layout/NotificationBell.tsx",
+            "src/renderer/components/layout/SidebarQuotas.tsx",
+            "src/renderer/components/panels/BtwAnswer.tsx",
+            "src/renderer/components/panels/LogPanel.tsx",
+            "src/renderer/components/panels/RepositoryChanges.tsx",
+            "src/renderer/components/panels/SubagentDag.tsx",
+            "src/renderer/components/panels/inventory/ErrorNote.tsx",
+            "src/renderer/components/panels/inventory/MarketplacesSection.tsx",
+            "src/renderer/components/panels/inventory/PluginDetailDrawer.tsx",
+            "src/renderer/components/panels/inventory/inventory-contract.test.ts",
+            "src/renderer/components/panels/inventory/inventory-ui.test.tsx",
+            "src/renderer/components/panels/inventory/marketplace-source.ts",
+            "src/renderer/components/panels/inventory/plugin-settings.ts",
+            "src/renderer/components/panels/inventory/rpc-result.ts",
+            "src/renderer/components/panels/mcp/McpServerCard.tsx",
+            "src/renderer/components/panels/pr/PrDetailPane.tsx",
+            "src/renderer/components/settings/pages/AdvancedTab.tsx",
+            "src/renderer/components/settings/pages/CapabilitiesHome.tsx",
+            "src/renderer/components/tools/AskRenderer.tsx",
+            "src/renderer/components/tools/AstGrepRenderer.tsx",
+            "src/renderer/components/tools/DebugRenderer.tsx",
+            "src/renderer/components/tools/EvalRenderer.tsx",
+            "src/renderer/components/tools/GoalRenderer.tsx",
+            "src/renderer/components/tools/HubRenderer.tsx",
+            "src/renderer/components/tools/ImageRenderer.tsx",
+            "src/renderer/components/tools/LspRenderer.tsx",
+            "src/renderer/components/tools/ManageTasksRenderer.tsx",
+            "src/renderer/components/tools/MemoryRenderer.tsx",
+            "src/renderer/components/tools/ResolveRenderer.tsx",
+            "src/renderer/components/tools/ResultImages.tsx",
+            "src/renderer/components/tools/ScheduleTaskRenderer.tsx",
+            "src/renderer/components/tools/TodoRenderer.tsx",
+            "src/shared/ipc-types.ts"
+          ],
+          "anchors": [
+            "src/renderer/components/panels/SubagentDag.tsx",
+            "src/renderer/App.tsx",
+            "BtwAnswer.tsx",
+            "src/renderer/components/tools/AskRenderer.tsx",
+            "src/shared/ipc-types.ts",
+            "RepositoryChanges.tsx",
+            "pr/PrDetailPane.tsx",
+            "panels/mcp/McpServerCard.tsx",
+            "panels/inventory/",
+            "settings/pages/CapabilitiesHome.tsx",
+            "AdvancedTab.tsx",
+            "panels/LogPanel.tsx",
+            "src/renderer/components/layout/NotificationBell.tsx",
+            "src/renderer/components/tools/EvalRenderer.tsx",
+            "DebugRenderer.tsx",
+            "LspRenderer.tsx",
+            "AstGrepRenderer.tsx",
+            "ResolveRenderer.tsx",
+            "TodoRenderer.tsx",
+            "GoalRenderer.tsx",
+            "ScheduleTaskRenderer.tsx",
+            "ManageTasksRenderer.tsx",
+            "HubRenderer.tsx",
+            "MemoryRenderer.tsx",
+            "ImageRenderer.tsx",
+            "ResultImages.tsx",
+            "src/renderer/components/layout/SidebarQuotas.tsx"
+          ]
+        },
+        {
+          "heading": "skip",
+          "line": 154,
+          "files": [
+            "src/renderer/components/common/RootErrorBoundary.tsx"
+          ],
+          "anchors": [
+            "src/renderer/components/common/RootErrorBoundary.tsx"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "replica/parts/flows.md",
+      "sections": [
+        {
+          "heading": "流程清册（F01–F26）",
+          "line": 1,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/hooks/session-hydration.ts",
+            "src/renderer/hooks/use-active-tab-route.ts",
+            "src/renderer/hooks/use-awaiting-confirmation.ts",
+            "src/renderer/hooks/use-chat-config.ts",
+            "src/renderer/hooks/use-compaction-config.ts",
+            "src/renderer/hooks/use-context-report.ts",
+            "src/renderer/hooks/use-extension-ui.ts",
+            "src/renderer/hooks/use-follow-up-modifier.ts",
+            "src/renderer/hooks/use-git-status.ts",
+            "src/renderer/hooks/use-learned-skills.ts",
+            "src/renderer/hooks/use-live-settings.ts",
+            "src/renderer/hooks/use-overlay-presence.ts",
+            "src/renderer/hooks/use-plan-approval.ts",
+            "src/renderer/hooks/use-quota-polling.test.tsx",
+            "src/renderer/hooks/use-quota-polling.ts",
+            "src/renderer/hooks/use-rpc-events.test.tsx",
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/renderer/hooks/use-session-list.test.tsx",
+            "src/renderer/hooks/use-session-list.ts",
+            "src/renderer/hooks/use-session-switch.test.ts",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/hooks/use-sidebar-recency.ts",
+            "src/renderer/hooks/use-stats.test.tsx",
+            "src/renderer/hooks/use-stats.ts",
+            "src/renderer/hooks/use-subagent-stream-poll.ts",
+            "src/renderer/hooks/use-tab-guard.ts",
+            "src/renderer/hooks/use-throttled-text.ts",
+            "src/renderer/hooks/use-tray-sync.ts",
+            "src/renderer/hooks/use-working-tree-changes.ts",
+            "src/renderer/hooks/use-workspace-surfaces.ts"
+          ],
+          "anchors": [
+            "src/renderer/App.tsx",
+            "hooks/"
+          ]
+        },
+        {
+          "heading": "总表",
+          "line": 8,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/layout/DictationStrip.tsx",
+            "src/renderer/components/layout/use-composer-submit.ts",
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/renderer/lib/composer-submit.ts",
+            "src/renderer/lib/session-search.ts",
+            "src/renderer/lib/stats-sync.ts",
+            "src/renderer/lib/tab-routing.ts",
+            "src/renderer/public/pre-paint.js",
+            "src/renderer/stores/subagent-graph.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/rpc-types.ts"
+          ],
+          "anchors": [
+            "renderer/components/layout/use-composer-submit.ts",
+            "renderer/lib/composer-submit.ts",
+            "renderer/lib/tab-routing.ts",
+            "renderer/lib/session-search.ts",
+            "renderer/stores/subagent-graph.ts",
+            "renderer/lib/stats-sync.ts",
+            "renderer/App.tsx",
+            "renderer/public/pre-paint.js",
+            "renderer/components/layout/DictationStrip.tsx",
+            "shared/ipc-types.ts",
+            "renderer/hooks/use-rpc-events.ts",
+            "shared/rpc-types.ts"
+          ]
+        },
+        {
+          "heading": "F01 发送 prompt 并观察流式回复（7 步）",
+          "line": 41,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/components/layout/use-composer-submit.ts"
+          ],
+          "anchors": [
+            "ChatStream.tsx",
+            "use-composer-submit.ts",
+            "renderer/components/layout/use-composer-submit.ts"
+          ]
+        },
+        {
+          "heading": "F02 工具卡生命周期（6 步）",
+          "line": 67,
+          "files": [
+            "src/renderer/components/tools/AskRenderer.tsx",
+            "src/renderer/components/tools/AstEditRenderer.tsx",
+            "src/renderer/components/tools/AstGrepRenderer.tsx",
+            "src/renderer/components/tools/BashRenderer.tsx",
+            "src/renderer/components/tools/BrowserRenderer.tsx",
+            "src/renderer/components/tools/ComputerRenderer.tsx",
+            "src/renderer/components/tools/CoordinationRenderer.tsx",
+            "src/renderer/components/tools/DebugRenderer.tsx",
+            "src/renderer/components/tools/EditRenderer.tsx",
+            "src/renderer/components/tools/EvalRenderer.tsx",
+            "src/renderer/components/tools/FindRenderer.tsx",
+            "src/renderer/components/tools/GenericRenderer.tsx",
+            "src/renderer/components/tools/GithubRenderer.tsx",
+            "src/renderer/components/tools/GlobRenderer.tsx",
+            "src/renderer/components/tools/GoalRenderer.tsx",
+            "src/renderer/components/tools/GrepRenderer.tsx",
+            "src/renderer/components/tools/HubRenderer.tsx",
+            "src/renderer/components/tools/ImageRenderer.tsx",
+            "src/renderer/components/tools/LspRenderer.tsx",
+            "src/renderer/components/tools/ManageTasksRenderer.tsx",
+            "src/renderer/components/tools/MemoryRenderer.tsx",
+            "src/renderer/components/tools/ReadRenderer.tsx",
+            "src/renderer/components/tools/ResolveRenderer.tsx",
+            "src/renderer/components/tools/ScheduleTaskRenderer.tsx",
+            "src/renderer/components/tools/TaskRenderer.tsx",
+            "src/renderer/components/tools/TodoRenderer.tsx",
+            "src/renderer/components/tools/VibeRenderer.tsx",
+            "src/renderer/components/tools/WebSearchRenderer.tsx",
+            "src/renderer/components/tools/WriteRenderer.tsx",
+            "src/renderer/hooks/use-rpc-events.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts",
+            "components/tools/*Renderer.tsx",
+            "renderer/hooks/use-rpc-events.ts"
+          ]
+        },
+        {
+          "heading": "F03 中断/中止一次运行（4 步）",
+          "line": 88,
+          "files": [
+            "src/renderer/hooks/use-rpc-events.ts"
+          ],
+          "anchors": [
+            "renderer/hooks/use-rpc-events.ts"
+          ]
+        },
+        {
+          "heading": "F04 切换模型 / 思考等级（5 步）",
+          "line": 110,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/renderer/lib/keymap.ts"
+          ],
+          "anchors": [
+            "App.tsx",
+            "use-rpc-events.ts",
+            "renderer/lib/keymap.ts"
+          ]
+        },
+        {
+          "heading": "F05 新建 tab / 切换 / 关闭 / 分屏（5 步，分项 3/1/2/3）",
+          "line": 139,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/lib/tab-routing.ts"
+          ],
+          "anchors": [
+            "lib/tab-routing.ts",
+            "App.tsx",
+            "renderer/lib/tab-routing.ts"
+          ]
+        },
+        {
+          "heading": "F06 会话列表浏览/搜索/打开/重命名/删除（6 步）",
+          "line": 162,
+          "files": [
+            "src/renderer/hooks/use-session-list.ts"
+          ],
+          "anchors": [
+            "use-session-list.ts"
+          ]
+        },
+        {
+          "heading": "F07 恢复历史会话（⌘P）（5 步）",
+          "line": 185,
+          "files": [
+            "src/renderer/lib/session-search.ts"
+          ],
+          "anchors": [
+            "lib/session-search.ts",
+            "renderer/lib/session-search.ts"
+          ]
+        },
+        {
+          "heading": "F09 压缩（compact）与 handoff（4 步 / 6 步）",
+          "line": 233,
+          "files": [
+            "src/renderer/components/layout/use-composer-submit.ts",
+            "src/renderer/hooks/use-compaction-config.ts"
+          ],
+          "anchors": [
+            "use-composer-submit.ts",
+            "use-compaction-config.ts",
+            "renderer/components/layout/use-composer-submit.ts",
+            "renderer/hooks/use-compaction-config.ts"
+          ]
+        },
+        {
+          "heading": "F10 plan mode 提案与审批（7 步）",
+          "line": 263,
+          "files": [
+            "src/renderer/hooks/use-rpc-events.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts"
+          ]
+        },
+        {
+          "heading": "F11 权限确认（tool approval）审批（6 步）",
+          "line": 288,
+          "files": [
+            "src/renderer/hooks/use-awaiting-confirmation.ts"
+          ],
+          "anchors": [
+            "hooks/use-awaiting-confirmation.ts"
+          ]
+        },
+        {
+          "heading": "F12 子代理 spawn 与 DAG 视图（6 步）",
+          "line": 312,
+          "files": [
+            "src/renderer/components/chat/dock/AgentsDockCard.tsx",
+            "src/renderer/components/panels/SubagentTranscript.tsx",
+            "src/renderer/stores/subagent-graph.ts"
+          ],
+          "anchors": [
+            "stores/subagent-graph.ts",
+            "renderer/stores/subagent-graph.ts",
+            "renderer/components/chat/dock/AgentsDockCard.tsx",
+            "renderer/components/panels/SubagentTranscript.tsx"
+          ]
+        },
+        {
+          "heading": "F13 todo / queue dock（5 步）",
+          "line": 336,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/layout/use-composer-submit.ts",
+            "src/renderer/hooks/use-rpc-events.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts",
+            "use-composer-submit.ts",
+            "App.tsx",
+            "renderer/hooks/use-rpc-events.ts"
+          ]
+        },
+        {
+          "heading": "F14 文件面板浏览 + diff 视图（6 步）",
+          "line": 358,
+          "files": [
+            "src/renderer/lib/diff.tsx"
+          ],
+          "anchors": [
+            "renderer/lib/diff.tsx"
+          ]
+        },
+        {
+          "heading": "F15 内置浏览器 open/navigate/capture（6 步）",
+          "line": 382,
+          "files": [
+            "src/renderer/App.tsx"
+          ],
+          "anchors": [
+            "App.tsx"
+          ]
+        },
+        {
+          "heading": "F17 定时任务创建/运行/复核（7 步）",
+          "line": 428,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/tasks/InsightsView.tsx",
+            "src/renderer/components/tasks/TaskForm.tsx"
+          ],
+          "anchors": [
+            "App.tsx",
+            "TaskForm.tsx",
+            "InsightsView.tsx"
+          ]
+        },
+        {
+          "heading": "F18 统计看板（5 步）",
+          "line": 453,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/lib/stats-sync.ts"
+          ],
+          "anchors": [
+            "App.tsx",
+            "lib/stats-sync.ts",
+            "renderer/lib/stats-sync.ts"
+          ]
+        },
+        {
+          "heading": "F19 设置 schema 编辑（6 步）",
+          "line": 473,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/shared/rpc-client.ts"
+          ],
+          "anchors": [
+            "App.tsx",
+            "shared/rpc-client.ts"
+          ]
+        },
+        {
+          "heading": "F20 主题切换（5 步）",
+          "line": 496,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/lib/theme.ts",
+            "src/renderer/public/pre-paint.js",
+            "src/renderer/stores/custom-themes.ts"
+          ],
+          "anchors": [
+            "lib/theme.ts",
+            "pre-paint.js",
+            "App.tsx",
+            "public/pre-paint.js",
+            "renderer/lib/theme.ts",
+            "renderer/App.tsx",
+            "renderer/stores/custom-themes.ts",
+            "renderer/public/pre-paint.js"
+          ]
+        },
+        {
+          "heading": "F21 命令面板 / slash 命令（6 步）",
+          "line": 518,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/lib/command-availability.ts"
+          ],
+          "anchors": [
+            "App.tsx",
+            "renderer/lib/command-availability.ts"
+          ]
+        },
+        {
+          "heading": "F23 语音听写（6 步）",
+          "line": 565,
+          "files": [
+            "src/renderer/components/layout/DictationStrip.tsx",
+            "src/renderer/components/layout/use-dictation.ts",
+            "src/renderer/public/dictation-worklet.js"
+          ],
+          "anchors": [
+            "dictation-worklet.js",
+            "DictationStrip.tsx",
+            "use-dictation.ts",
+            "renderer/components/layout/DictationStrip.tsx",
+            "renderer/public/dictation-worklet.js"
+          ]
+        },
+        {
+          "heading": "F25 深链 `omp://`（4 步）",
+          "line": 612,
+          "files": [
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/renderer/stores/ui.ts",
+            "src/shared/ipc-types.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts",
+            "shared/ipc-types.ts",
+            "renderer/stores/ui.ts"
+          ]
+        },
+        {
+          "heading": "F26 自动重试与模型回退（5 步）",
+          "line": 636,
+          "files": [
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/shared/rpc-types.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts",
+            "shared/rpc-types.ts"
+          ]
+        },
+        {
+          "heading": "M12 终端",
+          "line": 727,
+          "files": [
+            "src/renderer/stores/terminals.ts"
+          ],
+          "anchors": [
+            "terminals.ts"
+          ]
+        },
+        {
+          "heading": "M14 tab 路由（可见选择 vs 已路由）",
+          "line": 735,
+          "files": [
+            "src/renderer/lib/tab-routing.ts"
+          ],
+          "anchors": [
+            "renderer/lib/tab-routing.ts"
+          ]
+        },
+        {
+          "heading": "M16 主题选择",
+          "line": 743,
+          "files": [
+            "src/renderer/lib/theme.ts"
+          ],
+          "anchors": [
+            "lib/theme.ts"
+          ]
+        },
+        {
+          "heading": "复刻提示（与 flows 直接相关）",
+          "line": 750,
+          "files": [
+            "src/renderer/hooks/use-rpc-events.ts",
+            "src/renderer/lib/tab-routing.ts",
+            "src/shared/rpc-client.ts"
+          ],
+          "anchors": [
+            "use-rpc-events.ts",
+            "tab-routing.ts",
+            "shared/rpc-client.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "replica/parts/screens.md",
+      "sections": [
+        {
+          "heading": "omp GUI 屏与对话框清单（recon slice）",
+          "line": 1,
+          "files": [
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx"
+          ]
+        },
+        {
+          "heading": "分类规则（先读这段，否则 S/D 边界会看起来矛盾）",
+          "line": 7,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/common/Modal.tsx",
+            "src/renderer/components/layout/PanelContainer.tsx"
+          ],
+          "anchors": [
+            "components/common/Modal.tsx",
+            "App.tsx",
+            "PanelContainer.tsx"
+          ]
+        },
+        {
+          "heading": "1. 屏 / 窗口（S01–S22）",
+          "line": 16,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/stats/CostsRoute.tsx",
+            "src/renderer/components/stats/ErrorsRoute.tsx",
+            "src/renderer/components/stats/FrustrationRoute.tsx",
+            "src/renderer/components/stats/GainRoute.tsx",
+            "src/renderer/components/stats/ModelsRoute.tsx",
+            "src/renderer/components/stats/OverviewRoute.tsx",
+            "src/renderer/components/stats/ProjectsRoute.tsx",
+            "src/renderer/components/stats/ProvidersRoute.tsx",
+            "src/renderer/components/stats/RequestsRoute.tsx",
+            "src/renderer/components/stats/ToolsRoute.tsx",
+            "src/renderer/components/stats/shared.tsx",
+            "src/renderer/components/tools/index.tsx",
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx",
+            "App.tsx",
+            "components/tools/index.tsx",
+            "stats/*Route.tsx",
+            "stats/shared.tsx"
+          ]
+        },
+        {
+          "heading": "2. 对话框 / 模态 / 浮层（D01–D54）",
+          "line": 45,
+          "files": [
+            "src/renderer/components/dialogs/session-tree-layout.ts",
+            "src/renderer/components/settings/settings-window-model.ts"
+          ],
+          "anchors": [
+            "settings-window-model.ts",
+            "session-tree-layout.ts"
+          ]
+        },
+        {
+          "heading": "证据",
+          "line": 120,
+          "files": [
+            "src/renderer/App.tsx",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/components/dialogs/JobWidgetCard.tsx",
+            "src/renderer/components/dialogs/session-tree-layout.ts",
+            "src/renderer/components/layout/ApprovalControl.tsx",
+            "src/renderer/components/layout/ChatContextBar.tsx",
+            "src/renderer/components/layout/NotificationBell.tsx",
+            "src/renderer/components/layout/SidebarQuotas.tsx",
+            "src/renderer/components/layout/TabSearchMenu.tsx",
+            "src/renderer/components/panels/BrowserFindBar.tsx",
+            "src/renderer/components/panels/BtwAnswer.tsx",
+            "src/renderer/components/panels/LogPanel.tsx",
+            "src/renderer/components/panels/RepositoryChanges.tsx",
+            "src/renderer/components/panels/SubagentDag.tsx",
+            "src/renderer/components/panels/inventory/ErrorNote.tsx",
+            "src/renderer/components/panels/inventory/MarketplacesSection.tsx",
+            "src/renderer/components/panels/inventory/PluginDetailDrawer.tsx",
+            "src/renderer/components/panels/inventory/inventory-contract.test.ts",
+            "src/renderer/components/panels/inventory/inventory-ui.test.tsx",
+            "src/renderer/components/panels/inventory/marketplace-source.ts",
+            "src/renderer/components/panels/inventory/plugin-settings.ts",
+            "src/renderer/components/panels/inventory/rpc-result.ts",
+            "src/renderer/components/stats/CostsRoute.tsx",
+            "src/renderer/components/stats/ErrorsRoute.tsx",
+            "src/renderer/components/stats/FrustrationRoute.tsx",
+            "src/renderer/components/stats/GainRoute.tsx",
+            "src/renderer/components/stats/ModelsRoute.tsx",
+            "src/renderer/components/stats/OverviewRoute.tsx",
+            "src/renderer/components/stats/ProjectsRoute.tsx",
+            "src/renderer/components/stats/ProvidersRoute.tsx",
+            "src/renderer/components/stats/RequestsRoute.tsx",
+            "src/renderer/components/stats/ToolsRoute.tsx",
+            "src/renderer/components/tasks/TaskForm.tsx",
+            "src/renderer/main.tsx",
+            "src/renderer/stores/plan-approval.ts"
+          ],
+          "anchors": [
+            "src/renderer/App.tsx",
+            "src/renderer/main.tsx",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/components/layout/ApprovalControl.tsx",
+            "src/renderer/components/layout/ChatContextBar.tsx",
+            "src/renderer/components/layout/SidebarQuotas.tsx",
+            "src/renderer/components/layout/NotificationBell.tsx",
+            "src/renderer/components/layout/TabSearchMenu.tsx",
+            "src/renderer/components/panels/RepositoryChanges.tsx",
+            "src/renderer/components/panels/BrowserFindBar.tsx",
+            "src/renderer/components/panels/SubagentDag.tsx",
+            "src/renderer/components/panels/BtwAnswer.tsx",
+            "src/renderer/components/stats/*Route.tsx",
+            "src/renderer/components/panels/inventory/",
+            "src/renderer/components/dialogs/session-tree-layout.ts",
+            "src/renderer/components/panels/LogPanel.tsx",
+            "src/renderer/components/dialogs/JobWidgetCard.tsx",
+            "src/renderer/stores/plan-approval.ts",
+            "src/renderer/components/tasks/TaskForm.tsx"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".trellis/tasks/01-tauri-shell/prd.md",
+      "sections": [
+        {
+          "heading": "范围",
+          "line": 12,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/renderer/public/pre-paint.js",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts",
+            "vite.config.ts"
+          ],
+          "anchors": [
+            "src/bridge/omp-api.ts",
+            "vite.config.ts",
+            "public/pre-paint.js",
+            "src/shared"
+          ]
+        },
+        {
+          "heading": "验收标准",
+          "line": 27,
+          "files": [
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".trellis/tasks/11-04-full-replication/design.md",
+      "sections": [
+        {
+          "heading": "1. 架构基线",
+          "line": 3,
+          "files": [
+            "src/renderer/main.tsx",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/shared",
+            "main.tsx"
+          ]
+        },
+        {
+          "heading": "3. 共享契约",
+          "line": 34,
+          "files": [
+            "src/shared/ipc-types.ts"
+          ],
+          "anchors": [
+            "src/shared/ipc-types.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".trellis/tasks/11-04-full-replication/prd.md",
+      "sections": [
+        {
+          "heading": "2. 已确认事实",
+          "line": 9,
+          "files": [
+            "src/bridge/omp-api.ts",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/main.tsx",
+            "src/shared/approval-prompt.ts",
+            "src/shared/browser-address.test.ts",
+            "src/shared/browser-address.ts",
+            "src/shared/chord.ts",
+            "src/shared/custom-provider.ts",
+            "src/shared/feedback.test.ts",
+            "src/shared/feedback.ts",
+            "src/shared/hotkeys.ts",
+            "src/shared/index.ts",
+            "src/shared/ipc-types.ts",
+            "src/shared/languages.test.ts",
+            "src/shared/languages.ts",
+            "src/shared/launch-profile.ts",
+            "src/shared/model-restore.test.ts",
+            "src/shared/model-restore.ts",
+            "src/shared/quotas.test.ts",
+            "src/shared/quotas.ts",
+            "src/shared/rpc-client.test.ts",
+            "src/shared/rpc-client.ts",
+            "src/shared/rpc-types.ts",
+            "src/shared/schedule.test.ts",
+            "src/shared/schedule.ts",
+            "src/shared/scheduler-types.ts",
+            "src/shared/stats-types.ts",
+            "src/shared/task-depth.ts",
+            "src/shared/text.ts"
+          ],
+          "anchors": [
+            "src/shared",
+            "main.tsx",
+            "ChatStream.tsx",
+            "use-session-switch.ts",
+            "src/bridge"
+          ]
+        },
+        {
+          "heading": "4. 验收标准",
+          "line": 40,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx",
+            "ChatStream.tsx",
+            "use-session-switch.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".trellis/tasks/11-06-perf-baseline-deep/design.md",
+      "sections": [
+        {
+          "heading": "1. 边界",
+          "line": 3,
+          "files": [
+            "scripts/perf/drive.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/drive.mjs"
+          ]
+        },
+        {
+          "heading": "2. 单测量器契约",
+          "line": 11,
+          "files": [
+            "scripts/perf/drive.mjs"
+          ],
+          "anchors": [
+            "drive.mjs"
+          ]
+        },
+        {
+          "heading": "3. 启动时间对齐",
+          "line": 60,
+          "files": [
+            "scripts/perf/drive.mjs",
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx",
+            "ChatStream.tsx",
+            "drive.mjs"
+          ]
+        },
+        {
+          "heading": "5. 进程模型实验",
+          "line": 92,
+          "files": [
+            "scripts/perf/probe-shared.mjs"
+          ],
+          "anchors": [
+            "scripts/perf/probe-shared.mjs"
+          ]
+        },
+        {
+          "heading": "6. 流式渲染",
+          "line": 108,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/lib/markdown.tsx"
+          ],
+          "anchors": [
+            "markdown.tsx",
+            "ChatStream.tsx"
+          ]
+        },
+        {
+          "heading": "7. UI 审计",
+          "line": 118,
+          "files": [
+            "scripts/ui/audit.mjs",
+            "src/renderer/locales/en.ts",
+            "src/renderer/locales/ru.ts",
+            "src/renderer/locales/zh.ts"
+          ],
+          "anchors": [
+            "scripts/ui/audit.mjs",
+            "en.ts",
+            "zh.ts",
+            "ru.ts"
+          ]
+        }
+      ]
+    },
+    {
+      "path": ".trellis/tasks/11-06-perf-baseline-deep/prd.md",
+      "sections": [
+        {
+          "heading": "1. 问题",
+          "line": 3,
+          "files": [
+            "src/renderer/locales/en.ts"
+          ],
+          "anchors": [
+            "en.ts"
+          ]
+        },
+        {
+          "heading": "4. 验收标准",
+          "line": 30,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx"
+          ],
+          "anchors": [
+            "ChatStream.tsx"
+          ]
+        },
+        {
+          "heading": "5. 约束",
+          "line": 50,
+          "files": [
+            "src/renderer/components/chat/ChatStream.tsx",
+            "src/renderer/hooks/use-session-switch.ts",
+            "src/renderer/main.tsx"
+          ],
+          "anchors": [
+            "main.tsx",
+            "ChatStream.tsx",
+            "use-session-switch.ts"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,264 @@
+{
+  "version": 1,
+  "docs": [],
+  "code": [],
+  "docStatus": {},
+  "docInfo": {
+    "AGENTS.md": {
+      "type": "ai_config",
+      "status": "current",
+      "by": "rule"
+    },
+    ".trellis/tasks/00-bootstrap-guidelines/prd.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/01-tauri-shell/prd.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/11-04-core-tabs-sessions/prd.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    "docs/architecture.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    "replica/recon.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    "docs/handoff.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    "docs/parity.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/11-04-full-replication/design.md": {
+      "type": "design",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/11-04-full-replication/prd.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/11-06-perf-baseline-deep/design.md": {
+      "type": "design",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/tasks/11-06-perf-baseline-deep/prd.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    "docs/perf.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    },
+    ".trellis/spec/guides/index.md": {
+      "type": "requirements",
+      "status": "current",
+      "by": "trellis"
+    }
+  },
+  "domains": [
+    {
+      "name": "`docs/architecture.md`",
+      "index": "README.md",
+      "docs": [
+        "docs/architecture.md"
+      ],
+      "code": [
+        "docs/architecture.md"
+      ]
+    },
+    {
+      "name": "`docs/parity.md`",
+      "index": "README.md",
+      "docs": [
+        "docs/parity.md"
+      ],
+      "code": [
+        "docs/parity.md"
+      ]
+    },
+    {
+      "name": "`docs/perf.md`",
+      "index": "README.md",
+      "docs": [
+        "docs/perf.md"
+      ],
+      "code": [
+        "docs/perf.md"
+      ]
+    },
+    {
+      "name": "`docs/handoff.md`",
+      "index": "README.md",
+      "docs": [
+        "docs/handoff.md"
+      ],
+      "code": [
+        "docs/handoff.md"
+      ]
+    },
+    {
+      "name": "`replica/recon.md`",
+      "index": "README.md",
+      "docs": [
+        "replica/recon.md"
+      ],
+      "code": [
+        "replica/recon.md"
+      ]
+    },
+    {
+      "name": "`CHANGELOG.md`",
+      "index": "README.md",
+      "docs": [
+        "CHANGELOG.md"
+      ],
+      "code": []
+    },
+    {
+      "name": "Code Reuse Thinking Guide",
+      "index": ".trellis/spec/guides/index.md",
+      "docs": [
+        ".trellis/spec/guides/code-reuse-thinking-guide.md"
+      ],
+      "code": []
+    },
+    {
+      "name": "Cross-Layer Thinking Guide",
+      "index": ".trellis/spec/guides/index.md",
+      "docs": [
+        ".trellis/spec/guides/cross-layer-thinking-guide.md"
+      ],
+      "code": []
+    },
+    {
+      "name": "Performance Measurement",
+      "index": ".trellis/spec/guides/index.md",
+      "docs": [
+        ".trellis/spec/guides/performance-measurement.md"
+      ],
+      "code": []
+    }
+  ],
+  "trellis": {
+    "at": "2026-11-08T14:50:05.901Z",
+    "current": null,
+    "tasks": [
+      {
+        "dir": ".trellis/tasks/00-bootstrap-guidelines",
+        "title": "Bootstrap Guidelines",
+        "status": "in_progress",
+        "docs": [
+          ".trellis/tasks/00-bootstrap-guidelines/prd.md"
+        ]
+      },
+      {
+        "dir": ".trellis/tasks/01-tauri-shell",
+        "title": "Tauri 外壳 + window.omp shim",
+        "status": "in_progress",
+        "docs": [
+          ".trellis/tasks/01-tauri-shell/prd.md"
+        ]
+      },
+      {
+        "dir": ".trellis/tasks/11-04-core-tabs-sessions",
+        "title": "Core tabs and sessions",
+        "status": "in_progress",
+        "docs": [
+          ".trellis/tasks/11-04-core-tabs-sessions/prd.md",
+          "docs/architecture.md",
+          "replica/recon.md",
+          "docs/handoff.md",
+          "docs/parity.md"
+        ]
+      },
+      {
+        "dir": ".trellis/tasks/11-04-full-replication",
+        "title": "Romp full replication program",
+        "status": "in_progress",
+        "docs": [
+          ".trellis/tasks/11-04-full-replication/design.md",
+          ".trellis/tasks/11-04-full-replication/prd.md",
+          "docs/architecture.md",
+          "replica/recon.md",
+          "docs/handoff.md",
+          "docs/parity.md"
+        ]
+      },
+      {
+        "dir": ".trellis/tasks/11-06-perf-baseline-deep",
+        "title": "Perf baseline and deep measurement",
+        "status": "in_progress",
+        "docs": [
+          ".trellis/tasks/11-06-perf-baseline-deep/design.md",
+          ".trellis/tasks/11-06-perf-baseline-deep/prd.md",
+          "docs/perf.md",
+          "docs/architecture.md",
+          "docs/handoff.md",
+          ".trellis/spec/guides/index.md"
+        ]
+      }
+    ],
+    "docs": [
+      ".trellis/tasks/00-bootstrap-guidelines/prd.md",
+      ".trellis/tasks/01-tauri-shell/prd.md",
+      ".trellis/tasks/11-04-core-tabs-sessions/prd.md",
+      "docs/architecture.md",
+      "replica/recon.md",
+      "docs/handoff.md",
+      "docs/parity.md",
+      ".trellis/tasks/11-04-full-replication/design.md",
+      ".trellis/tasks/11-04-full-replication/prd.md",
+      ".trellis/tasks/11-06-perf-baseline-deep/design.md",
+      ".trellis/tasks/11-06-perf-baseline-deep/prd.md",
+      "docs/perf.md",
+      ".trellis/spec/guides/index.md"
+    ]
+  },
+  "updatedAt": "2026-11-08T14:50:05.907Z",
+  "ignore": [
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/design.md|window.omp.tabs.spawn/close",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/design.md|omp/18.15.0",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/prd.md|.trellis/spec/guides/performance-measurement.md:30/:38",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md|omp/18.15.0",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md|examples/probe.rs",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md|taskkill /T /F",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md|src-tauri/src/ipc.rs:1481",
+    "unresolved|.trellis/tasks/11-08-perf-sidecar-deep/research/agent-binary.md|max_sidecars",
+    "unresolved|docs/architecture.md|l0ng-ai/openidea",
+    "unresolved|docs/architecture.md|stores/session.ts:111",
+    "unresolved|docs/architecture.md|src/bindings.ts",
+    "unresolved|docs/architecture.md|event_payload",
+    "unresolved|docs/architecture.md|src/main/stats-server.ts",
+    "unresolved|docs/architecture.md|ensure_running",
+    "unresolved|docs/architecture.md|terminate_now",
+    "unresolved|docs/architecture.md|/trace",
+    "unresolved|docs/architecture.md|main/ipc.ts",
+    "unresolved|docs/perf.md|taskkill /T",
+    "unresolved|docs/perf.md|ensure_running",
+    "unresolved|docs/perf.md|terminate_now",
+    "unresolved|docs/perf.md|main/ipc.ts",
+    "unresolved|docs/perf.md|/trace",
+    "unresolved|docs/perf.md|/api/stats/overview",
+    "unresolved|docs/perf.md|@oh-my-pi/omp-gui"
+  ]
+}
