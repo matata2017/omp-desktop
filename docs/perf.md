@@ -195,4 +195,6 @@ session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `
 
 视觉验收：两臂 `document.querySelector('#root').children.length=1`、DOM 节点 391；`.perf/gpu-ab/shots/baseline-1.png` 与 `disable-gpu-1.png` 逐项一致（侧栏、会话卡、字体、图标）。静态 UI 无回归。
 
+flag 生效验证：带 `--disable-gpu` 启动时 WebView2 进程 cmdline 命中 2 处该 flag；`measure.json` 的 `webview2Types` 显示 GPU 进程 private 30.1 MB（baseline 144.8 MB），`window.omp` bridge=object、`rootChildren=1`、`nodes=390`。所以差值来自 flag 本身，不是偶然波动。
+
 **不默认启用**：未验证流式输出、滚动、动画、WebGL/KaTeX/mermaid 渲染；软件渲染可能在负载下变慢。`--disable-gpu` 只作为可选开关，用户可在启动时设 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--disable-gpu`（`measure.ps1` 的 `-BrowserArgs` 用于 A/B）。
