@@ -1,6 +1,6 @@
 # Agent runtime (`omp.exe`)
 
-Last verified: 2026-11-08, installed build `22:00:06`.
+Last verified: 2026-11-09. Cost/cap rows: 22:00 build; startup and open/close: 00:51 build.
 
 ## 1. What it is
 

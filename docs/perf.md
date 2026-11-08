@@ -149,24 +149,26 @@ session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `
 
 结论：cap3 省约 **550 MB**，代价是第 4 个 tab 不 ready；4 tab 下 cap4 与 cap6 无内存差异。默认 6 保留（给 >4 tab 留余量），文档已对齐。
 
-## 2026-11-08：启动分段（安装版，N=10）
+复现：`powershell -NoProfile -File scripts/perf/cap-matrix.ps1 -Runs 3`（cap 矩阵测量使用 22:00 构建）。
 
-方法：隔离 `OMP_DATA_DIR` + `PI_CODING_AGENT_DIR`（含注册表），1 个 fresh tab；`measure.ps1 -NoDrive` 拿窗口与 sidecar ready，一次 `cdp-eval` 读取 `performance` marks 换算首帧与首会话。
+## 2026-11-09：启动分段（安装版 00:51，N=10）
+
+方法：隔离 `OMP_DATA_DIR` + `PI_CODING_AGENT_DIR`（含注册表），1 个 fresh tab；`measure.ps1 -NoDrive` 拿窗口与 sidecar ready，一次 `cdp-eval` 读取 `performance` marks 换算首帧与首会话。复现：`powershell -NoProfile -File scripts/perf/startup.ps1 -Runs 10`。
 
 | 里程碑 | median | p95 |
 |---|---|---|
-| 窗口可见 | 321 ms | 347 ms |
-| first paint | 1597 ms | 1630 ms |
-| sidecar ready | 3828 ms | 3854 ms |
-| first session rendered | 3877 ms | 3885 ms |
+| 窗口可见 | 306 ms | 314 ms |
+| first paint | 1591 ms | 1618 ms |
+| sidecar ready | 3830 ms | 4127 ms |
+| first session rendered | 3868 ms | 4148 ms |
 
-窗口→首帧约 1.28 s（WebView2 初始化 + JS boot）；首帧→sidecar ready 约 2.23 s。冷启方差这次很紧（292–347 ms），三段的 p95 与中位差都在 ~60 ms 内。
+窗口→首帧约 1.29 s（WebView2 初始化 + JS boot）；首帧→sidecar ready 约 2.24 s。第 2 个样本 private 2.1 GB 是残留 sidecar 离群，时间指标未受影响。00:30 构建的 N=10 中位为 321 / 1597 / 3828 / 3877 ms，ghost 修复未回归启动。
 
-## 2026-11-08：100 次 tab open/close（修复前后）
+## 2026-11-09：100 次 tab open/close（裸 IPC 路径）
 
-方法：隔离根，`cap 6`，每批 `tabs.spawn` + `tabs.close` 各 10 次，共 10 批；每批后采样进程树（Private/RSS/handles/threads）。
+方法：隔离根，`cap 6`，每批 `tabs.spawn` + `tabs.close` 各 10 次，共 10 批；每批后采样进程树。**这是裸 IPC 路径**：正常 UI 的 `closeTab` 会先 `switchTab(neighbor)` 再 close，因此该 ghost 复活只在绕过 renderer store 的路径可复现；修复属于防御性加固，不是用户可见泄漏修复。复现：`scripts/perf/lifecycle.ps1 -RawClose`；真实关闭路径用 `scripts/perf/lifecycle.ps1`（默认先 `setActive` 到 base tab）。
 
-| 指标 | 修复前 | 修复后 |
+| 指标 | raw-IPC（修复前 00:30） | raw-IPC（修复后 00:51） |
 |---|---|---|
 | sidecars | 1 → **5** | 1 → **1** |
 | total private | +1828.2 MB | **−20.7 MB**（811.2 → 790.5） |
@@ -176,4 +178,4 @@ session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `
 
 根因：`tab:close` 不重置 `active_tab`；`tab:get-all` 无条件对 active 调 `ensure_tab_started`，而 `ensure_tab_started` 不校验 tab 是否仍注册 → 已关闭的 active 被复活成 ghost sidecar，每批 +1（约 500 MB/个）。
 
-修复：`tab:close` 在关闭 active 时把 active 切到剩余的第一个 tab；`ensure_tab_started` 对未注册 tab 直接返回。安装版（00:51 构建）复测 100 次：sidecar 恒 1，private 不增长。
+修复：`tab:close` 在关闭 active 时把 active 切到剩余的第一个 tab；`ensure_tab_started` 对未注册 tab 直接返回；watcher 用 pid 比对忽略被替换的旧进程。00:51 构建复测 raw 路径 100 次：sidecar 恒 1，private 不增长。
