@@ -129,3 +129,18 @@ M1 是分水岭：**先停止"每 tab 一个 sidecar"的设计，再谈释放**�
 - 换掉 React renderer / 上 egui、iced（破坏上游复用与 100 条功能账本）。
 - ACP 替换现有 RPC 数据层（renderer 依赖现有协议；ACP 只作为未来接其他 agent 的缝）。
 - WASM 插件（不解决当前内存问题，后置）。
+
+## 9. 决策记录
+
+### 2026-11-06：共享 sidecar 否决
+
+探针 `scripts/perf/probe-shared.mjs` 对一个 `omp --mode rpc-ui` 进程发真实命令：切到会话 A、`prompt` 开始流式、收到 `agent_start` 后切到 B，再切回 A。
+
+结果：
+
+- 两次 `switch_session` 都返回 `success:true`、`data.cancelled:false`。
+- 切换后 A 的 `message_update` 归零，`agent_end` 始终不出现。
+- 切回 A 也不恢复 `message_update`。
+- 命令不带 sessionId，事件帧也没有稳定的会话归属字段。
+
+结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 3）做 LRU 回收，同 workspace 切会话走 `switch_session` 原地复用。内存预算按 `docs/perf.md` 的“固定开销约 480 MB + 每 tab 约 240 MB”计。

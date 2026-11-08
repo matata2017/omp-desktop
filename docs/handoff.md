@@ -23,7 +23,7 @@
 | 3 | 会话 / 多标签 | **3/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、布局持久化与重启恢复、**LRU 回收的租约判定**（活动/流式/待审批/浏览器页面 均挡住回收）已完成；剩 phantom tab、会话归档/树/branch-fork |
 | 4 | 对话面与系统通道 | **4/5**：模型指示器、system 对话框/剪贴板/通知、`editor:open-external`、**会话搜索（FTS5）**已完成；剩会话树/分支/导出 |
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
-| 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过 |
+| 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过（2026-11-08 已改回懒启动，见 8.1） |
 | 7 | 定时任务 | **4/4**：`crates/omp-scheduler` 四表 + 修订链 + 5 段 cron、`scheduler:*` 全通道、**运行 argv 由代码控制**、**监督循环到终态**、`schedule_task`/`manage_scheduled_tasks` host tools 已完成；含通知铃与 Insights（均由 `insights.rs` 派生，见 parity） |
 | 8 | 终端与浏览器 | **3/4**：内置浏览器 host 已跑通（子 HWND WebView2，open/navigate/close/几何/`browser:state` 推送/title 实测）；**终端面板实测出字**（`.xterm` 挂载 + 真实提示符 + `terminal_input` 回显）；剩 agent relay（`browser_host_start/stop` → `agentLinked`）与截图/历史按钮 |
 | 9 | 打包 / 深链 / 托盘 / 性能 | **3/3**：性能实测写进 `docs/perf.md`；NSIS x64 安装包已构建并校验；**`omp://` 深链与单实例转发、托盘（显示/退出）已接**（`omp://new` 实测新建会话） |
@@ -94,7 +94,7 @@ app:quit                                          → 应用退出、D:\rust-omp
 | 外部编辑器 | `src-tauri/src/editor.rs` | 3 单测（命令拆分、换行剥离、缺编辑器） |
 | system 通道 | `ipc.rs`（dialog/clipboard/notification/recorder） | clipboard 260 字符、notify ok、recorderSave 字节一致 |
 | argv 契约门 | `crates/omp-agent/tests/argv_caps.rs` | 5 条：三组能力矩阵 + 不可覆盖 + scheduled denylist |
-| 性能采样 | `scripts/measure-perf.ps1` + `docs/perf.md` | 冷启 137–321 ms；1 tab 883–894 MB；4 tab 1273 MB |
+| 性能采样 | `scripts/perf/measure.ps1` + `docs/perf.md` | release 冷启 327 ms；1 tab 712.0 MB；4 tab 1442.7 MB；首会话 4.1 s |
 
 ---
 
@@ -115,13 +115,13 @@ crates/
                 cron.rs：5 段 cron 解析（vixie day OR、DST、拒绝 6 段）
 scripts/         dev.ps1（注入 MSVC/PATH/OMP_SIDECAR + CDP 端口）、with-msvc.cmd、install-msvc.ps1
                  cdp-eval.mjs / cdp-cmd.mjs / measure-click.mjs（WebView2 9222 驱动）、capture-window.ps1
-                 measure-perf.ps1（进程树 RSS 按角色拆分）、extract-host-tools.mjs（从上游 TS 生成工具 schema）
+                 perf/measure.ps1（release 测量 + 启动分段）、perf/drive.mjs（开 tab/读标记）、perf/gate.ps1（预算门）、perf/profile-stream.mjs、perf/probe-shared.mjs、ui/audit.mjs（文案 + axe）
 vitest.config.ts + scripts/test-locale.ts（上游缺，导致 268 个 locale 测试失败，已补）
 src-tauri/      lib.rs（状态/事件路由/优雅退出）ipc.rs（唯一命令 ipc_invoke，全通道 match）
                 models.rs（models.yml 读写）editor.rs（外部编辑器往返）bench.rs（`omp bench --json`）
                 scheduler.rs（运行 argv 策略 + 监督循环）host_tools.rs + host_tools_defs.json（agent 的定时任务工具）
                 tab_layout.rs（布局持久化）builtin_providers.rs（88 个内置 provider，生成）
-src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），仅改 main.tsx、index.html、ChatStream.tsx（加载门）、use-session-switch.ts（原地切换）
+src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），改动仅限 main.tsx（`window.omp` + 首帧标记）、index.html、ChatStream.tsx（加载门 + 首会话标记）、use-session-switch.ts（原地切换）、common/LangSwitcher.tsx、layout/ContextStrategyBar.tsx（可访问名）、locales/{en,zh,ru}.ts（首轮文案清理）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
@@ -208,10 +208,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1
 node scripts/cdp-eval.mjs "await window.omp.tabs.list()"
 node scripts/measure-click.mjs "先看下当前项目"
 
-# 性能采样（进程树 RSS 按 app/webview2/sidecar/stats 拆分）
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/measure-perf.ps1
-# 已起窗后只采样当前状态：
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/measure-perf.ps1 -SampleOnly -Label 4tabs
+# 性能采样（必须用 tauri build 的产物；cargo build --release 仍指向 devUrl）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/measure.ps1 -Exe target/release/romp-desktop.exe -Label release-idle -Out .perf/release-idle.json
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/measure.ps1 -Exe target/release/romp-desktop.exe -Label release-4tabs -Tabs 4 -Out .perf/release-4tabs.json
+
+# 预算门（缺字段 exit 2，回归 >10% exit 1）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/gate.ps1 -Baseline .perf/release-idle.json -Current .perf/release-idle.json
 
 # 从上游 TypeScript 重新生成 host tool schema（改完 .research 后跑）
 node scripts/extract-host-tools.mjs
@@ -301,6 +303,27 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 - dev.ps1 端口守卫：有残留时打印 `stopping stale vite on 1420`；有活会话时只抛 `already running`，不动活会话
 
 ---
+## 8.1 性能与 UI 审计（2026-11-06 起）
+
+测量器只有一套：`scripts/perf/measure.ps1`。旧的 `scripts/measure-perf.ps1` 已删除。
+
+```powershell
+# 发布版基线（必须用 tauri build；cargo build --release 仍指向 devUrl）
+bunx tauri build --no-bundle
+powershell -File scripts/perf/measure.ps1 -Exe target/release/romp-desktop.exe -Label release-idle -Out .perf/release-idle.json
+powershell -File scripts/perf/measure.ps1 -Exe target/release/romp-desktop.exe -Label release-4tabs -Tabs 4 -Out .perf/release-4tabs.json
+
+# 预算门：回归 >10% 或 ready 超时 exit 1
+powershell -File scripts/perf/gate.ps1 -Baseline .perf/release-idle.json -Current .perf/release-idle.json
+```
+
+启动里程碑来自 Rust 的 `boot` 日志（`epoch_ms`）与 renderer 的 `performance.mark`：`boot:first-paint`、`chat:first-session-rendered`。`drive.mjs` 负责开 tab、等 sidecar、读标记；`profile-stream.mjs` 录一次真实流式回答；`probe-shared.mjs` 验证共享 sidecar（已否决，见 `docs/architecture.md`）。
+
+`omp stats` 已从 setup 预启动改回懒启动：`ipc.rs` 的 `stats:url` 与 `stats:fetch` 都 `ensure_running()`，省掉空闲常驻的 97 MB（1 tab 840.8 → 712.0 MB，4 tab 1553.5 → 1442.7 MB）。`/trace` 只调 `stats:url`，所以懒启动必须同时改这里，否则不打开统计页就一直报“未就绪”。实测干净进程表：启动后 0 个 `omp.exe stats` 子进程，CDP 调 `stats.url()` 返回有效 URL 后变 1 个。强杀主进程仍会留下 stats 孤儿，要按可执行路径额外清理。
+
+UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），产出 `docs/ui-audit.md` 和 `docs/ui-audit/screen.png`。首轮 345 条文案命中，已处理 8 个高频键，剩 328 条留在报告里。axe 首轮 2 类 serious，现剩 2 类：`label-content-name-mismatch` 从 2 个节点降到 1 个（`LangSwitcher` 与 `ContextStrategyBar` 已修；`ContextUsagePopover` 保留，因为让它的 `aria-label` 包含可见文本会破坏上游既有的可访问名契约测试，需与上游一起改），`nested-interactive` 仍有 3 个节点（侧栏会话行、tab 内部按钮），属于上游结构。审计结果依赖当前页面状态：空白页会报 `landmark-one-main`，等 `window.omp` 与首页渲染完再跑。
+
+---
 
 ## 9. Git 与许可
 
@@ -322,4 +345,6 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | `.trellis/`、`.omp/skills/trellis-*` | `mindfold-ai/Trellis` 模板 | AGPL-3.0（`LICENSES/trellis-AGPL-3.0.txt`） |
 | `crates/`、`src-tauri/`、`src/bridge/`、`replica/`、`docs/` | 本工程 | MIT（`LICENSE`） |
 
-发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`（加载门）、`use-session-switch.ts`（原地切换），其余保持上游。
+发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`、`use-session-switch.ts`、`common/LangSwitcher.tsx`、`layout/ContextStrategyBar.tsx`、`locales/en.ts`、`locales/zh.ts`、`locales/ru.ts`，其余保持上游。
+
+本轮的 renderer 差异只有三类：启动/首会话的 `performance.mark`；`LangSwitcher` 的可访问名包含当前语言短名；`ContextStrategyBar` 去掉与可见文本不一致的 `aria-label`，交给可见文本命名。locale 只改了 8 个高频键的破折号/弯引号（`tabs.allTabsHidden`、`contextStrategy.title`、`notices.unread`、`unavailable.chatSession`、`settings.editors.kvDuplicateKey`、`sessionSwitch.busyBlocked`、`settings.display.pasteMenuThreshold`、`agents.openHint`），其余 300 余条命中留在 `docs/ui-audit.md`。`ContextUsagePopover` 试过同样改法，但会破坏上游既有的可访问名契约测试，已回退到上游原样。

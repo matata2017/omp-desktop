@@ -1,93 +1,119 @@
-# 性能实测（dev 构建）
+# 性能实测
 
-测量时间：2026-11-04。方法脚本：`scripts/measure-perf.ps1`。
+测量日期：2026-11-06（发布版基线），2026-11-08（懒启动 stats 后复测）。测量器：`scripts/perf/measure.ps1`（进程/内存），`scripts/perf/drive.mjs`（CDP 驱动与 renderer 标记），`scripts/perf/gate.ps1`（预算门）。原始 JSON 在 `.perf/`（已忽略，不入库）。
 
-**这些数字来自 dev 构建**（`target/debug/romp-desktop.exe` + Vite dev server，未压缩、带 sourcemap、
-HMR 客户端）。它只能用来比较「有 sidecar / 没 sidecar」「1 tab / 4 tab」这类结构差异，不能当成
-发布版预算。发布版数字需要 `cargo tauri build` 后重跑同一脚本，尚未做。
+## 先看构建类型
+
+`cargo build --release` **不是**发布版。它仍指向 `devUrl`（`http://localhost:1420`），Vite 一停，窗口在 260 ms 出现，但 renderer 永远不加载：`window.omp` 不出现，sidecar 不启动，进程树只有 460 MB 的空壳。发布版必须用 `bunx tauri build --no-bundle`，它会跑 `build:web` 并把 `dist` 嵌进自定义协议。
+
+本文所有发布版数字都来自 `bunx tauri build --no-bundle` 的产物（`target/release/romp-desktop.exe`）。
 
 ## 方法
 
-1. 杀掉旧实例 → `Start-Process` → 轮询 `MainWindowHandle != 0` 记冷启时间。
-2. 等到 `runtime.log` 出现 `sidecar ready` 再采样（否则样本会横跨进程启动，min/max 差 7 倍）。
-3. 采样 10 次、每次间隔 250 ms，取中位数。
-4. 足迹按**进程树**统计（从 `romp-desktop` 的 pid 递归 `ParentProcessId`），再按角色拆开：
-   `app` / `webview2`（`msedgewebview2.exe`）/ `sidecar`（`omp.exe --mode rpc-ui`）/ `stats`（`omp.exe stats`）。
-   按进程名全局过滤会把用户自己的 omp 实例算进来，已避免。
+1. 只清理目标 exe 对应的进程；同一 app 标识的 debug/release 会互相顶掉单实例锁，因此 `romp-desktop.exe` 按名字清理，其他目标按完整路径清理。
+2. `Start-Process` 到进程树里任一窗口句柄非零，记冷启。
+3. 开 CDP（`--remote-debugging-port`），`drive.mjs` 等到 `window.omp` 可用，按 `-Tabs N` 启动 N 个 tab 的 sidecar，并读 renderer 的 `performance` 标记。
+4. 等 `runtime.log` 出现 N 条本轮 `sidecar ready`（按 `epoch_ms` 过滤旧行），超时记 `readyTimedOut`。
+5. 采样 10 次、间隔 250 ms，按进程树（`ParentProcessId` 递归）求中位数。
+6. 结束时 `taskkill /T` 清理本次启动的整棵树；`-KeepRunning` 可保留现场。
 
-## 冷启动
+`-Tabs 1` 只测应用自己启动的那一个 active tab 的 sidecar。`drive.mjs` 会先等应用把 active tab 拉到 ready，再决定是否激活额外 tab；抢在应用之前 `setActive` 会多起一个 sidecar，曾把 1 tab 测成两个。
+
+## 启动分段（release，1 tab）
+
+| 里程碑 | 实测 |
+|---|---|
+| 进程启动 → 窗口可见 | **327 ms**（多次 250–655 ms） |
+| → renderer 首帧（`boot:first-paint`） | **1861 ms**（多次 1.7–4.6 s） |
+| → sidecar ready | **4013 ms** |
+| → 首会话可交互（`chat:first-session-rendered`） | **4063 ms** |
+
+窗口本身不是瓶颈；WebView2 初始化占掉首帧前约 1.5 s，sidecar 启动再占约 2.2 s。用户感知的“打开就到能用”是约 4 s，不是 300 ms。首帧与冷启的方差较大，单次结果不可当预算。
+
+## 内存足迹（release，懒启动 stats 后）
+
+| 状态 | 进程树中位数 | sidecar | WebView2 | app | 进程数 |
+|---|---:|---:|---:|---:|---:|
+| 1 tab 空闲 | **712.0 MB** | 231.4 MB / 1 | 448.9 MB / 6 | 34.5 MB | 9 |
+| 2 tab 空闲 | **978.7 MB** | 529.0 MB / 2 | 442.6 MB / 6 | 34.7 MB | 11 |
+| 4 tab 空闲 | **1442.7 MB** | 928.9 MB / 4 | 441.5 MB / 6 | 34.6 MB | 15 |
+
+每多一个 tab 约 **+240 MB**（(1442.7 − 712) / 3 = 243.6 MB），全部来自 sidecar。app 与 WebView2 是固定开销，约 480 MB。
+
+改懒启动之前，同样的构建是 840.8 / 1075.9 / 1553.5 MB，每一行都多一个常驻 97 MB 的 `omp stats` 子进程。dev 构建同口径是 883–894 MB（1 tab）与 1273 MB（4 tab）。原计划的 ①120 MB、②250 MB、③500 MB 全部不成立：只要常驻一个 agent 进程，1 tab 就已经 712 MB。可执行的表述是“固定开销约 480 MB + 每 tab 约 240 MB”。
+
+## stats 改为懒启动
+
+原来 setup 里就 `ensure_running()`，空闲常驻 97 MB，而多数会话根本不打开统计页。改法是把启动挪到真正需要的地方：
+
+- `ipc.rs` 的 `stats:url` 改为 `await state.stats.ensure_running()`。`stats:fetch` 本来就会懒启动。
+- `lib.rs` 的 setup 删掉预启动 spawn，退出时的 `terminate_now()` 保留。
+
+只删 spawn 是不够的：命令面板的 `/trace` 先调 `window.omp.stats.url()`，而 `use-stats.ts` 只在统计组件挂载时才 `stats:fetch`。若 `stats:url` 仍在 port 为 None 时返回 `unavailable:true`，不打开统计页就用 `/trace` 会一直弹“未就绪”。
+
+实测（干净进程表，最终 release）：
+
+| 步骤 | 本仓库 `omp.exe stats` 子进程数 |
+|---|---:|
+| 启动后、调用 `stats:url()` 前 | **0** |
+| CDP 调 `await window.omp.stats.url()` | 返回 `http://127.0.0.1:54789/` |
+| 调用后 | **1** |
+
+即省下 97 MB 常驻，`/trace` 与统计页仍按需拉起服务。
+
+## 上游 Electron 对照
+
+来源：`.research/omp-gui-git`（`@oh-my-pi/omp-gui` 0.9.35，MIT），`bun install` + `bun run build`，以 `electron . --user-data-dir=<独立 profile>` 运行，`OMP_BUNDLED_OMP` 指向本仓库 `resources/omp.exe`。未打包，属于源码 dev 运行。
+
+| 指标 | 上游 Electron（dev 源码） | Romp（release） |
+|---|---:|---:|
+| 冷启到窗口 | 3218 ms | 327 ms |
+| 进程树空闲内存 | 1082.9 MB | 712.0 MB |
+| 主进程 | 160.5 MB | 34.5 MB |
+| sidecar | 463.5 MB / 2 | 231.4 MB / 1 |
+| renderer/WebView | 329.1 MB / 3 | 448.9 MB / 6 |
+
+口径差异必须一起读：上游是未打包的 Electron dev 运行，且探针期间开了 2 个 sidecar；Romp 是打包后的 release，1 个 sidecar。冷启差距（约 10 倍）足以定性，内存差距只能作方向参考。上游若要公平对比，需要 `electron-builder --dir` 的打包产物，本机未做（`electron-builder` 未安装）。
+
+## 流式渲染 profile
+
+`scripts/perf/profile-stream.mjs` 对真实 prompt（40 行数字）做 CDP `Profiler` 录制，并用 `Performance.getMetrics` 取前后差：
 
 | 指标 | 实测 |
-|---|---|
-| 进程启动 → 窗口句柄出现 | **137 / 141 / 233 / 321 ms**（四次运行） |
+|---|---:|
+| 墙钟时长 | 5791 ms |
+| `TaskDuration` | 355 ms |
+| `ScriptDuration` | 93 ms |
+| `LayoutCount` | 3 |
+| `RecalcStyleCount` | 10 |
+| `JSHeapUsedSize` | -1.76 MB |
 
-计划预算是 < 1500 ms，dev 构建下已有 4–10 倍余量。注意这里只测到「窗口出现」，页面的首条会话
-渲染（`sidecar ready` + `get_messages`）另算：`runtime.log` 里 `romp run() start` → `sidecar ready`
-通常 2–4 s，其中 `spawn → ready` 与 handoff 记录的 600–950 ms 一致，剩余是大头在首个页面渲染。
+self-time 前三是 idle（5.5 s）、`(program)`（124 ms）、GC（72 ms）。40 行流式回答的渲染成本不到 0.4 s，主线程大部分时间在等模型。结论是当前没有可改的渲染热点；先别动 `ChatStream`，更长的 transcript 再测。
 
-## 内存足迹
+## 共享 sidecar 实验（否决）
 
-### 状态①：启动空闲（1 tab，未发任何 prompt）
+问题：每个 tab 一个 `omp.exe --mode rpc-ui` 是内存主变量，能否一个进程服务多个 tab？
 
-| 角色 | 常驻 |
-|---|---|
-| app（主进程） | 66 MB |
-| WebView2 子进程（合计） | 530 MB |
-| agent sidecar（`omp --mode rpc-ui`） | 246 MB |
-| stats dashboard（`omp stats`） | 96 MB |
-| **进程树合计（中位数）** | **883–894 MB** |
+探针 `scripts/perf/probe-shared.mjs` 对一个 sidecar 发命令：切到会话 A，`prompt` 开始流式，收到 `agent_start` 后切到会话 B，再切回 A。结果：
 
-单次采样区间 348–973 MB：低值出现在采样跨越 GC / WebView2 尚未完成初始化时，这也是为什么脚本
-改成「等 `sidecar ready` 再采样」。
+- `switch_session` 两次都返回 `success:true`、`data.cancelled:false`。
+- 切换后 A 的 `message_update` 归零，`agent_end` 始终没有出现。
+- 切回 A 后仍然没有 `message_update`。
+- 事件流里没有 session 归属字段，RPC 命令也不带 sessionId。
 
-### 状态③：4 个 tab（各自一个常驻 sidecar，未发 prompt）
+结论：一个进程只有一个可见流。切换会让在途回答脱离观察者，且无法按 tab 归属事件。共享进程需要改协议（每命令带 session、每事件带归属），不属于本任务范围。决定记在 `docs/architecture.md`。
 
-| 角色 | 常驻 |
-|---|---|
-| app | 90 MB |
-| WebView2 子进程（合计） | 477 MB |
-| agent sidecar × 4 | 706 MB |
-| **进程树合计** | **1273 MB** |
+## 预算门
 
-**每多一个 tab ≈ +235 MB**（一个常驻 agent 进程）。这是预算的主变量，不是主进程。
+```
+powershell -File scripts/perf/gate.ps1 -Baseline .perf/release-idle.json -Current .perf/release-idle.json
+```
 
-## 与计划预算的差距
-
-计划的目标是 ①启动空闲 ≤120 MB、②1 tab 一次 prompt 后 ≤250 MB、③4 tab ≤500 MB。按上面的实测：
-
-- ①120 MB **不可能**达到：光是 4 个 tab 的 sidecar 就 706 MB，1 个 tab 的 sidecar 也 246 MB，
-  而 stats dashboard 再占 96 MB。要进 120 MB 只能不常驻任何 agent 进程。
-- ②250 MB 与「一个常驻 sidecar」本身持平，等于要求主进程 + WebView2 只占 4 MB。
-- ③500 MB 需要 4 个 tab 共享 1 个进程，与每 tab 一个 sidecar 的隔离设计冲突。
-
-结论：**预算应按「每 tab 250 MB」计**，主进程 + WebView2 是固定开销（dev 下 600 MB，发布版应显著更低，
-待测）。这与计划里「每 tab 一个 232 MB 的 sidecar 是主因，故按 tab 计预算」的判断一致，只是数值需要
-按 dev 实测上调，发布版另行测量。
-
-## 已经落地的省内存措施
-
-1. **懒启动**：sidecar 只在 tab 首次可见时 spawn（`tab:get-all` / `tab:set-active` / `tab:set-view`）。
-2. **布局恢复只启 active tab**：重启时按 `tab-layout.json` 注册全部 tab，但只为 active 那个起进程。
-3. **原地会话切换**：同 workspace 点会话用 `switch_session`，不新起 244 MB 进程。
-4. **LRU 回收**：超过 `ROMP_MAX_SIDECARS`（默认 3）时回收最久未活动的空闲 tab，可 resume。
-
-## 口径说明
-
-- 足迹按**进程树**统计（从 `romp-desktop` 的 pid 递归 `ParentProcessId`），不是按进程名全局匹配——
-  后者会把用户自己那套 omp 的 sidecar / WebView2 一起算进来。
-- WebView2 那一行是**多个 helper 进程之和**（browser / gpu / renderer / utility），不是单个进程。
-- `WorkingSet64` 是工作集，不是提交量；OS 在内存压力下会 trim，所以同一状态多次采样会出现
-  348–973 MB 这种区间。
-- 全部数字来自 **dev 构建 + Vite dev server**（未压缩、带 sourcemap、HMR 客户端常驻），只能做
-  相对比较；发布版必须用 `cargo tauri build` 的产物重跑本脚本。
+缺字段返回 2；`readyTimedOut=true`、冷启或内存相对基线超过 `-MaxRegressionPct`（默认 10%）返回 1。已用基线自比（exit 0）与人为加倍（exit 1）验证两条路径。预算值等下一次发布版基线确定后写进 `-MaxRssMB` 调用，不内置猜测。
 
 ## 已知问题
 
-- **正常退出已闭环（实测）**：`window.omp.app.quit()` → 应用退出、`D:\rust-omp` 孤儿进程 **0 个**、
-  runtime.log 无 panic（此前 `app:quit` 在 async 命令里 `block_on` 会 panic，已改同步 `terminate_now()`）。
-- **强制终止会留下孤儿子进程**：`Stop-Process` 杀掉主进程时，`kill_on_drop` 不生效，sidecar 与
-  stats 会存活（实测一次测量跑出 5 个 `omp stats` 残留）。正常关窗 / `app:quit` 现在会先
-  `bench.abort()`、关闭全部 tab、`stats.stop()` 再退出（本轮补上）；要覆盖强杀需要 Windows Job Object。
-- **stats dashboard 常驻 96 MB**：蓝图要求 app 启动即起；如果预算优先，可改为首次打开统计页再起
-  （`stats:fetch` 已经是懒 `ensure_running`，只是 setup 里预启动了一次）。
-- dev 构建的 WebView2 内存明显偏高（477–530 MB），发布版需重测后再下结论。
+- **强杀仍留孤儿**：`taskkill /T` 只在测量结束时清理；用户强杀主进程时 sidecar/stats 会存活。实测 `-KeepRunning` 后按名字杀主进程，会留下一个 `omp.exe stats` 孤儿，需要按可执行路径额外清理。要彻底覆盖需要 Windows Job Object。
+- **sidecar ready 约 4 s**：启动关键路径的最大一段，下一步单独测（sidecar 自身的 `spawn → ready` 与首次模型/工具初始化）。
+- **首帧方差 1.7–4.6 s**：WebView2 初始化占主因；区分 environment 创建与页面加载需要 ETW 轨迹。
+- **冷启方差 250–655 ms**：受 OS 缓存与 WebView2 版本影响；脚本取中位数，单次结果不可当预算。
