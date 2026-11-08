@@ -12,7 +12,7 @@ it does not relicense the two imported components below.
    Copyright (c) 2026 Romp contributors.
 
 2. Upstream renderer
-   Paths: src/renderer/, src/shared/
+   Paths: src/renderer/, src/shared/, CHANGELOG.md
    Source: nornzach/oh-my-pi-gui v0.9.35
            https://github.com/nornzach/oh-my-pi-gui
    License: MIT. Full text and original copyright line in

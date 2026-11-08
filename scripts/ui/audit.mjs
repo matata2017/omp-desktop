@@ -17,7 +17,9 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 const port = Number(args.get("port") ?? 9222);
 const outPath = args.get("out") ?? "docs/ui-audit.md";
-const shotDir = args.get("shots") ?? "docs/ui-audit";
+// Screenshots contain live session titles, so they stay in the ignored .perf/ tree;
+// only the text report goes into docs/.
+const shotDir = args.get("shots") ?? ".perf/ui";
 
 const LOCALES = ["src/renderer/locales/en.ts", "src/renderer/locales/zh.ts", "src/renderer/locales/ru.ts"];
 const ROOT = "src/renderer";

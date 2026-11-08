@@ -26,7 +26,7 @@ resources/    内置 omp sidecar（omp.exe，被 .gitignore 排除）
 
 ## 构建与运行
 
-前置条件：Windows 10/11、Rust 1.90（edition 2024）、[bun](https://bun.sh)、Visual Studio Build Tools（含 VC.Tools 与 Windows 10 SDK）、WebView2 Runtime（Windows 11 自带）。`resources/omp.exe` 需要单独放入，它不入库。
+前置条件：Windows 10/11、Rust 1.90（edition 2024）、[bun](https://bun.sh)、Visual Studio Build Tools（含 VC.Tools 与 Windows 10 SDK）、WebView2 Runtime（Windows 11 自带）。`resources/omp.exe` 需要单独放入，它不入库；重建配方（上游 v0.9.35 portable release 抽出 `app-64.7z`）见 [`docs/handoff.md`](docs/handoff.md) 第 8 节，或直接设 `OMP_SIDECAR` 指向已有的 omp CLI。
 
 ```bash
 bun install
@@ -76,11 +76,11 @@ bunx tauri build
 ## 测试与工具
 
 ```bash
-cargo test --workspace     # 167 passed（16 suites）
+cargo test --workspace     # 170 passed（16 suites）
 bun run typecheck          # tsc --noEmit
 bun run test               # 1589 passed（187 files）
-bun run perf:gate          # 冷启与内存回归门，基线在 docs/perf-baseline.json
-bun run ui:audit           # 文案扫描 + axe + 截图，需要运行中的窗口与 9222
+bun run perf:gate          # 先跑 measure.ps1 生成 .perf/release-idle.json；基线在 docs/perf-baseline.json
+bun run ui:audit           # 文案扫描 + axe + 截图，需要运行中的窗口与 9222；截图写 .perf/ui/
 ```
 
 `scripts/perf/` 是唯一的测量器：`measure.ps1` 测冷启与进程树内存，`drive.mjs` 通过 CDP 开 tab 并读启动标记，`gate.ps1` 判回归，`profile-stream.mjs` 录流式回答，`probe-shared.mjs` 验证进程模型。`scripts/ui/audit.mjs` 扫 locale 文案并注入 axe-core。`scripts/cdp-eval.mjs` 可在运行中的窗口执行表达式。

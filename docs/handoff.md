@@ -35,7 +35,7 @@
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
 bun run test                                     → 11-05 快照：186 files / 1570 passed，1 条抖动；当前 187 files / 1589 passed（0 failed）
-cargo test --workspace                           → 11-05 快照：142 passed（16 suites）；当前 167 passed（16 suites，0 failed）
+cargo test --workspace                           → 11-05 快照：142 passed（16 suites）；当前 170 passed（16 suites，0 failed）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
@@ -250,7 +250,7 @@ cp .resources/app/resources/omp.exe resources/omp.exe
 | vendor 契约门 | `argv_matches_capabilities` 已通过（5 条）；`stats_paths_match_vendor` / `rpc-types` 对账需要 fork 的 `packages/stats/src/server.ts` 与 `coding-agent/src/modes/rpc/rpc-types.ts`，本机没有 | 中 |
 | 调试器 | 两个适配器都能完成 DAP 握手（codelldb 4.1 MB、debugpy 1.8.22 @ py3.14.7），`.omp/dap.json` 两个条目可用；**未跑过带断点的完整 launch 会话** | 低 |
 | 强杀孤儿 | 正常退出已闭环（实测 0 孤儿）；`Stop-Process` 强杀主进程仍留 sidecar（需 Job Object） | 低 |
-| `markdown-links.test.tsx` | 已在 `vitest.config.ts` 排除（它 import main 进程的 `toAbsolutePath`） | 低 |
+| `markdown-links.test.tsx` | 已从 `vitest.config.ts` 的排除列表移除（测试内联上游 `toAbsolutePath` 作为期望值辅助）；仍在 `tsconfig.json` 的 exclude 中，因为 renderer 的 `types: []` 没有 `@types/node` | 低 |
 | MSVC 路径 | 用 `scripts/dev.ps1` / `scripts/with-msvc.cmd`；直接 `cargo` 会命中 Git 的 `link.exe` | 中 |
 | dev.ps1 端口占用 | **已修**：脚本启动前按 `CommandLine` 含 `rust-omp` 且 `vite` 过滤并杀掉占用 1420 的残留进程（实测输出 `stopping stale vite on 1420 (pid 3672)`；无残留时直接起，不再报 `Port 1420 is already in use`。**先查 `romp-desktop` 是否在跑再清端口**——顺序反了会杀掉正在运行的 dev 会话（实测第二次调用：app pid 6684 / vite pid 11620 均保持不变，只抛 `already running`）） | 已闭环 |
 

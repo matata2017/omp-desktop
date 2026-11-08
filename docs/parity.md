@@ -43,7 +43,7 @@
 | `src/renderer/index.html` | CSP 增加 `ipc:`/`http://ipc.localhost`/`ws://localhost:*`；入口改 `/main.tsx`；`pre-paint.js` 改绝对路径 | Vite 与 Tauri 的 IPC 需要 | 无 |
 | `src/renderer/components/chat/ChatStream.tsx` | `awaitingTranscript` 增加“status ready 且 tabHasHistory 且 rows===0 且未流式”分支 | sidecar ready 早于首屏 `get_messages`，原逻辑会先渲染空会话页再显示历史（点击会话的三段式闪烁） | 变成“启动/加载骨架 → 内容”，不再闪“想做点什么?”；上游文件不再字节级一致 |
 | `src/renderer/hooks/use-session-switch.ts` | `canBrowseInPlace` 允许任何空闲、同 workspace/kind 的 tab 原地 `switch_session`（不再要求 blank/browsing） | Codex 式的常驻 agent 线程切换：点击侧栏不应每次新起 244MB sidecar | 同 workspace 点击不再新开 tab/进程；跨 workspace 仍新开；流式/草稿/审批期间不切换 |
-| `src/renderer/lib/markdown-links.test.tsx` | 从 tsc/vitest 排除 | 该测试 import main 进程的 `toAbsolutePath`，而 main 进程已由 Rust 接管 | 该用例暂不参与回归，Phase 4 用 Rust 侧等价实现补回 |
+| `src/renderer/lib/markdown-links.test.tsx` | 仍在 `tsconfig.json` 的 exclude 中，但已从 `vitest.config.ts` 的 exclude 移除 | 测试里内联了上游 `toAbsolutePath` 作为期望值辅助（它 mock `system:resolve-paths`）；renderer 的 tsconfig 是 `types: []` 且没有 `@types/node`，因此 `node:os`/`node:path` 只在 vitest 下编译 | 18 个用例参与回归；`tsc --noEmit` 不覆盖该文件。Rust 侧 `system:resolve-paths` 的等价规则另在 `src-tauri/src/ipc.rs` 有单测 |
 | `linkedom` | 保留为 devDependency | 30+ 个 renderer 测试用它建 DOM | 与计划"删除 linkedom"相反；删了测试跑不了 |
 | 内置浏览器 | 页内查找与 keymap 快捷键回传未实现；agent relay 未接（`agentLinked` 恒 false） | 前者需要在子 webview 内注入查找逻辑并把 chord 回传，后者是 sidecar `browser_host_*` 的扩展协议 | `browser:capture`（CapturePreview→内存流→data URL）与 `canGoBack/canGoForward`（读控制器）都已实现并实测，面板可截图、历史按钮可用 |
 | `models.yml` 写入 | Rust 侧用 `serde_yaml` 全量重写，**用户手写的注释与键序不保留** | 上游用 `parseDocument`/`setIn` 做文档级合并；Rust 侧没有等价的注释保留 YAML 编辑器 | GUI 一旦保存 provider，文件里的注释会消失；键序仍稳定（映射插入序）。字段级未知键已保留（有单测） |

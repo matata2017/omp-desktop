@@ -18,9 +18,10 @@ import { MarkdownRenderer } from "./markdown";
 import { clearPathResolutionCache } from "./path-resolver";
 
 /**
- * Mirrors the Rust resolver's path rules so the mocked answers match what the
- * renderer asks for: "~" expands, absolute paths pass through, relative ones
- * resolve inside the tab's workspace.
+ * Expected-value helper copied from upstream `src/main/workspace-paths.ts`.
+ * The test mocks `system:resolve-paths`, so this only computes what the mock
+ * should answer; the Rust resolver itself is covered in `src-tauri/src/ipc.rs`.
+ * "~" expands, absolute paths pass through, relative ones stay inside the cwd.
  */
 function toAbsolutePath(
 	target: string,

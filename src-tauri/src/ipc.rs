@@ -436,11 +436,7 @@ pub async fn ipc_invoke(
                 .iter()
                 .filter_map(|entry| {
                     let raw = entry.as_str()?;
-                    let candidate = if Path::new(raw).is_absolute() {
-                        PathBuf::from(raw)
-                    } else {
-                        cwd.join(raw)
-                    };
+                    let candidate = resolve_target(raw, &cwd)?;
                     let meta = fs::metadata(&candidate).ok()?;
                     let kind = if meta.is_dir() { "directory" } else { "file" };
                     let mut item = json!({
@@ -1239,6 +1235,70 @@ fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
         .unwrap_or_else(|| state.cwd.clone())
 }
 
+/// Resolve a path named by the renderer the way the upstream main process did.
+///
+/// `file:///E:/x` and `/E:/x` reach here with a leading slash (`classifyImageSrc`
+/// keeps it), which Windows reads as a rooted path on the current drive
+/// (`C:\E:\x`) instead of drive E. A drive path written that way loses the
+/// slash, `~` expands, absolute paths pass through, and relative ones must stay
+/// inside the tab's workspace.
+fn resolve_target(raw: &str, cwd: &Path) -> Option<PathBuf> {
+    let raw = strip_url_style_drive(raw);
+    let expanded = if raw == "~" {
+        omp_core::home_dir()
+    } else if let Some(rest) = raw.strip_prefix("~/").or_else(|| raw.strip_prefix("~\\")) {
+        omp_core::home_dir().join(rest)
+    } else {
+        PathBuf::from(raw)
+    };
+    if expanded.is_absolute() {
+        return Some(normalize_path(&expanded));
+    }
+    let root = normalize_path(&std::path::absolute(cwd).ok()?);
+    let candidate = normalize_path(&root.join(expanded));
+    if candidate != root && !candidate.starts_with(&root) {
+        return None;
+    }
+    Some(candidate)
+}
+
+/// `/E:/x` and `\E:\x` become `E:/x` / `E:\x`; other inputs are unchanged.
+#[cfg(windows)]
+fn strip_url_style_drive(raw: &str) -> &str {
+    let bytes = raw.as_bytes();
+    if bytes.len() >= 4
+        && (bytes[0] == b'/' || bytes[0] == b'\\')
+        && bytes[1].is_ascii_alphabetic()
+        && bytes[2] == b':'
+        && (bytes[3] == b'/' || bytes[3] == b'\\')
+    {
+        &raw[1..]
+    } else {
+        raw
+    }
+}
+
+#[cfg(not(windows))]
+fn strip_url_style_drive(raw: &str) -> &str {
+    raw
+}
+
+/// Lexical `.`/`..` removal, so a workspace-escape check cannot be fooled.
+fn normalize_path(path: &Path) -> PathBuf {
+    use std::path::Component;
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other.as_os_str()),
+        }
+    }
+    out
+}
+
 /// What the eviction sweep needs to know about one tab. Split out from the sweep so the rules can
 /// be exercised without an app handle: releasing a sidecar discards whatever it was holding.
 #[derive(Debug, Clone, Copy)]
@@ -1756,6 +1816,49 @@ mod tests {
                 &json!({ "success": true, "data": { "cancelled": false } })
             )
             .is_none()
+        );
+    }
+
+    #[test]
+    fn resolve_target_keeps_relative_paths_inside_the_workspace() {
+        let workspace = std::env::temp_dir().join(format!("romp-resolve-{}", std::process::id()));
+        std::fs::create_dir_all(&workspace).unwrap();
+        assert_eq!(
+            resolve_target("src/app.ts", &workspace),
+            Some(workspace.join("src").join("app.ts"))
+        );
+        assert!(resolve_target("../escape.ts", &workspace).is_none());
+        std::fs::remove_dir_all(workspace).ok();
+    }
+
+    #[test]
+    fn resolve_target_expands_home() {
+        let cwd = std::env::temp_dir();
+        assert_eq!(
+            resolve_target("~/notes.md", &cwd),
+            Some(omp_core::home_dir().join("notes.md"))
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolve_target_strips_the_slash_before_a_drive() {
+        let cwd = Path::new("C:\\work");
+        assert_eq!(
+            resolve_target("/E:/ymt/scan.js", cwd),
+            Some(PathBuf::from("E:\\ymt\\scan.js"))
+        );
+        assert_eq!(
+            resolve_target("\\E:\\ymt\\scan.js", cwd),
+            Some(PathBuf::from("E:\\ymt\\scan.js"))
+        );
+        assert_eq!(
+            resolve_target("E:\\ymt\\scan.js", cwd),
+            Some(PathBuf::from("E:\\ymt\\scan.js"))
+        );
+        assert_eq!(
+            resolve_target("\\\\nas\\share\\doc.md", cwd),
+            Some(PathBuf::from("\\\\nas\\share\\doc.md"))
         );
     }
 }
