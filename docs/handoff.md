@@ -341,19 +341,23 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 
 ### 2026-11-09：改造 OMP fork 前的基线
 
-打 tag `pre-omp-rework-2026-11-09`（含本轮性能测量、修复与文档）。后续在 **OMP fork** 上做两件事，本仓库不动：
+打 annotated tag `pre-omp-rework-2026-11-09`（`^{commit}=7b79774`，已推送；tag 对象 `366bcb89` 是 annotated tag 的正常 hash）。tag **只到 `7b79774`**；下面的 RPC 探针证据与修正记在之后的提交（`c96aa1f` 及本次），按 tag 检出需一并看 master。后续在 **OMP fork** 上做两件事，本仓库不动：
 
 - 加入**决策模型**（本轮未动 fork 代码）。
-- **共享 sidecar**：当前 `omp --mode rpc-ui` 一个进程只服务一个 active session，命令不带 `sessionId`、事件帧没有稳定的会话归属；11-06 的 `probe-shared.mjs` 实验（`docs/architecture.md` §9）显示切会话会丢在途 `message_update` / `agent_end`。因此并发共享需要改 RPC 协议：命令带 session、事件带归属、在途流隔离与恢复。**这个协议改动在 upstream fork，不在 Romp 仓库；已确认该方向可接受，随 fork 改造一并做。**
+- **共享 sidecar**：11-06 的 `probe-shared.mjs` 实验（`docs/architecture.md` §9）显示切会话会丢在途 `message_update` / `agent_end`；本节下面的 2026-11-09 重跑在**当前打包 fork** 上确认同一结论。并发共享需要改 RPC 协议：命令带 session、事件带归属、在途流隔离与恢复。**这个协议改动在 upstream fork，不在 Romp 仓库；已确认该方向可接受，随 fork 改造一并做。**
 - 本仓库侧已有的复用：同 workspace 切会话走 `switch_session` 原地复用（`ipc.rs::confirmed_switch_path`），不新起 ~500 MB 进程；这是**串行复用**，不是并发共享。
 
-2026-11-09 对**打包的 fork**（`omp/18.15.0`、ready `protocolVersion:1`、supported `[1,2]`）发 RPC 命令（`.perf/rpc-caps.ps1`）：
+2026-11-09 对**打包的 fork**（`omp/18.15.0`、ready `protocolVersion:1`、supported `[1,2]`）发 RPC 命令（`scripts/perf/rpc-caps.ps1`，104 条命令的 input schema 与响应全部落盘 `.perf/rpc-caps/commands.json`）：
 
-- `get_state` 带 `sessionId` 与不带返回完全相同（`dataLen=39377`）→ 命令**不按会话路由**。
-- `get_session_lease` → `success:true`；`open_session` → `success:true`，返回新 `sessionId` / `sessionFile`，`resumed:false` → 一个进程**能串行持有/切换多个会话**。
-- `get_available_commands` 成功；事件帧仍无稳定会话归属（11-06 探针）。
+- `get_state` 带 `sessionId` 与不带的 `data` **SHA256 完全相同** → 命令不按会话路由；`get_state` 返回里的 `sessionId`/`sessionFile` 是**当前 active session** 的字段，不是路由键。
+- `get_available_commands` 共 **104 个命令，input schema 中 `sessionId` 出现 0 次** → 该 fork 没有任何 session-addressed 命令。
+- `get_session_lease` → `success:true`；`open_session` → `success:true`，返回新 `sessionId` / `sessionFile`，`resumed:false` → 一个进程能**串行重挂**到另一个会话，不是并发持有多个。
+- `scripts/perf/probe-shared.mjs` 在当前 `omp.exe` 上重跑（隔离 agent 根复制了 `models.yml`/`models.db*`/`config.yml`；不复制会因 `Could not restore model ...` 得到无效样本）：A 上 `agent_start` 后切到 B 再切回，三次 `switch_session` 都 `success:true cancelled:false`，但切走后的 12 个事件里**没有 `agent_end`、没有 `message_update`**，切回后 `messageUpdatesAfterReturn=0` → **被切走 tab 的在途回答对该观察者不可恢复**。
 
-由此把「共享 sidecar」分两档：**串行共享**（一个进程 + 切 tab 时 `open_session`/`switch_session` + renderer 重新 hydrate）协议已经够，改动在 Romp host 侧的 tab→sidecar 映射，能省 (N−1)×~500 MB，代价是切 tab 会 abort 前一个 tab 的在途流、需排队。**并发共享**（多 tab 同时 streaming 互不丢流）才需要改上游协议：命令带 `sessionId`、事件带归属、在途流隔离/恢复；随 fork 改造（决策模型）一并做。
+由此把「共享 sidecar」分两档，**两档都尚未实测内存收益**：
+
+- **串行共享**：用现有 `open_session`/`switch_session` + renderer 重新 hydrate，把同一 workspace 的多个 tab 映射到同一个 sidecar。命令面够用，但改动在 Romp host 侧的 tab→sidecar 映射与 renderer 重新 hydrate；「省 (N−1)×~500 MB」只是 cap 矩阵的**算术外推（推算，待验证前提）**，没有共享配置下的实测。代价不是简单排队：被切走 tab 的在途回答对观察者不可恢复，host 必须**显式禁止或丢弃并发 turn**，属于产品语义变更。
+- **并发共享**（多 tab 同时 streaming 互不丢流）：需要改上游协议——命令带 `sessionId`、事件带归属、在途流隔离/恢复；随 fork 改造（决策模型）一并做。
 
 许可（本仓库**同时**承载三方代码，必须随附声明）：
 
