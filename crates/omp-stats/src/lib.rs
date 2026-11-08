@@ -178,8 +178,8 @@ impl StatsServer {
             return Err(Error::msg("stats server restart budget exhausted"));
         }
 
-        let mut child = Command::new(&self.binary)
-            .args([
+        let mut cmd = Command::new(&self.binary);
+        cmd.args([
                 "stats",
                 "--host",
                 "127.0.0.1",
@@ -191,7 +191,16 @@ impl StatsServer {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .kill_on_drop(true)
-            .env("PI_NOTIFICATIONS", "off")
+            .env("PI_NOTIFICATIONS", "off");
+        // Same as the agent sidecar: a GUI child process must not flash a console window
+        // when it is lazily started (first /trace or stats panel).
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.as_std_mut().creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = cmd
             .spawn()
             .map_err(|e| Error::msg(format!("failed to spawn stats server: {e}")))?;
 

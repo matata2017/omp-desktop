@@ -631,10 +631,17 @@ fn probe_capabilities(binary: &std::path::Path) -> Capabilities {
     caps
 }
 fn run_help(binary: &std::path::Path, args: &[&str]) -> String {
-    let output = std::process::Command::new(binary)
-        .args(args)
-        .stdin(std::process::Stdio::null())
-        .output();
+    let mut cmd = std::process::Command::new(binary);
+    cmd.args(args).stdin(std::process::Stdio::null());
+    // The two capability probes are short-lived console children of a GUI app. Without
+    // CREATE_NO_WINDOW each one flashes a black conhost window during startup.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = cmd.output();
     match output {
         Ok(out) => {
             let mut text = String::from_utf8_lossy(&out.stdout).into_owned();

@@ -31,9 +31,11 @@ Rust 侧 `boot` 日志带 `epoch_ms`，renderer 侧 `performance.mark`（`boot:f
 
 `omp stats` **懒启动**：`ipc.rs` 的 `stats:url` 和 `stats:fetch` 都 `ensure_running()`，setup 不预启动。只删 setup 的 spawn 会让 `/trace`（先调 `stats.url()`，不挂载统计组件）一直报“未就绪”。省下的 97 MB 是拿 `/trace` 换不得的，改完必须 CDP 实跑一次 `stats.url()`，确认调用前 0 个、调用后 1 个本仓库 `omp.exe stats` 子进程。
 
+Windows 上，从 GUI 主进程 spawn 的每个 `omp.exe` 子进程都必须带 `CREATE_NO_WINDOW`（`0x0800_0000`，`std::os::windows::process::CommandExt`）。`omp.exe` 是 console 子系统程序，GUI 应用拉起它时 Windows 会新建黑色 conhost 窗口。启动阶段的 `probe_capabilities` 跑两次 `run_help`（`--help` / `stats --help`），漏设就闪两个黑窗；`omp-stats` 懒启动同理。已覆盖：`omp-agent/src/sidecar.rs`、`src-tauri/src/bench.rs`、`ipc.rs` 的 scheduler run、`lib.rs` 的 `run_help`、`omp-stats` 的 spawn。例外是故意要显示窗口的 `explorer.exe` 与外部编辑器。
+
 ## 预算
 
-固定开销约 480 MB + 每 tab 约 240 MB。`gate.ps1` 回归超过 `-MaxRegressionPct`（默认 10%）或 `readyTimedOut` 就 exit 1。冷启 250–655 ms、首帧 1.7–4.6 s 的方差较大，取中位数，单次结果不可当预算。
+固定开销约 480 MB + 每 tab 约 240 MB。`gate.ps1` 回归超过 `-MaxRegressionPct`（默认 10%）或 `readyTimedOut` 就 exit 1。冷启 275–694 ms、首帧 1.7–2.8 s 的方差较大（见 `docs/perf.md`），单次结果不可当预算；传了 `-MaxColdStartMs` 时 gate 用绝对阈值、跳过紧相对比较。
 
 ## renderer 改动
 
