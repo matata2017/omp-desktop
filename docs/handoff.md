@@ -347,6 +347,14 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 - **共享 sidecar**：当前 `omp --mode rpc-ui` 一个进程只服务一个 active session，命令不带 `sessionId`、事件帧没有稳定的会话归属；11-06 的 `probe-shared.mjs` 实验（`docs/architecture.md` §9）显示切会话会丢在途 `message_update` / `agent_end`。因此并发共享需要改 RPC 协议：命令带 session、事件带归属、在途流隔离与恢复。**这个协议改动在 upstream fork，不在 Romp 仓库；已确认该方向可接受，随 fork 改造一并做。**
 - 本仓库侧已有的复用：同 workspace 切会话走 `switch_session` 原地复用（`ipc.rs::confirmed_switch_path`），不新起 ~500 MB 进程；这是**串行复用**，不是并发共享。
 
+2026-11-09 对**打包的 fork**（`omp/18.15.0`、ready `protocolVersion:1`、supported `[1,2]`）发 RPC 命令（`.perf/rpc-caps.ps1`）：
+
+- `get_state` 带 `sessionId` 与不带返回完全相同（`dataLen=39377`）→ 命令**不按会话路由**。
+- `get_session_lease` → `success:true`；`open_session` → `success:true`，返回新 `sessionId` / `sessionFile`，`resumed:false` → 一个进程**能串行持有/切换多个会话**。
+- `get_available_commands` 成功；事件帧仍无稳定会话归属（11-06 探针）。
+
+由此把「共享 sidecar」分两档：**串行共享**（一个进程 + 切 tab 时 `open_session`/`switch_session` + renderer 重新 hydrate）协议已经够，改动在 Romp host 侧的 tab→sidecar 映射，能省 (N−1)×~500 MB，代价是切 tab 会 abort 前一个 tab 的在途流、需排队。**并发共享**（多 tab 同时 streaming 互不丢流）才需要改上游协议：命令带 `sessionId`、事件带归属、在途流隔离/恢复；随 fork 改造（决策模型）一并做。
+
 许可（本仓库**同时**承载三方代码，必须随附声明）：
 
 | 目录 | 来源 | 许可 |
