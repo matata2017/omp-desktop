@@ -56,6 +56,7 @@ import {
 	isPluginActivationOriginActive,
 } from "./plugin-activation";
 import { isRecording, startRecording, stopRecording } from "./recording";
+import { closeActiveTab } from "./tab-close";
 import { findTextLinks } from "./terminal-links";
 import { copyTodosToClipboard, dumpTranscriptToClipboard, exportTodos, importTodosFromFile } from "./transcript-copy";
 import { addWorkspaceDirectory, moveSessionTo, pickWorkspaceDirectory } from "./workspace-dirs";
@@ -683,7 +684,7 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		label: t("cmd.close"),
 		description: t("cmd.close.desc"),
 		category: "session",
-		affordance: { kind: "action", run: () => window.close() },
+		affordance: { kind: "action", run: () => { closeActiveTab(); } },
 	});
 	add({
 		name: "restart",
@@ -693,8 +694,8 @@ export function buildCommandMenu(ctx: CommandRegistryContext): CommandMenuItem[]
 		affordance: { kind: "action", run: restartSidecar },
 	});
 	add({
-		// `window.close()` used to hide behind this name, which left every other
-		// window (and its running agents) open while reporting the app as quit.
+		// `window.close()` used to hide behind this name; in a single-window shell
+		// that just ends the app, so quit goes through the main-process guard.
 		name: "quit",
 		aliases: ["exit"],
 		label: t("cmd.quit"),

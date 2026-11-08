@@ -1,8 +1,8 @@
 /**
  * The close-a-tab rules every entry point shares (chip ×, ⌘W, File → Close Tab):
  * work that would die with the tab arms the inline confirm first, a
- * worktree-bound tab detours to the cleanup prompt, the last tab hands the
- * keystroke to the window, and an idle tab closes at once.
+ * worktree-bound tab detours to the cleanup prompt, the last tab stays open
+ * (one window, so closing it would quit the app), and an idle tab closes at once.
  */
 
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
@@ -83,11 +83,11 @@ describe("tabNeedsCloseConfirm", () => {
 });
 
 describe("closeActiveTab", () => {
-	it("hands ⌘W to the window at the single-tab floor", async () => {
+	it("keeps the last tab and never closes the window at the single-tab floor", async () => {
 		useTabsStore.setState({ tabs: [tab("only")], activeTabId: "only" });
 
-		expect(closeActiveTab()).toBe("window");
-		expect(window.close).toHaveBeenCalledTimes(1);
+		expect(closeActiveTab()).toBe("nothing");
+		expect(window.close).not.toHaveBeenCalled();
 		expect(omp.tabs.close).not.toHaveBeenCalled();
 		expect(useTabsStore.getState().tabs).toHaveLength(1);
 	});

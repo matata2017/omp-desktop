@@ -3,8 +3,9 @@
  *
  * A tab whose run is live dies with its close, so it arms the chip's inline
  * confirm first; a worktree-bound tab detours to the cleanup prompt (plan/20)
- * instead of orphaning the checkout; and at the single-tab floor there is no
- * tab left to close, so ⌘W closes the window like every other tabbed app.
+ * instead of orphaning the checkout; and at the single-tab floor the last tab
+ * stays. Tauri has one window: `window.close()` there quits the whole app, so
+ * it must never stand in for closing a tab.
  */
 
 import { useAgentPagesStore } from "../stores/agent-pages";
@@ -27,9 +28,9 @@ export function tabNeedsCloseConfirm(tab: SessionTab, live: LiveTabRuntime): boo
 	return tabSignalPresentation(tab, activeRuntime).running || tab.status === "starting";
 }
 
-/** What a close request ended up doing. `"window"` = the last tab, so ⌘W closed
- *  its window instead; `"page"` = a subagent page was shown, so ⌘W closed it. */
-export type TabCloseOutcome = "closed" | "worktree-prompt" | "armed" | "window" | "page" | "nothing";
+/** What a close request ended up doing. `"page"` = a subagent page was shown,
+ *  so ⌘W closed it; `"nothing"` = no tab to close (also the single-tab floor). */
+export type TabCloseOutcome = "closed" | "worktree-prompt" | "armed" | "page" | "nothing";
 
 /** Execute a close the user already committed to (chip ✓, or ⌘W on an armed tab). */
 export function performTabClose(tab: SessionTab): TabCloseOutcome {
@@ -57,8 +58,9 @@ export function closeActiveTab(): TabCloseOutcome {
 		return "page";
 	}
 	if (tabs.length <= 1) {
-		window.close();
-		return "window";
+		// One window in Tauri: closing it terminates the whole app. Keep the last
+		// tab instead; quitting goes through the `app:quit` guard.
+		return "nothing";
 	}
 	const live: LiveTabRuntime = {
 		activeTabId,

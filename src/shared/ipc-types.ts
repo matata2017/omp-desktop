@@ -1198,8 +1198,8 @@ export interface OmpApi {
 	app: {
 		/**
 		 * Quit the whole app through the main-process guard, which confirms while
-		 * any session is still working. `window.close()` is NOT a quit: it only
-		 * shuts the focused window and leaves the rest of the session behind.
+		 * any session is still working. This shell has a single window, so
+		 * `window.close()` would end the app too — a bare exit; use this instead.
 		 */
 		quit(): void;
 		/** Filesystem path of a dropped or picked `File`; empty for in-memory files (e.g. pasted images). */
