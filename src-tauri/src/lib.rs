@@ -447,6 +447,10 @@ pub(crate) fn start_tab(app: &AppHandle, tab: TabId, launch: LaunchOptions) -> R
                 if process_alive(pid) {
                     continue;
                 }
+                if state.pool.process_pid(&tab) != Some(pid) {
+                    // A newer sidecar was attached for this tab; this watcher is stale.
+                    return;
+                }
                 let client = state.clients.lock().remove(&tab);
                 if let Some(client) = client {
                     client.reject_all("sidecar exited");

@@ -13,6 +13,10 @@ use omp_core::{Error, Result, TabId};
 /// doubles, so the pool's bookkeeping is testable without spawning processes.
 pub trait SidecarHandle: Send {
     fn send(&self, frame: &Value) -> Result<()>;
+    /// OS pid of this handle, used to ignore a watcher whose process was replaced.
+    fn pid(&self) -> Option<u32> {
+        None
+    }
     /// Recent stderr lines, for diagnosing an unexpected exit. Empty by default.
     fn stderr_tail(&self) -> Vec<String> {
         Vec::new()
@@ -23,6 +27,9 @@ pub trait SidecarHandle: Send {
 impl SidecarHandle for crate::sidecar::Sidecar {
     fn send(&self, frame: &Value) -> Result<()> {
         crate::sidecar::Sidecar::send(self, frame)
+    }
+    fn pid(&self) -> Option<u32> {
+        crate::sidecar::Sidecar::pid(self)
     }
     fn stderr_tail(&self) -> Vec<String> {
         crate::sidecar::Sidecar::stderr_tail(self)
@@ -196,6 +203,15 @@ impl<H: SidecarHandle> SidecarPool<H> {
             .unwrap_or_default()
     }
 
+    /// OS pid of the sidecar currently attached to a tab, if any.
+    pub fn process_pid(&self, tab: &TabId) -> Option<u32> {
+        self.slots
+            .lock()
+            .get(tab)
+            .and_then(|slot| slot.handle.as_ref())
+            .and_then(|handle| handle.pid())
+    }
+
     /// Atomically set the focused tab and the one or two full-stream tabs for a window.
     pub fn set_view(&self, window: &omp_core::WindowId, focused: TabId, visible: &[TabId]) -> Result<()> {
         let view = ViewState::validate(focused, visible)?;
@@ -301,12 +317,16 @@ mod tests {
         sent: Arc<Mutex<Vec<Value>>>,
         disposed: Arc<AtomicUsize>,
         tail: Vec<String>,
+        pid: Option<u32>,
     }
 
     impl SidecarHandle for FakeHandle {
         fn send(&self, frame: &Value) -> Result<()> {
             self.sent.lock().push(frame.clone());
             Ok(())
+        }
+        fn pid(&self) -> Option<u32> {
+            self.pid
         }
         fn stderr_tail(&self) -> Vec<String> {
             self.tail.clone()
@@ -324,6 +344,7 @@ mod tests {
                 sent: sent.clone(),
                 disposed: disposed.clone(),
                 tail: Vec::new(),
+                pid: None,
             },
             sent,
             disposed,
@@ -463,5 +484,21 @@ mod tests {
         );
         assert!(pool.release_process(&tab("a")));
         assert!(pool.stderr_tail(&tab("a")).is_empty());
+    }
+
+    #[test]
+    fn process_pid_reads_the_current_handle_and_tracks_replacement() {
+        let pool: SidecarPool<FakeHandle> = SidecarPool::new();
+        assert_eq!(pool.process_pid(&tab("a")), None);
+        let (mut first, _, _) = fake();
+        first.pid = Some(42);
+        pool.attach(tab("a"), first);
+        assert_eq!(pool.process_pid(&tab("a")), Some(42));
+        let (mut second, _, _) = fake();
+        second.pid = Some(43);
+        pool.attach(tab("a"), second);
+        assert_eq!(pool.process_pid(&tab("a")), Some(43));
+        assert!(pool.release_process(&tab("a")));
+        assert_eq!(pool.process_pid(&tab("a")), None);
     }
 }
