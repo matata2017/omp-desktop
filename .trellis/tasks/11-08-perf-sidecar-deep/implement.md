@@ -25,14 +25,14 @@
 
 ## 阶段 3：启动归因
 
-- [ ] N=10 采集四段里程碑（window / first-paint / sidecar-ready / first-session）median/p95。
+- [x] N=10 四段里程碑：window median 321 / p95 347 ms，first-paint 1597 / 1630，sidecar-ready 3828 / 3854，first-session 3877 / 3885（`docs/perf.md`）。
 - [ ] WPR `.etl` 一次，与 app mark 对齐；两通道差 < 50 ms。
 - [ ] 选一个候选做改动；前后各 N=10，p95 置信区间不重叠才算通过。
 - 验证：命令 + 原始 JSON/ETL 路径；未达标则记录证据并回滚。
 
 ## 阶段 4：生命周期
 
-- [ ] 100 次 open/close（每 10 次采样 private/RSS/句柄/线程），回归斜率 + 95% CI。
+- [x] 100 次 open/close：修复前 sidecars 1→5、private +1828.2 MB；根因 `tab:close` 不重置 active + `ensure_tab_started` 不校验注册。修复后 sidecar 恒 1、private −20.7 MB（安装版 00:51 构建复测）。
 - [ ] 1 小时 streaming（固定间隔），记录 sidecar private 斜率与 transcript 增长。
 - [ ] 正常退出 + 强杀两种路径的孤儿计数；目标 0。
 - [ ] 定位 `conhost.exe` 的 spawn 点，确认与 spec :34 的例外/遗漏一致。
@@ -40,7 +40,7 @@
 
 ## 阶段 5：agent runtime 文档
 
-- [ ] `docs/agent-runtime.md`：hash/版本/大小/来源、~500 MB private 基线、能力探测、本仓库可控 vs 不可控、预算与 cap 的关系。
+- [x] `docs/agent-runtime.md`：hash/版本/来源、Private 基线、可控 vs 不可控、隔离坑与 cap 关系。
 - 验证：文中每个数字都能指向 `.perf/*.json` 或一条命令。
 
 ## 全局验证

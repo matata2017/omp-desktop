@@ -74,3 +74,15 @@ SessionModelRestoreError: Could not restore model magpie/raccoon/sn-deepseek-v4-
 | 6 | 4 | 2352.7 / 2366.0 / 2328.3 MB | 2352.7 MB | 是 |
 
 每次 `clean=true`（`spawns≤6`、`exits≤1`、快照稳定）。结论：cap3 省约 550 MB 但第 4 个 tab 不 ready；4 tab 下 cap4 与 cap6 无内存差异。默认 6 保留，理由是 >4 tab 的余量，而不是 4 tab 的内存收益。
+
+## 9. 100 次 open/close：ghost tab 泄漏与修复
+
+修复前：sidecars 1→5、private +1828.2 MB、RSS +949.3 MB、handles +1480、threads +229（每 10 次 +1 个 sidecar）。
+
+根因（源码）：`ipc.rs` 的 `tab:close` 只清 slot/clients/cwds/sessions/activity，不更新 `active_tab`；`tab:get-all` 第 104 行无条件 `ensure_tab_started(active)`；`lib.rs::ensure_tab_started` 不校验 tab 是否仍在 `pool.tabs()` 里，于是已关闭的 active 被 `start_tab` → `pool.attach` 复活成 ghost sidecar。
+
+修复：
+- `tab:close`：若关闭的是 active，把 `active_tab` 切到 `pool.tabs().first()`。
+- `ensure_tab_started`：tab 不在 `pool.tabs()` 时直接返回。
+
+验证：安装版（00:51 构建）100 次 open/close，sidecar 恒 1，private −20.7 MB、RSS +2.5 MB、handles +68、threads +1。`cargo test --workspace` 177 passed。

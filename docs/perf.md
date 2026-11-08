@@ -148,3 +148,32 @@ session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `
 | 6 | 4 | 2352.7 / 2366.0 / 2328.3 MB | 2352.7 MB | 是 |
 
 结论：cap3 省约 **550 MB**，代价是第 4 个 tab 不 ready；4 tab 下 cap4 与 cap6 无内存差异。默认 6 保留（给 >4 tab 留余量），文档已对齐。
+
+## 2026-11-08：启动分段（安装版，N=10）
+
+方法：隔离 `OMP_DATA_DIR` + `PI_CODING_AGENT_DIR`（含注册表），1 个 fresh tab；`measure.ps1 -NoDrive` 拿窗口与 sidecar ready，一次 `cdp-eval` 读取 `performance` marks 换算首帧与首会话。
+
+| 里程碑 | median | p95 |
+|---|---|---|
+| 窗口可见 | 321 ms | 347 ms |
+| first paint | 1597 ms | 1630 ms |
+| sidecar ready | 3828 ms | 3854 ms |
+| first session rendered | 3877 ms | 3885 ms |
+
+窗口→首帧约 1.28 s（WebView2 初始化 + JS boot）；首帧→sidecar ready 约 2.23 s。冷启方差这次很紧（292–347 ms），三段的 p95 与中位差都在 ~60 ms 内。
+
+## 2026-11-08：100 次 tab open/close（修复前后）
+
+方法：隔离根，`cap 6`，每批 `tabs.spawn` + `tabs.close` 各 10 次，共 10 批；每批后采样进程树（Private/RSS/handles/threads）。
+
+| 指标 | 修复前 | 修复后 |
+|---|---|---|
+| sidecars | 1 → **5** | 1 → **1** |
+| total private | +1828.2 MB | **−20.7 MB**（811.2 → 790.5） |
+| total RSS | +949.3 MB | +2.5 MB |
+| handles | +1480 | +68 |
+| threads | +229 | +1 |
+
+根因：`tab:close` 不重置 `active_tab`；`tab:get-all` 无条件对 active 调 `ensure_tab_started`，而 `ensure_tab_started` 不校验 tab 是否仍注册 → 已关闭的 active 被复活成 ghost sidecar，每批 +1（约 500 MB/个）。
+
+修复：`tab:close` 在关闭 active 时把 active 切到剩余的第一个 tab；`ensure_tab_started` 对未注册 tab 直接返回。安装版（00:51 构建）复测 100 次：sidecar 恒 1，private 不增长。
