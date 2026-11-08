@@ -1078,9 +1078,12 @@ pub async fn ipc_invoke(
         "bench:abort" => Ok(json!(state.bench.abort())),
 
         // ---- stats dashboard -------------------------------------------------------------
-        "stats:url" => match state.stats.port() {
-            Some(port) => Ok(json!({ "url": format!("http://127.0.0.1:{port}/") })),
-            None => Ok(json!({ "url": Value::Null, "unavailable": true })),
+        // Starting the dashboard only when something asks for it keeps 97 MB out of the idle
+        // footprint. /trace reads this URL before any stats component mounts, so the lazy start
+        // has to live here too, not only in stats:fetch.
+        "stats:url" => match state.stats.ensure_running().await {
+            Ok(port) => Ok(json!({ "url": format!("http://127.0.0.1:{port}/") })),
+            Err(err) => Ok(json!({ "url": Value::Null, "unavailable": true, "error": err.to_string() })),
         },
         "stats:fetch" => {
             let path = payload

@@ -34,3 +34,6 @@ Thumbs.db
 
 # tauri-build generated ACL schemas
 /src-tauri/gen/schemas/
+
+# Perf measurement output (JSON baselines and screenshots)
+/.perf/

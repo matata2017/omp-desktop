@@ -270,7 +270,7 @@ fn route_frame(app: &AppHandle, tab: &TabId, frame: Value) {
 
     if frame_type == "ready" {
         state.ready_tabs.lock().insert(tab.clone());
-        tracing::info!(tab = %tab, "sidecar ready");
+        tracing::info!(tab = %tab, epoch_ms = epoch_ms(), "sidecar ready");
         // Agent tabs get the scheduler tools; a chat tab cannot schedule work.
         let kind = state.tab_kinds.lock().get(tab).copied().unwrap_or(TabKind::Agent);
         if kind == TabKind::Agent {
@@ -430,8 +430,70 @@ pub(crate) fn start_tab(app: &AppHandle, tab: TabId, launch: LaunchOptions) -> R
     state.clients.lock().insert(tab.clone(), client);
     state.tab_cwds.lock().insert(tab.clone(), cwd);
     state.tab_kinds.lock().insert(tab.clone(), kind);
-    state.pool.attach(tab, sidecar);
+    let pid = sidecar.pid();
+    state.pool.attach(tab.clone(), sidecar);
+    // Watch the child: without this the UI keeps saying "ready" after the process dies and every
+    // command times out, which reads as "sidecar ready but not answering".
+    if let Some(pid) = pid {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                let state = app.state::<AppState>();
+                // A closed tab already dropped the handle, so stop watching.
+                if !state.clients.lock().contains_key(&tab) {
+                    return;
+                }
+                if process_alive(pid) {
+                    continue;
+                }
+                let client = state.clients.lock().remove(&tab);
+                if let Some(client) = client {
+                    client.reject_all("sidecar exited");
+                }
+                if let Some(batcher) = state.batchers.lock().remove(&tab) {
+                    batcher.dispose();
+                }
+                state.ready_tabs.lock().remove(&tab);
+                state.pool.release_process(&tab);
+                tracing::warn!(tab = %tab, pid, "sidecar exited; state cleared");
+                let _ = app.emit(
+                    crate::events::SIDECAR_STATUS,
+                    json!({ "tabId": tab, "payload": { "status": "exited" } }),
+                );
+                return;
+            }
+        });
+    }
     Ok(())
+}
+
+/// Whether a pid still names a live process. `OpenProcess` fails for a reaped child, and
+/// `GetExitCodeProcess` reports STILL_ACTIVE while it runs.
+#[cfg(windows)]
+fn process_alive(pid: u32) -> bool {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    // STILL_ACTIVE is 259; the bindings no longer export it by name.
+    const STILL_ACTIVE: u32 = 259;
+    unsafe {
+        match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(handle) => {
+                let mut code = 0u32;
+                let read = GetExitCodeProcess(handle, &mut code).is_ok();
+                let _ = CloseHandle(handle);
+                read && code == STILL_ACTIVE
+            }
+            Err(_) => false,
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn process_alive(_pid: u32) -> bool {
+    true
 }
 
 /// Boot a warm spare after a short delay when there is room for another process.
@@ -765,6 +827,7 @@ pub(crate) fn persist_layout(state: &AppState) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let boot_epoch_ms = epoch_ms();
     let log_dir = omp_core::paths::data_dir();
     std::fs::create_dir_all(&log_dir).ok();
     let file_appender = tracing_appender::rolling::never(&log_dir, "runtime.log");
@@ -775,7 +838,7 @@ pub fn run() {
         .with_writer(non_blocking)
         .with_ansi(false)
         .init();
-    tracing::info!("romp run() start");
+    tracing::info!(target: "boot", mark = "process_start", epoch_ms = boot_epoch_ms, "boot");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_deep_link::init())
@@ -802,6 +865,10 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                boot_mark("window_visible");
+            }
             let data_dir = omp_core::paths::data_dir();
             std::fs::create_dir_all(&data_dir).ok();
 
@@ -932,18 +999,9 @@ pub fn run() {
                 }
             }
 
-            // The dashboard is spawned on app start and killed on quit (blueprint:
-            // stats-server.ts), so opening the stats panel never races a cold start.
-            {
-                let handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let state = handle.state::<AppState>();
-                    match state.stats.ensure_running().await {
-                        Ok(port) => tracing::info!(port, "stats dashboard ready"),
-                        Err(err) => tracing::warn!("stats dashboard unavailable: {err}"),
-                    }
-                });
-            }
+            // The dashboard is not spawned here: stats:url and stats:fetch start it on first
+            // use. Eager startup cost a resident 97 MB child for a panel most sessions never
+            // open. It is still killed on quit.
             for id in &tab_ids {
                 app.state::<AppState>().pool.register_deferred(id.clone());
             }
@@ -971,6 +1029,19 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![ipc::ipc_invoke])
         .run(tauri::generate_context!())
         .expect("error while running Romp");
+}
+
+/// Milliseconds since the Unix epoch, so the measurement harness can align boot logs with
+/// its own stopwatch without parsing formatted timestamps.
+fn epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn boot_mark(mark: &'static str) {
+    tracing::info!(target: "boot", mark = mark, epoch_ms = epoch_ms(), "boot");
 }
 
 #[cfg(test)]

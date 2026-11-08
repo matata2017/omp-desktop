@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Romp \u2014 Rust/Tauri desktop shell around the oh-my-pi GUI renderer",
+  "description": "Romp — Rust/Tauri desktop shell around the oh-my-pi GUI renderer",
   "scripts": {
     "dev:web": "vite",
     "build:web": "vite build",
@@ -12,7 +12,9 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "perf:gate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/gate.ps1",
+    "ui:audit": "node scripts/ui/audit.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "6.10.4",
@@ -61,6 +63,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "5.2.0",
+    "axe-core": "^4.14.0",
     "jsdom": "^26.0.0",
     "linkedom": "^0.18.13",
     "tailwindcss": "^4.0.0",

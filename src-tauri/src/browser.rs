@@ -303,7 +303,14 @@ impl BrowserHost {
                 page.webview.eval("window.stop()").map_err(|e| e.to_string())?;
                 page.loading = false;
             }
-            "devtools" => page.webview.open_devtools(),
+            "devtools" => {
+                // Tauri exposes open_devtools only in debug builds (or with the devtools
+                // feature). Keep the IPC surface stable and refuse the action in release.
+                #[cfg(debug_assertions)]
+                page.webview.open_devtools();
+                #[cfg(not(debug_assertions))]
+                return Err("devtools are disabled in release builds".to_owned());
+            }
             "external" => {
                 let _ = tauri_plugin_opener::open_url(page.url.clone(), None::<&str>);
             }
@@ -406,7 +413,7 @@ impl BrowserHost {
         use webview2_com::CapturePreviewCompletedHandler;
         use webview2_com::Microsoft::Web::WebView2::Win32::COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG;
         use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
-        use windows::Win32::System::Com::{IStream, STREAM_SEEK_SET};
+        use windows::Win32::System::Com::STREAM_SEEK_SET;
 
         let page_id = self.active.lock().get(tab).copied()?;
         let webview = self

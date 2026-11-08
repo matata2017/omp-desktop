@@ -254,6 +254,7 @@ function SessionTranscript() {
 		streamingMessage,
 	]);
 
+
 	const parentRef = useRef<HTMLDivElement>(null);
 	const canvasRef = useRef<HTMLDivElement>(null);
 	const conversationAnchors = useMemo(() => buildConversationAnchors(rows, rowKeys), [rows, rowKeys]);
@@ -293,6 +294,15 @@ function SessionTranscript() {
 		(status === "starting" ||
 			(status === "ready" && tabHasHistory && rows.length === 0 && !isStreaming)) &&
 		(tabHasHistory || readOnly !== null);
+	// Measurement hook for the boot harness: fires once, after the transcript area is usable.
+	// A fresh tab marks on its start screen; a resumed tab waits until history replaces the
+	// spinner, so the mark never lands on an empty placeholder.
+	const firstSessionMarked = useRef(false);
+	useEffect(() => {
+		if (firstSessionMarked.current || status !== "ready" || awaitingTranscript) return;
+		firstSessionMarked.current = true;
+		requestAnimationFrame(() => performance.mark("chat:first-session-rendered"));
+	}, [status, awaitingTranscript]);
 
 	const virtualizer = useVirtualizer({
 		count: rows.length,

@@ -116,7 +116,7 @@ export const zh: Record<string, string> = {
 	"tabs.pair": "分屏组合",
 	"tabs.pickPartner": "与「{title}」分屏显示",
 	"tabs.allTabs": "全部标签页",
-	"tabs.allTabsHidden": "全部标签页——另有 {count} 个不在视野内",
+	"tabs.allTabsHidden": "全部标签页：另有 {count} 个不在视野内",
 	"tabs.search": "搜索标签页",
 	"tabs.searchEmpty": "没有匹配的标签页",
 	"tabs.current": "当前标签页",
@@ -341,7 +341,7 @@ export const zh: Record<string, string> = {
 	"sidebar.newWork": "新建工作任务",
 	"sidebar.quickChat": "快速聊天",
 	"sidebar.navigation.expand": "展开更多导航",
-	"contextStrategy.title": "上下文策略 — 当前模型上下文写满时会发生什么",
+	"contextStrategy.title": "上下文策略：当前模型上下文写满时会发生什么",
 	"contextStrategy.strategyLabel": "策略",
 	"contextStrategy.window": "{size} 窗口",
 	"contextStrategy.windowUnknown": "窗口大小未知",
@@ -415,7 +415,7 @@ export const zh: Record<string, string> = {
 	"chatContext.scope": "仅作用于当前聊天",
 	"chatContext.allSettings": "新聊天的默认设置",
 	"notices.title": "通知",
-	"notices.unread": "通知 — {count} 条未读",
+	"notices.unread": "通知：{count} 条未读",
 	"notices.unreadOne": "未读",
 	"notices.markAllRead": "全部标为已读",
 	"notices.empty": "定时任务完成后会显示在这里。",
@@ -856,7 +856,7 @@ export const zh: Record<string, string> = {
 	"cmd.guidedGoal.desc": "代理采访你以设置目标",
 
 	// Unavailable reason
-	"unavailable.chatSession": "需要代理会话——聊天会话没有工具",
+	"unavailable.chatSession": "需要代理会话。聊天会话没有工具。",
 	"unavailable.tuiOnly": "仅限 TUI — 尚未通过 RPC 提供",
 	"usage.title": "用量与配额",
 	"usage.providerQuotas": "提供商配额",
@@ -2257,7 +2257,7 @@ export const zh: Record<string, string> = {
 	"sessionSwitch.openNewTab": "在新标签页打开",
 	"sessionSwitch.openNewWindow": "在新窗口打开",
 	"sessionSwitch.switchAnyway": "中断并切换",
-	"sessionSwitch.busyBlocked": "当前会话仍在运行——请先中止（Esc），或使用新标签页并行操作。",
+	"sessionSwitch.busyBlocked": "当前会话仍在运行。请先中止（Esc），或使用新标签页并行操作。",
 
 	// Command palette additions
 	"palette.failed": "命令执行失败",

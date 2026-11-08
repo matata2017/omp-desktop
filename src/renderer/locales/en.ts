@@ -121,7 +121,7 @@ export const en: Record<string, string> = {
 	"tabs.pair": "Split pair",
 	"tabs.pickPartner": "Show beside “{title}”",
 	"tabs.allTabs": "All tabs",
-	"tabs.allTabsHidden": "All tabs — {count} out of view",
+	"tabs.allTabsHidden": "All tabs: {count} out of view",
 	"tabs.search": "Search tabs",
 	"tabs.searchEmpty": "No matching tabs",
 	"tabs.current": "Current tab",
@@ -348,7 +348,7 @@ export const en: Record<string, string> = {
 	"sidebar.newWork": "New work task",
 	"sidebar.quickChat": "Quick chat",
 	"sidebar.navigation.expand": "Show more navigation",
-	"contextStrategy.title": "Context strategy — what happens when this model's context fills",
+	"contextStrategy.title": "Context strategy: what happens when this model's context fills",
 	"contextStrategy.strategyLabel": "Strategy",
 	"contextStrategy.window": "{size} window",
 	"contextStrategy.windowUnknown": "Window size unknown",
@@ -433,7 +433,7 @@ export const en: Record<string, string> = {
 	"chatContext.scope": "Applies to this chat only",
 	"chatContext.allSettings": "Defaults for new chats",
 	"notices.title": "Notifications",
-	"notices.unread": "Notifications — {count} unread",
+	"notices.unread": "Notifications: {count} unread",
 	"notices.unreadOne": "Unread",
 	"notices.markAllRead": "Mark all read",
 	"notices.empty": "Scheduled tasks show up here when they finish.",
@@ -877,7 +877,7 @@ export const en: Record<string, string> = {
 	"cmd.guidedGoal.desc": "Agent interviews you for goal setup",
 
 	// Unavailable reason
-	"unavailable.chatSession": "Needs an agent session — chat sessions run without tools",
+	"unavailable.chatSession": "Needs an agent session. Chat sessions run without tools.",
 	"unavailable.tuiOnly": "TUI-only — not yet available via RPC",
 	"usage.title": "Usage & quotas",
 	"usage.providerQuotas": "Provider quotas",
@@ -1848,7 +1848,7 @@ export const en: Record<string, string> = {
 	"settings.editors.kvKey": "key",
 	"settings.editors.kvValue": "value",
 	"settings.editors.kvRemove": "Remove row",
-	"settings.editors.kvDuplicateKey": "Another entry already uses “{key}”. Give this row a different name.",
+	"settings.editors.kvDuplicateKey": "Another entry already uses \"{key}\". Give this row a different name.",
 	"settings.editors.limitAdd": "Add provider limit…",
 	"settings.editors.limitUnlimited": "unlimited",
 	"settings.editors.errPositive": "Enter a positive number",
@@ -2314,7 +2314,7 @@ export const en: Record<string, string> = {
 	"sessionSwitch.openNewTab": "Open in new tab",
 	"sessionSwitch.openNewWindow": "Open in new window",
 	"sessionSwitch.switchAnyway": "Abort & switch",
-	"sessionSwitch.busyBlocked": "A turn is still running — abort it first (Esc), or use a new tab for parallel work.",
+	"sessionSwitch.busyBlocked": "A turn is still running. Abort it first (Esc), or use a new tab for parallel work.",
 
 	// Command palette additions
 	"palette.failed": "Command failed",

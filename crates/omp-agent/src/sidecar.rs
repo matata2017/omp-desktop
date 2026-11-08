@@ -108,6 +108,11 @@ impl Sidecar {
         })
     }
 
+    /// OS pid of the child, for liveness checks from outside the struct.
+    pub fn pid(&self) -> Option<u32> {
+        self.child.id()
+    }
+
     pub fn generation(&self) -> u32 {
         self.generation
     }

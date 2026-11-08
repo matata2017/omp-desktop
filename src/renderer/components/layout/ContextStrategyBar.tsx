@@ -243,7 +243,6 @@ export function ContextStrategyBar() {
 				type="button"
 				aria-expanded={open}
 				aria-haspopup="dialog"
-				aria-label={t("contextStrategy.title")}
 				onClick={() => setOpen(value => !value)}
 				title={t("contextStrategy.title")}
 				className="omp-pressable flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md px-1.5 text-omp-xs text-(--omp-dim) hover:bg-(--omp-selected-bg) hover:text-(--omp-muted)"

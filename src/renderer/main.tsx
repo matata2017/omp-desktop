@@ -36,3 +36,9 @@ createRoot(container, {
 		</I18nProvider>
 	</RootErrorBoundary>,
 );
+
+// Boot harness mark. The second frame runs after the first paint, so the delta from process
+// start includes style and layout rather than only the React commit.
+requestAnimationFrame(() => {
+	requestAnimationFrame(() => performance.mark("boot:first-paint"));
+});
