@@ -416,6 +416,14 @@ pub async fn ipc_invoke(
         // ---- Files ----------------------------------------------------------------------
         "fs:read" => read_file(state.cwd.clone(), payload),
         "fs:list" => list_tree(state.cwd.clone(), payload),
+        "fs:read-image" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
+            read_image(tab_cwd(&state, tab.as_ref()), &payload)
+        }
+        "fs:read-plan" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
+            read_plan(tab_cwd(&state, tab.as_ref()), &payload)
+        }
 
         // ---- Logs -----------------------------------------------------------------------
         "runtime:log-path" => Ok(json!(state.data_dir.join("runtime.log").to_string_lossy())),
@@ -1299,6 +1307,141 @@ fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+const FS_IMAGE_MAX_BYTES: u64 = 25_000_000;
+
+/// `fs:read-image`: sniff, then return the file as a data URL. Only real image
+/// bytes pass, so a markdown `![alt](path)` cannot turn into a generic file read.
+fn read_image(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
+    let fail = |error: &str| {
+        json!({ "ok": false, "dataUrl": Value::Null, "mime": Value::Null, "size": 0, "error": error })
+    };
+    let Some(raw) = payload.get("path").and_then(Value::as_str).filter(|path| !path.is_empty()) else {
+        return Ok(fail("Invalid path"));
+    };
+    let Some(path) = resolve_target(raw, &cwd) else {
+        return Ok(fail("Invalid path"));
+    };
+    let Ok(meta) = fs::metadata(&path) else {
+        return Ok(fail("Invalid path"));
+    };
+    if !meta.is_file() {
+        return Ok(fail("Not a file"));
+    }
+    if meta.len() > FS_IMAGE_MAX_BYTES {
+        return Ok(fail("Image too large"));
+    }
+    let Ok(bytes) = fs::read(&path) else {
+        return Ok(fail("Invalid path"));
+    };
+    let Some(mime) = sniff_image_mime(&bytes) else {
+        return Ok(fail("Not a supported image"));
+    };
+    use base64::prelude::{Engine as _, BASE64_STANDARD};
+    let data_url = format!("data:{mime};base64,{}", BASE64_STANDARD.encode(&bytes));
+    Ok(json!({ "ok": true, "dataUrl": data_url, "mime": mime, "size": bytes.len() }))
+}
+
+/// Image type by magic bytes; SVG only when the text actually starts as one.
+fn sniff_image_mime(header: &[u8]) -> Option<&'static str> {
+    if header.starts_with(&[0x89, b'P', b'N', b'G']) {
+        return Some("image/png");
+    }
+    if header.starts_with(&[0xff, 0xd8, 0xff]) {
+        return Some("image/jpeg");
+    }
+    if header.starts_with(b"GIF89a") || header.starts_with(b"GIF87a") {
+        return Some("image/gif");
+    }
+    if header.starts_with(b"RIFF") && header.get(8..12) == Some(&b"WEBP"[..]) {
+        return Some("image/webp");
+    }
+    if header.get(4..8) == Some(&b"ftyp"[..]) {
+        let brand = header.get(8..12);
+        if brand == Some(&b"avif"[..]) || brand == Some(&b"avis"[..]) {
+            return Some("image/avif");
+        }
+    }
+    if header.starts_with(b"BM") {
+        return Some("image/bmp");
+    }
+    if header.starts_with(&[0x00, 0x00, 0x01, 0x00]) {
+        return Some("image/x-icon");
+    }
+    let text = String::from_utf8_lossy(&header[..header.len().min(512)]);
+    let text = text.trim_start().to_ascii_lowercase();
+    if text.starts_with("<svg") || (text.starts_with("<?xml") && text.contains("<svg")) {
+        return Some("image/svg+xml");
+    }
+    None
+}
+
+/// `fs:read-plan`: read the configured plan file, else the newest `*plan.md`
+/// under the session-local root. Confined to the workspace and the sessions dir.
+fn read_plan(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
+    let fail =
+        |error: &str| json!({ "ok": false, "path": Value::Null, "content": Value::Null, "error": error });
+    let Some(raw) = payload.get("fsPath").and_then(Value::as_str).filter(|path| !path.is_empty()) else {
+        return Ok(fail("Invalid path"));
+    };
+    let sessions = omp_session::sessions_root();
+    let Some(target) =
+        resolve_within(&cwd, raw).or_else(|| resolve_within(&sessions, raw))
+    else {
+        return Ok(fail("Path escapes allowed roots"));
+    };
+    let local_root =
+        match payload.get("localRoot").and_then(Value::as_str).filter(|root| !root.is_empty()) {
+            Some(root) => match resolve_within(&cwd, root).or_else(|| resolve_within(&sessions, root)) {
+                Some(path) => Some(path),
+                None => return Ok(fail("Path escapes allowed roots")),
+            },
+            None => None,
+        };
+    let picked = if target.is_file() {
+        Some(target)
+    } else {
+        local_root.as_deref().and_then(newest_plan_file)
+    };
+    let Some(picked) = picked else {
+        return Ok(json!({ "ok": true, "path": Value::Null, "content": Value::Null }));
+    };
+    match fs::read_to_string(&picked) {
+        Ok(content) => Ok(json!({ "ok": true, "path": picked.to_string_lossy(), "content": content })),
+        Err(err) => Ok(fail(&err.to_string())),
+    }
+}
+
+/// Newest top-level `*plan.md` in `root`; the agent names plans itself, so the
+/// configured path alone often misses the one being shown.
+fn newest_plan_file(root: &Path) -> Option<PathBuf> {
+    let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
+    for entry in fs::read_dir(root).ok()?.flatten() {
+        if !entry.file_name().to_string_lossy().to_ascii_lowercase().ends_with("plan.md") {
+            continue;
+        }
+        let Ok(meta) = entry.metadata() else { continue };
+        if !meta.is_file() {
+            continue;
+        }
+        let modified = meta.modified().unwrap_or(std::time::UNIX_EPOCH);
+        if best.as_ref().is_none_or(|(time, _)| modified > *time) {
+            best = Some((modified, entry.path()));
+        }
+    }
+    best.map(|(_, path)| path)
+}
+
+/// Resolve `raw` inside `root`; absolute paths must already be inside it.
+fn resolve_within(root: &Path, raw: &str) -> Option<PathBuf> {
+    let root = normalize_path(&std::path::absolute(root).ok()?);
+    let candidate = normalize_path(&if Path::new(raw).is_absolute() {
+        PathBuf::from(raw)
+    } else {
+        root.join(raw)
+    });
+    (candidate == root || candidate.starts_with(&root)).then_some(candidate)
+}
+
 /// What the eviction sweep needs to know about one tab. Split out from the sweep so the rules can
 /// be exercised without an app handle: releasing a sidecar discards whatever it was holding.
 #[derive(Debug, Clone, Copy)]
@@ -1575,15 +1718,6 @@ fn merge_json(mut base: Value, patch: Value) -> Value {
     base
 }
 
-fn resolve_in(cwd: &Path, path: &str) -> PathBuf {
-    let candidate = PathBuf::from(path);
-    if candidate.is_absolute() {
-        candidate
-    } else {
-        cwd.join(candidate)
-    }
-}
-
 fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
     let path = payload
         .get("path")
@@ -1594,7 +1728,7 @@ fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
         .and_then(Value::as_u64)
         .unwrap_or(FS_READ_CAP)
         .min(FS_READ_CAP);
-    let resolved = resolve_in(&cwd, path);
+    let resolved = resolve_target(path, &cwd).ok_or_else(|| "path escapes the workspace".to_owned())?;
     let bytes = std::fs::read(&resolved).map_err(|e| e.to_string())?;
     let size = bytes.len() as u64;
     let truncated = size > max_bytes;
@@ -1610,11 +1744,12 @@ fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
 }
 
 fn list_tree(cwd: PathBuf, payload: Value) -> Result<Value, String> {
-    let root = payload
-        .get("path")
-        .and_then(Value::as_str)
-        .map(|p| resolve_in(&cwd, p))
-        .unwrap_or(cwd);
+    let root = match payload.get("path").and_then(Value::as_str) {
+        Some(path) => {
+            resolve_target(path, &cwd).ok_or_else(|| "path escapes the workspace".to_owned())?
+        }
+        None => cwd,
+    };
     let mut entries = Vec::new();
     let mut truncated = false;
     let mut stack = vec![(root.clone(), 0usize)];
@@ -1723,14 +1858,6 @@ mod tests {
         let base = json!({ "theme": "dark", "lang": "en" });
         let merged = merge_json(base, json!({ "lang": "zh" }));
         assert_eq!(merged, json!({ "theme": "dark", "lang": "zh" }));
-    }
-
-    #[test]
-    fn resolve_in_keeps_absolute_paths() {
-        let cwd = PathBuf::from("D:/w");
-        assert_eq!(resolve_in(&cwd, "a/b.txt"), PathBuf::from("D:/w").join("a/b.txt"));
-        let absolute = resolve_in(&cwd, "C:/x/y.txt");
-        assert!(absolute.is_absolute());
     }
 
     #[test]
@@ -1860,5 +1987,36 @@ mod tests {
             resolve_target("\\\\nas\\share\\doc.md", cwd),
             Some(PathBuf::from("\\\\nas\\share\\doc.md"))
         );
+    }
+
+    #[test]
+    fn sniff_image_mime_recognises_the_shipped_formats() {
+        assert_eq!(sniff_image_mime(&[0x89, b'P', b'N', b'G', 0, 0, 0, 0]), Some("image/png"));
+        assert_eq!(sniff_image_mime(&[0xff, 0xd8, 0xff, 0]), Some("image/jpeg"));
+        assert_eq!(sniff_image_mime(b"GIF89a...."), Some("image/gif"));
+        assert_eq!(sniff_image_mime(b"RIFF....WEBP"), Some("image/webp"));
+        assert_eq!(sniff_image_mime(b"....ftypavif"), Some("image/avif"));
+        assert_eq!(sniff_image_mime(b"BM......"), Some("image/bmp"));
+        assert_eq!(sniff_image_mime(&[0x00, 0x00, 0x01, 0x00]), Some("image/x-icon"));
+        assert_eq!(sniff_image_mime(b"  <svg xmlns=\"\">"), Some("image/svg+xml"));
+        assert_eq!(sniff_image_mime(b"plain text"), None);
+    }
+
+    #[test]
+    fn resolve_within_refuses_escapes() {
+        let root = std::env::temp_dir();
+        assert!(resolve_within(&root, "plan.md").is_some());
+        assert!(resolve_within(&root, "../escape.md").is_none());
+        assert!(resolve_within(&root, "..").is_none());
+    }
+
+    #[test]
+    fn newest_plan_file_ignores_other_names_and_directories() {
+        let root = std::env::temp_dir().join(format!("romp-plan-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("dir-plan.md")).unwrap();
+        std::fs::write(root.join("notes.md"), "x").unwrap();
+        std::fs::write(root.join("case-plan.md"), "plan").unwrap();
+        assert_eq!(newest_plan_file(&root), Some(root.join("case-plan.md")));
+        std::fs::remove_dir_all(root).ok();
     }
 }

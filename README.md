@@ -76,7 +76,7 @@ bunx tauri build
 ## 测试与工具
 
 ```bash
-cargo test --workspace     # 170 passed（16 suites）
+cargo test --workspace     # 172 passed（16 suites）
 bun run typecheck          # tsc --noEmit
 bun run test               # 1589 passed（187 files）
 bun run perf:gate          # 先跑 measure.ps1 生成 .perf/release-idle.json；基线在 docs/perf-baseline.json
