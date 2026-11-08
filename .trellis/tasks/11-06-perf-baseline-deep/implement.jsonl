@@ -1,0 +1,4 @@
+{"file": "docs/perf.md", "reason": "existing dev-build methodology, numbers, and measurement pitfalls"}
+{"file": "docs/architecture.md", "reason": "sidecar lifecycle and process model decisions"}
+{"file": "docs/handoff.md", "reason": "verification recipes and upstream divergence rules"}
+{"file": ".trellis/spec/guides/index.md", "reason": "cross-layer and reuse checks before changing shared values"}
