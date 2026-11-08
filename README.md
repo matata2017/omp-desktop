@@ -22,7 +22,7 @@ crates/       常驻 Rust 服务：omp-agent / omp-core / omp-rpc /
 resources/    内置 omp sidecar（omp.exe，被 .gitignore 排除）
 ```
 
-一个活动 tab 对应一个 `omp --mode rpc-ui` 子进程，约 231 MB。共享单个 sidecar 服务多个 tab 的做法已用 `scripts/perf/probe-shared.mjs` 否决：切换会话会让在途回答脱离观察者，事件帧不带会话归属。常驻进程上限由 `ROMP_MAX_SIDECARS` 控制（默认 3），超出时按 LRU 回收空闲 tab。设计决定见 [`docs/architecture.md`](docs/architecture.md)。
+一个活动 tab 对应一个 `omp --mode rpc-ui` 子进程，约 240 MB RSS / 约 500 MB private（2026-11-08 安装版实测）。共享单个 sidecar 服务多个 tab 的做法已用 `scripts/perf/probe-shared.mjs` 否决：切换会话会让在途回答脱离观察者，事件帧不带会话归属。常驻进程上限由 `ROMP_MAX_SIDECARS` 控制（默认 6），超出时按 LRU 回收空闲 tab。设计决定见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 构建与运行
 
@@ -57,7 +57,7 @@ bunx tauri build
 |---|---|
 | `OMP_SIDECAR` | sidecar 路径。优先级最高，开发时默认 `resources/omp.exe` |
 | `OMP_DATA_DIR` | 数据目录，默认 `%APPDATA%\dev.romp.desktop` |
-| `ROMP_MAX_SIDECARS` | 常驻 sidecar 上限，默认 3 |
+| `ROMP_MAX_SIDECARS` | 常驻 sidecar 上限，默认 6 |
 | `ROMP_STOCK_SIDECAR` | 设置后按上游 sidecar 的能力探测，不启用 fork 专属参数 |
 | `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` | 传给 WebView2，例如 `--remote-debugging-port=9222` |
 
@@ -76,7 +76,7 @@ bunx tauri build
 ## 测试与工具
 
 ```bash
-cargo test --workspace     # 176 passed（16 suites）
+cargo test --workspace     # 177 passed（16 suites）
 bun run typecheck          # tsc --noEmit
 bun run test               # 1589 passed（187 files）
 bun run perf:gate          # 先跑 measure.ps1 生成 .perf/release-idle.json；基线在 docs/perf-baseline.json

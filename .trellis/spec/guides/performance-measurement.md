@@ -27,7 +27,7 @@ Rust 侧 `boot` 日志带 `epoch_ms`，renderer 侧 `performance.mark`（`boot:f
 
 ## 进程生命周期
 
-一个 tab 一个 `omp --mode rpc-ui` 进程（约 231 MB）。共享 sidecar 已用 `probe-shared.mjs` 否决：切换会让在途流式回答脱离观察者，事件帧没有会话归属，命令也不带 sessionId。决定见 `docs/architecture.md`。
+一个 tab 一个 `omp --mode rpc-ui` 进程（约 240 MB RSS；Private 口径约 490–540 MB，见 `docs/perf.md` 与 11-08 任务）。
 
 `omp stats` **懒启动**：`ipc.rs` 的 `stats:url` 和 `stats:fetch` 都 `ensure_running()`，setup 不预启动。只删 setup 的 spawn 会让 `/trace`（先调 `stats.url()`，不挂载统计组件）一直报“未就绪”。省下的 97 MB 是拿 `/trace` 换不得的，改完必须 CDP 实跑一次 `stats.url()`，确认调用前 0 个、调用后 1 个本仓库 `omp.exe stats` 子进程。
 
@@ -35,7 +35,7 @@ Windows 上，从 GUI 主进程 spawn 的每个 `omp.exe` 子进程都必须带 
 
 ## 预算
 
-固定开销约 480 MB + 每 tab 约 240 MB。`gate.ps1` 回归超过 `-MaxRegressionPct`（默认 10%）或 `readyTimedOut` 就 exit 1。冷启 275–694 ms、首帧 1.7–2.8 s 的方差较大（见 `docs/perf.md`），单次结果不可当预算；传了 `-MaxColdStartMs` 时 gate 用绝对阈值、跳过紧相对比较。
+固定开销约 480 MB + 每 tab 约 240 MB（**均为 WorkingSet 口径**）。Private 口径见 11-08 实测：每 sidecar 约 490–540 MB，固定部分约 388 MB（单样本待复核）；两套口径不可相加。`gate.ps1` 回归超过 `-MaxRegressionPct`（默认 10%）或 `readyTimedOut` 就 exit 1。冷启 275–694 ms、首帧 1.7–2.8 s 的方差较大（见 `docs/perf.md`），单次结果不可当预算；传了 `-MaxColdStartMs` 时 gate 用绝对阈值、跳过紧相对比较。
 
 ## renderer 改动
 

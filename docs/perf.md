@@ -38,13 +38,13 @@
 | 2 tab 空闲 | **978.7 MB** | 529.0 MB / 2 | 21.6 MB / 2 | 442.6 MB / 6 | 34.7 MB | 11 |
 | 4 tab 空闲 | **1442.7 MB** | 928.9 MB / 4 | 43.2 MB / 4 | 441.5 MB / 6 | 34.6 MB | 15 |
 
-每多一个 tab 约 **+244 MB**（(1442.7 − 712) / 3 = 243.6 MB），其中约 231 MB 是 sidecar、约 11 MB 是 helper（helper 随 tab 精确线性：10.8 / 21.6 / 43.2 MB）。app 与 WebView2 是固定开销，约 480 MB。
+每多一个 tab 约 **+244 MB**（(1442.7 − 712) / 3 = 243.6 MB），其中约 231 MB 是 sidecar、约 11 MB 是 helper（helper 随 tab 精确线性：10.8 / 21.6 / 43.2 MB）。app 与 WebView2 是固定开销，约 480 MB。以上均为 **WorkingSet 口径**；2026-11-08 安装版 Private 实测：每 sidecar 约 490–540 MB（N=3），固定部分约 388 MB（单样本待复核），两套口径不可相加。
 
 2 tab 那行的 sidecar 为 264.5 MB/个，明显高于 1 tab 的 231.4 和 4 tab 的 232.2，属于跨次采样异常；978.7 MB 含这个偏高样本，边际估算以 1→4 tab 的差值为准。
 
 改懒启动之前，同样的构建是 840.8 / 1075.9 / 1553.5 MB，旧 breakdown 里每一行都有一个常驻 **97 MB** 的 `omp stats` 子进程。新旧同口径差值是 **128.8 / 97.2 / 110.8 MB**，不全是 stats，还叠了跨次测量方差。dev 构建同口径是 883–894 MB（1 tab）与 1273 MB（4 tab），**均为改懒启动之前的旧构建、同样含预启动 stats**，只做结构相对比较。
 
-原计划的 ①120 MB、②250 MB、③500 MB 全部不成立：只要常驻一个 agent 进程，1 tab 就已经 712 MB。可执行的表述是“固定开销约 480 MB + 每 tab 约 240 MB”。
+原计划的 ①120 MB、②250 MB、③500 MB 全部不成立：只要常驻一个 agent 进程，1 tab 就已经 712 MB。可执行的表述是“固定开销约 480 MB + 每 tab 约 240 MB”（**WorkingSet 口径**；Private 口径见上文与 11-08 任务）。
 
 ## stats 改为懒启动
 
@@ -127,3 +127,24 @@ powershell -File scripts/perf/gate.ps1 -Baseline docs/perf-baseline.json -Curren
 - **首帧 1.7–2.8 s**：WebView2 初始化占主因；区分 environment 创建与页面加载需要 ETW 轨迹。
 - **冷启方差 275–694 ms**（干净批次）：受 OS 缓存与 WebView2 版本影响；694 / 2763 / 5357 / 5420 ms 那一批次出现在刚重编完 release、系统缓存冷的时候，进程树仍是 1 sidecar / 9 进程 / 711.8 MB，属于真实方差而非坏测量。脚本取中位数，单次结果不可当预算。
 - **首次 `/trace` 有 spawn 等待**：实测首启 312 ms / 二次 7 ms（上限 15 s），`openSessionTrace` 无 loading 提示。
+
+## 2026-11-08：sidecar cap 与 fresh tab（P0）
+
+方法：隔离 `OMP_DATA_DIR` + `PI_CODING_AGENT_DIR`；1 个 fresh active tab，短调用 CDP 逐次 `tab:spawn` 到 4，激活后稳定 8 s 再采样；`ROMP_MAX_SIDECARS` 显式设为 3 / 6。
+
+| cap | spawn 序列 | sidecars | total private | total RSS | 结果 |
+|---|---|---|---|---|---|
+| 3 | 1→2 2→3 3→3 | 3 | 1828.8 MB | 1219.7 MB | 第 4 个 fresh tab 被拒（`tab:spawn` 返回 null） |
+| 6 | 1→2 2→3 3→4 | 4 | 2327.6 MB | 1455.5 MB | 4 个 tab 全部 ready |
+
+原因（源码）：`evict_idle_sidecar` 只回收已绑定 session 的空闲 tab；fresh tab 没有 session 文件，不可驱逐，所以 cap < tab 数时第 4 次 spawn 直接被拒。第 4 个 tab 的代价约 **+499 MB private / +236 MB RSS**（单轮）。
+
+session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `models.yml`/`models.db*`/`config.yml`/`agent.db*`，否则 resume 报 `SessionModelRestoreError`；每 tab 只 `setActive` 一次，固定 settle 后取两次快照。轮询 `tabs.list` 会走 `tab:get-all → ensure_tab_started`，把一次退出放大成风暴（32 spawns / 26 exits）。
+
+| cap | sidecars | total private（3 次） | 中位 | all-ready |
+|---|---|---|---|---|
+| 3 | 3 | 1797.2 / 1806.8 / 1784.8 MB | 1797.2 MB | 否：1 个 tab 停在 `starting` |
+| 4 | 4 | 2358.6 / 2347.3 / 2346.1 MB | 2347.3 MB | 是 |
+| 6 | 4 | 2352.7 / 2366.0 / 2328.3 MB | 2352.7 MB | 是 |
+
+结论：cap3 省约 **550 MB**，代价是第 4 个 tab 不 ready；4 tab 下 cap4 与 cap6 无内存差异。默认 6 保留（给 >4 tab 留余量），文档已对齐。

@@ -143,7 +143,7 @@ M1 是分水岭：**先停止"每 tab 一个 sidecar"的设计，再谈释放**�
 - 切回 A 也不恢复 `message_update`。
 - 命令不带 sessionId，事件帧也没有稳定的会话归属字段。
 
-结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 3）做 LRU 回收，同 workspace 切会话走 `switch_session` 原地复用。内存预算按 `docs/perf.md` 的“固定开销约 480 MB + 每 tab 约 240 MB”计。
+结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 6）做 LRU 回收，同 workspace 切会话走 `switch_session` 原地复用。内存预算分两套口径、不可相加：WorkingSet 历史口径为“固定开销约 480 MB + 每 tab 约 240 MB”（`docs/perf.md`）；2026-11-08 安装版 Private 实测：每活跃 sidecar 约 490–540 MB（N=3），固定部分约 388 MB（单样本待复核），4 个活跃 tab 的 sidecar Private 合计约 2.0 GB。
 
 ### 2026-11-08：stats 服务懒启动（刻意偏离蓝图）
 
