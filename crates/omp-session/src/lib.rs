@@ -132,7 +132,7 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// Root of the agent's saved sessions.
 pub fn sessions_root() -> PathBuf {
-    omp_core::home_dir().join(".omp").join("agent").join("sessions")
+    omp_core::paths::sessions_dir()
 }
 
 /// List sessions, newest activity first. `scope = "local"` keeps the current cwd only.

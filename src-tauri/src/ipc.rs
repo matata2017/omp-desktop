@@ -418,11 +418,19 @@ pub async fn ipc_invoke(
         "fs:list" => list_tree(state.cwd.clone(), payload),
         "fs:read-image" => {
             let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
-            read_image(tab_cwd(&state, tab.as_ref()), &payload)
+            let cwd = tab_cwd(&state, tab.as_ref());
+            let payload = payload.clone();
+            tauri::async_runtime::spawn_blocking(move || read_image(cwd, &payload))
+                .await
+                .map_err(|err| err.to_string())?
         }
         "fs:read-plan" => {
             let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
-            read_plan(tab_cwd(&state, tab.as_ref()), &payload)
+            let cwd = tab_cwd(&state, tab.as_ref());
+            let payload = payload.clone();
+            tauri::async_runtime::spawn_blocking(move || read_plan(cwd, &payload))
+                .await
+                .map_err(|err| err.to_string())?
         }
 
         // ---- Logs -----------------------------------------------------------------------
@@ -1155,13 +1163,6 @@ pub async fn ipc_invoke(
             lines.reverse();
             Ok(json!(lines))
         }
-        "tray:state-push" => {
-            let path = state.data_dir.join("prefs.json");
-            let mut prefs = read_json_or(&path, json!({}));
-            prefs["trayState"] = payload.clone();
-            write_json(&path, &prefs)?;
-            Ok(Value::Null)
-        }
         "progress:set" => Ok(Value::Null),
         "session:consume-pending" => Ok(Value::Null),
         "session:open-new-window" => Ok(json!(false)),
@@ -1330,11 +1331,16 @@ fn read_image(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
     if meta.len() > FS_IMAGE_MAX_BYTES {
         return Ok(fail("Image too large"));
     }
-    let Ok(bytes) = fs::read(&path) else {
+    let Ok(mut file) = fs::File::open(&path) else {
         return Ok(fail("Invalid path"));
     };
-    let Some(mime) = sniff_image_mime(&bytes) else {
+    let mut header = [0u8; 512];
+    let read = std::io::Read::read(&mut file, &mut header).unwrap_or(0);
+    let Some(mime) = sniff_image_mime(&header[..read]) else {
         return Ok(fail("Not a supported image"));
+    };
+    let Ok(bytes) = fs::read(&path) else {
+        return Ok(fail("Invalid path"));
     };
     use base64::prelude::{Engine as _, BASE64_STANDARD};
     let data_url = format!("data:{mime};base64,{}", BASE64_STANDARD.encode(&bytes));
@@ -2017,6 +2023,60 @@ mod tests {
         std::fs::write(root.join("notes.md"), "x").unwrap();
         std::fs::write(root.join("case-plan.md"), "plan").unwrap();
         assert_eq!(newest_plan_file(&root), Some(root.join("case-plan.md")));
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn read_image_returns_a_data_url_for_a_png() {
+        let root = std::env::temp_dir().join(format!("romp-img-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let bytes = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0];
+        std::fs::write(root.join("x.png"), bytes).unwrap();
+        let value = read_image(root.clone(), &json!({ "path": "x.png" })).unwrap();
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["mime"], "image/png");
+        assert_eq!(value["size"].as_u64(), Some(bytes.len() as u64));
+        assert!(value["dataUrl"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn read_image_rejects_a_non_image() {
+        let root = std::env::temp_dir().join(format!("romp-img-text-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("notes.txt"), "hello").unwrap();
+        let value = read_image(root.clone(), &json!({ "path": "notes.txt" })).unwrap();
+        assert_eq!(value["ok"], false);
+        assert_eq!(value["error"], "Not a supported image");
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn read_plan_reads_a_workspace_file_and_reports_a_missing_one() {
+        let root = std::env::temp_dir().join(format!("romp-plan-read-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("plan.md"), "# Steps\n").unwrap();
+        let found =
+            read_plan(root.clone(), &json!({ "fsPath": "plan.md", "localRoot": null })).unwrap();
+        assert_eq!(found["ok"], true);
+        assert_eq!(found["content"], "# Steps\n");
+        assert!(found["path"].as_str().unwrap().ends_with("plan.md"));
+        let missing =
+            read_plan(root.clone(), &json!({ "fsPath": "nope.md", "localRoot": null })).unwrap();
+        assert_eq!(missing["ok"], true);
+        assert!(missing["path"].is_null());
+        assert!(missing["content"].is_null());
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn read_plan_refuses_paths_outside_allowed_roots() {
+        let root = std::env::temp_dir().join(format!("romp-plan-escape-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let value =
+            read_plan(root.clone(), &json!({ "fsPath": "../escape.md", "localRoot": null })).unwrap();
+        assert_eq!(value["ok"], false);
+        assert_eq!(value["error"], "Path escapes allowed roots");
         std::fs::remove_dir_all(root).ok();
     }
 }
