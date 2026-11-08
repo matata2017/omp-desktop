@@ -76,9 +76,9 @@ bunx tauri build
 ## 测试与工具
 
 ```bash
-cargo test --workspace     # 158 passed（16 suites）
+cargo test --workspace     # 167 passed（16 suites）
 bun run typecheck          # tsc --noEmit
-bun run test               # 1571 passed（186 files）
+bun run test               # 1589 passed（187 files）
 bun run perf:gate          # 冷启与内存回归门，基线在 docs/perf-baseline.json
 bun run ui:audit           # 文案扫描 + axe + 截图，需要运行中的窗口与 9222
 ```

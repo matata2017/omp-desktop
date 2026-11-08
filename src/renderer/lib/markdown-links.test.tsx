@@ -4,18 +4,39 @@
  * that names nothing stays code; a web address in inline code opens beside the
  * work. Before this, all three rendered as dead text the user had to retype.
  */
+import * as os from "node:os";
 import * as path from "node:path";
 import { parseHTML } from "linkedom";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
-import { toAbsolutePath } from "../../main/workspace-paths";
 import type { IpcResolvedPath } from "../../shared/ipc-types";
 import { useTabsStore } from "../stores/tabs";
 import { useUiStore } from "../stores/ui";
 import { I18nProvider } from "./i18n";
 import { MarkdownRenderer } from "./markdown";
 import { clearPathResolutionCache } from "./path-resolver";
+
+/**
+ * Mirrors the Rust resolver's path rules so the mocked answers match what the
+ * renderer asks for: "~" expands, absolute paths pass through, relative ones
+ * resolve inside the tab's workspace.
+ */
+function toAbsolutePath(
+	target: string,
+	cwd: string | null,
+	paths: path.PlatformPath = path,
+): { path: string } | { error: string } {
+	const windows = paths.sep === "\\";
+	let raw = windows && /^[\\/][A-Za-z]:[\\/]/.test(target) ? target.slice(1) : target;
+	if (windows ? /^~[\\/]/.test(raw) : raw.startsWith("~/")) raw = paths.join(os.homedir(), raw.slice(2));
+	if (paths.isAbsolute(raw)) return { path: paths.normalize(raw) };
+	if (!cwd) return { error: "No workspace" };
+	const resolved = paths.resolve(cwd, raw);
+	const rootWithSep = cwd.endsWith(paths.sep) ? cwd : cwd + paths.sep;
+	if (resolved !== cwd && !resolved.startsWith(rootWithSep)) return { error: "Path escapes the workspace" };
+	return { path: resolved };
+}
 
 const { document, window, Event, HTMLElement, Node, Element } = parseHTML("<html><body></body></html>");
 

@@ -34,8 +34,8 @@
 ```
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
-bun run test                                     → 11-05 快照：186 files / 1570 passed，1 条抖动；本轮最终 186 files / 1571 passed（0 failed）
-cargo test --workspace                           → 11-05 快照：142 passed（16 suites）；本轮最终 158 passed（16 suites，0 failed）
+bun run test                                     → 11-05 快照：186 files / 1570 passed，1 条抖动；当前 187 files / 1589 passed（0 failed）
+cargo test --workspace                           → 11-05 快照：142 passed（16 suites）；当前 167 passed（16 suites，0 failed）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema

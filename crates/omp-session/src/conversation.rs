@@ -998,3 +998,119 @@ mod tests {
         assert_eq!(response["unavailable"], true);
     }
 }
+
+#[cfg(test)]
+mod helper_tests {
+    use super::*;
+
+    #[test]
+    fn session_head_reads_title_and_header() {
+        let head = concat!(
+            "{\"type\":\"title\",\"title\":\"Hello\"}\n",
+            "{\"type\":\"session\",\"id\":\"s1\",\"cwd\":\"D:\\\\w\",\"kind\":\"agent\"}\n"
+        );
+        let parsed = parse_session_head(head);
+        assert_eq!(parsed.title.as_deref(), Some("Hello"));
+        assert_eq!(parsed.session_id.as_deref(), Some("s1"));
+        assert_eq!(parsed.cwd.as_deref(), Some("D:\\w"));
+        assert_eq!(parsed.kind.as_deref(), Some("agent"));
+    }
+
+    #[test]
+    fn session_head_ignores_blank_title_and_stops_at_session_line() {
+        let head = concat!(
+            "{\"type\":\"title\",\"title\":\"  \"}\n",
+            "{\"type\":\"session\",\"id\":\"s1\"}\n",
+            "{\"type\":\"title\",\"title\":\"Later\"}\n"
+        );
+        let parsed = parse_session_head(head);
+        assert_eq!(parsed.title, None);
+        assert_eq!(parsed.session_id.as_deref(), Some("s1"));
+    }
+
+    #[test]
+    fn message_line_joins_text_parts_and_skips_tool_output() {
+        let line = json!({
+            "type": "message",
+            "id": "m1",
+            "timestamp": "2026-01-02T03:04:05.000Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "list "},
+                    {"type": "text", "text": "files"},
+                    {"type": "tool_result", "text": "ignored"}
+                ]
+            }
+        })
+        .to_string();
+        let parsed = parse_message_line(&line).expect("user message");
+        assert_eq!(parsed.body, "list \nfiles");
+        assert_eq!(parsed.role, "user");
+        assert_eq!(parsed.timestamp, 1_767_323_045_000);
+
+        let tool = json!({
+            "type": "message",
+            "id": "m2",
+            "message": {"role": "tool", "content": "ignored"}
+        })
+        .to_string();
+        assert!(parse_message_line(&tool).is_none());
+    }
+
+    #[test]
+    fn message_line_rejects_blank_bodies_and_truncates_long_ones() {
+        let blank = json!({
+            "type": "message",
+            "id": "m",
+            "message": {"role": "user", "content": [{"type": "text", "text": "   "}]}
+        })
+        .to_string();
+        assert!(parse_message_line(&blank).is_none());
+
+        let long = "a".repeat(MAX_BODY_CHARS + 100);
+        let line = json!({
+            "type": "message",
+            "id": "m",
+            "message": {"role": "assistant", "content": long}
+        })
+        .to_string();
+        let parsed = parse_message_line(&line).expect("assistant message");
+        assert_eq!(parsed.body.chars().count(), MAX_BODY_CHARS);
+    }
+
+    #[test]
+    fn parse_time_accepts_rfc3339_only() {
+        assert_eq!(parse_time("2026-01-02T03:04:05.000Z"), Some(1_767_323_045_000));
+        assert_eq!(parse_time("not a time"), None);
+    }
+
+    #[test]
+    fn search_terms_lowercase_dedupe_and_cap_at_eight() {
+        assert_eq!(search_terms("List list  FILES"), vec!["list", "files"]);
+        let many = (0..12).map(|index| format!("t{index}")).collect::<Vec<_>>().join(" ");
+        assert_eq!(search_terms(&many).len(), 8);
+    }
+
+    #[test]
+    fn snippet_marks_the_term_and_flattens_newlines() {
+        let snippet = build_snippet("first line\nsecond line with needle here", &["needle".to_owned()]);
+        assert!(snippet.contains(MARK_OPEN));
+        assert!(snippet.contains("needle"));
+        assert!(!snippet.contains('\n'));
+    }
+
+    #[test]
+    fn snippet_adds_ellipsis_when_the_body_is_cut() {
+        let body = format!("{} needle {}", "x ".repeat(200), "y ".repeat(200));
+        let snippet = build_snippet(&body, &["needle".to_owned()]);
+        assert!(snippet.starts_with('…'));
+        assert!(snippet.ends_with('…'));
+    }
+
+    #[test]
+    fn phrase_and_like_pattern_escape_their_wildcards() {
+        assert_eq!(phrase("a\"b"), "\"a\"\"b\"");
+        assert_eq!(like_pattern("a%b_c\\"), "%a\\%b\\_c\\\\%");
+    }
+}
