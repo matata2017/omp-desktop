@@ -1,7 +1,11 @@
 // Evaluate one expression in the running Romp WebView2 (dev builds with
 // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222).
 // Usage: node scripts/cdp-eval.mjs "await window.omp.tabs.list()"
-const expression = process.argv[2] ?? "1 + 1";
+import { readFileSync } from "node:fs";
+const raw = process.argv[2] ?? "1 + 1";
+// `@path` reads the expression from a UTF-8 file so native argv quoting cannot
+// mangle backslashes or embedded quotes (PowerShell 5.1 strips them).
+const expression = raw.startsWith("@") ? readFileSync(raw.slice(1), "utf8") : raw;
 const targets = await (await fetch("http://127.0.0.1:9222/json")).json();
 // A tab with the Browser panel open has a second page target; drive the app one.
 const target =

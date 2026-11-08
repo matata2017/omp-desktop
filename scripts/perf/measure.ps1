@@ -78,6 +78,7 @@ $prevWebViewArgs = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 $prevMaxSidecars = $env:ROMP_MAX_SIDECARS
 $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
 if ($Tabs -gt 3 -and -not $env:ROMP_MAX_SIDECARS) { $env:ROMP_MAX_SIDECARS = "$Tabs" }
+if ($env:ROMP_MAX_SIDECARS) { [Console]::Error.WriteLine("sidecar cap in effect: ROMP_MAX_SIDECARS=$env:ROMP_MAX_SIDECARS") }
 
 $launchedPid = $null
 try {
@@ -161,14 +162,20 @@ try {
   $rootPid = $proc.Id
   $tree = Get-Tree -RootPid $rootPid
   $values = @()
+  $privateValues = @()
   for ($i = 0; $i -lt $Samples; $i++) {
     $tree = Get-Tree -RootPid $rootPid
-    $sum = (Get-Process -Id $tree -ErrorAction SilentlyContinue | Measure-Object -Property WorkingSet64 -Sum).Sum
+    $procs = Get-Process -Id $tree -ErrorAction SilentlyContinue
+    $sum = ($procs | Measure-Object -Property WorkingSet64 -Sum).Sum
+    $privateSum = ($procs | Measure-Object -Property PrivateMemorySize64 -Sum).Sum
     if ($null -ne $sum) { $values += [math]::Round($sum / 1MB, 1) }
+    if ($null -ne $privateSum) { $privateValues += [math]::Round($privateSum / 1MB, 1) }
     Start-Sleep -Milliseconds 250
   }
   $sorted = @($values | Sort-Object)
   $median = if ($sorted.Count -gt 0) { $sorted[[int][math]::Floor($sorted.Count / 2)] } else { 0 }
+  $privateSorted = @($privateValues | Sort-Object)
+  $privateMedian = if ($privateSorted.Count -gt 0) { $privateSorted[[int][math]::Floor($privateSorted.Count / 2)] } else { 0 }
 
   $rows = foreach ($procId in (Get-Tree -RootPid $rootPid)) {
     $info = Get-CimInstance Win32_Process -Filter "ProcessId=$procId" -ErrorAction SilentlyContinue
@@ -181,10 +188,12 @@ try {
       $threads = $p.Threads.Count
     }
     [pscustomobject]@{
-      Role    = Role-Of -Name $info.Name -CommandLine ([string]$info.CommandLine)
-      MB      = if ($p) { [math]::Round($p.WorkingSet64 / 1MB, 1) } else { 0 }
-      Handles = $handles
-      Threads = $threads
+      Role      = Role-Of -Name $info.Name -CommandLine ([string]$info.CommandLine)
+      Type      = if ($info.CommandLine -match "--type=([a-zA-Z0-9_-]+)") { $Matches[1] } else { "" }
+      MB        = if ($p) { [math]::Round($p.WorkingSet64 / 1MB, 1) } else { 0 }
+      PrivateMB = if ($p) { [math]::Round($p.PrivateMemorySize64 / 1MB, 1) } else { 0 }
+      Handles   = $handles
+      Threads   = $threads
     }
   }
 
@@ -193,6 +202,7 @@ try {
       [pscustomobject]@{
         role      = $_.Name
         mb        = [math]::Round((($_.Group | Measure-Object -Property MB -Sum).Sum), 1)
+        privateMB = [math]::Round((($_.Group | Measure-Object -Property PrivateMB -Sum).Sum), 1)
         processes = $_.Count
         handles   = (($_.Group | Measure-Object -Property Handles -Sum).Sum)
         threads   = (($_.Group | Measure-Object -Property Threads -Sum).Sum)
@@ -200,6 +210,16 @@ try {
     } | Sort-Object mb -Descending
   )
 
+  $webviewTypes = @(
+    $rows | Where-Object { $_.Role -eq "webview2" } | Group-Object Type | ForEach-Object {
+      [pscustomobject]@{
+        type      = if ($_.Name) { $_.Name } else { "browser" }
+        mb        = [math]::Round((($_.Group | Measure-Object -Property MB -Sum).Sum), 1)
+        privateMB = [math]::Round((($_.Group | Measure-Object -Property PrivateMB -Sum).Sum), 1)
+        processes = $_.Count
+      }
+    } | Sort-Object privateMB -Descending
+  )
   $marks = @{}
   if ($drive -and $drive.marks) {
     foreach ($mark in $drive.marks) {
@@ -234,6 +254,14 @@ try {
     processes       = $rows.Count
     handles         = (($rows | Measure-Object -Property Handles -Sum).Sum)
     threads         = (($rows | Measure-Object -Property Threads -Sum).Sum)
+    launchedPid     = $launchedPid
+    treePrivate     = [ordered]@{
+      medianMB = $privateMedian
+      minMB    = if ($privateSorted.Count -gt 0) { $privateSorted[0] } else { 0 }
+      maxMB    = if ($privateSorted.Count -gt 0) { $privateSorted[$privateSorted.Count - 1] } else { 0 }
+    }
+    maxSidecars     = if ($env:ROMP_MAX_SIDECARS) { [int]$env:ROMP_MAX_SIDECARS } else { $null }
+    webview2Types   = $webviewTypes
     tabs            = $Tabs
     tabStates       = $tabStates
     driveError      = $driveError

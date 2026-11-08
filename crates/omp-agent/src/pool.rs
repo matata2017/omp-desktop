@@ -13,12 +13,19 @@ use omp_core::{Error, Result, TabId};
 /// doubles, so the pool's bookkeeping is testable without spawning processes.
 pub trait SidecarHandle: Send {
     fn send(&self, frame: &Value) -> Result<()>;
+    /// Recent stderr lines, for diagnosing an unexpected exit. Empty by default.
+    fn stderr_tail(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn dispose(self);
 }
 
 impl SidecarHandle for crate::sidecar::Sidecar {
     fn send(&self, frame: &Value) -> Result<()> {
         crate::sidecar::Sidecar::send(self, frame)
+    }
+    fn stderr_tail(&self) -> Vec<String> {
+        crate::sidecar::Sidecar::stderr_tail(self)
     }
     fn dispose(self) {
         self.terminate();
@@ -179,6 +186,15 @@ impl<H: SidecarHandle> SidecarPool<H> {
         handle.dispose();
         true
     }
+    /// Recent stderr lines for a tab's live sidecar, if one is attached.
+    pub fn stderr_tail(&self, tab: &TabId) -> Vec<String> {
+        self.slots
+            .lock()
+            .get(tab)
+            .and_then(|slot| slot.handle.as_ref())
+            .map(|handle| handle.stderr_tail())
+            .unwrap_or_default()
+    }
 
     /// Atomically set the focused tab and the one or two full-stream tabs for a window.
     pub fn set_view(&self, window: &omp_core::WindowId, focused: TabId, visible: &[TabId]) -> Result<()> {
@@ -284,12 +300,16 @@ mod tests {
     struct FakeHandle {
         sent: Arc<Mutex<Vec<Value>>>,
         disposed: Arc<AtomicUsize>,
+        tail: Vec<String>,
     }
 
     impl SidecarHandle for FakeHandle {
         fn send(&self, frame: &Value) -> Result<()> {
             self.sent.lock().push(frame.clone());
             Ok(())
+        }
+        fn stderr_tail(&self) -> Vec<String> {
+            self.tail.clone()
         }
         fn dispose(self) {
             self.disposed.fetch_add(1, Ordering::Relaxed);
@@ -303,6 +323,7 @@ mod tests {
             FakeHandle {
                 sent: sent.clone(),
                 disposed: disposed.clone(),
+                tail: Vec::new(),
             },
             sent,
             disposed,
@@ -428,5 +449,19 @@ mod tests {
         pool.register_request("req-1", &tab("a"));
         pool.close(&tab("a"));
         assert_eq!(pool.take_request("req-1"), None);
+    }
+
+    #[test]
+    fn stderr_tail_reads_the_attached_handle_and_clears_on_release() {
+        let pool: SidecarPool<FakeHandle> = SidecarPool::new();
+        let (mut handle, _, _) = fake();
+        handle.tail = vec!["SessionModelRestoreError: boom".to_owned()];
+        pool.attach(tab("a"), handle);
+        assert_eq!(
+            pool.stderr_tail(&tab("a")),
+            vec!["SessionModelRestoreError: boom".to_owned()]
+        );
+        assert!(pool.release_process(&tab("a")));
+        assert!(pool.stderr_tail(&tab("a")).is_empty());
     }
 }

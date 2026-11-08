@@ -455,8 +455,14 @@ pub(crate) fn start_tab(app: &AppHandle, tab: TabId, launch: LaunchOptions) -> R
                     batcher.dispose();
                 }
                 state.ready_tabs.lock().remove(&tab);
+                let stderr_tail = state.pool.stderr_tail(&tab);
                 state.pool.release_process(&tab);
-                tracing::warn!(tab = %tab, pid, "sidecar exited; state cleared");
+                tracing::warn!(
+                    tab = %tab,
+                    pid,
+                    stderr = %stderr_tail.join(" | "),
+                    "sidecar exited; state cleared"
+                );
                 let _ = app.emit(
                     crate::events::SIDECAR_STATUS,
                     json!({ "tabId": tab, "payload": { "status": "exited" } }),
