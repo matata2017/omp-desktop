@@ -332,10 +332,12 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
   单日新增 12 个提交（stats / bench / scheduler / 会话搜索 / 布局恢复 / models / editor / system / argv 契约门）。
 - `.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、`resources/*.exe`、
   `.probe/`、`replica/screens/`、`src-tauri/gen/schemas/`，以及侦察期的 JSON/清单/zip 临时产物。
-- 本机 SSH 认证为 `matata2017`（`~/.ssh/config` 走 `ssh.github.com:443`）。**2026-11-06 起该路径出现 `Permission denied (publickey)`**，
-  同时 HTTPS 直连被 reset、`schannel` 与 `openssl` 走代理会间歇 `TLS connect error / unexpected eof`。当时可用的一次组合：
-  `GIT_TERMINAL_PROMPT=0 git -c credential.helper=manager -c http.sslBackend=openssl -c http.proxy=http://127.0.0.1:7897 push https://github.com/matata2017/omp-desktop.git master:master`
-  （凭据来自 Windows 凭据管理器）。遇到 push 失败先重试该命令，仍不行再查 SSH key / 代理。
+- 本机 SSH 认证为 `matata2017`。2026-11-09 实测 `ssh -T git@github.com` 与 `ssh -p 443 -T git@ssh.github.com` 都直接成功；
+  `origin` 已改为 `git@github.com:matata2017/omp-desktop.git`，推送用 `git push origin master`。
+- HTTPS 当前不可用：直连被 reset，`127.0.0.1:7897` 代理下 TLS 报 `unexpected eof`。旧的
+  `credential.helper=manager + http.sslBackend=openssl + http.proxy` 组合曾可用，2026-11-09 复测失败，仅作历史记录。
+- 显式 URL push 不会更新 `refs/remotes/origin/master`；核对远端用 `git ls-remote origin refs/heads/master`，
+  与本地 HEAD 一致后再 `git update-ref refs/remotes/origin/master HEAD`。
 
 许可（本仓库**同时**承载三方代码，必须随附声明）：
 
