@@ -25,3 +25,26 @@
 3. 终端面板 UI、浏览器内置 webview host、`scheduler:*`/`models:*`/`updater:*` 等通道未做。
 
 **交接**：`docs/handoff.md`（当天完整状态、运行方式、风险、下一步顺序）。
+
+
+## Session 1: Perf baseline and deep measurement
+<!-- trellis-session: v=2 fp=1a8108639484f25b -->
+
+**Date**: 2026-11-08
+**Task**: Perf baseline and deep measurement
+**Package**: omp-agent
+**Branch**: `master`
+
+### Summary
+
+Merged the perf harness, measured real release builds (1 tab 712 MB, 4 tab 1442.7 MB), split boot into four milestones, compared against upstream Electron, vetoed shared sidecar, profiled streaming, ran UI copy/axe audit, made stats lazy, and added a regression gate. 3 commits; cargo test 158, vitest 1571, typecheck all pass.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a4d1e6a` | chore(trellis): perf baseline task artifacts and measurement spec guide |
+
+### Status
+
+[OK] **Completed**
