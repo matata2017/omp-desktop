@@ -16,6 +16,7 @@ param(
   [string]$WorkingDirectory,
   [string[]]$Arguments = @(),
   [string]$LogPath,
+  [string]$BrowserArgs = "",
   [string]$Out
 )
 
@@ -76,7 +77,7 @@ if (-not $NoClean) {
 
 $prevWebViewArgs = $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
 $prevMaxSidecars = $env:ROMP_MAX_SIDECARS
-$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = ("--remote-debugging-port=$Port " + $BrowserArgs).Trim()
 if ($Tabs -gt 3 -and -not $env:ROMP_MAX_SIDECARS) { $env:ROMP_MAX_SIDECARS = "$Tabs" }
 if ($env:ROMP_MAX_SIDECARS) { [Console]::Error.WriteLine("sidecar cap in effect: ROMP_MAX_SIDECARS=$env:ROMP_MAX_SIDECARS") }
 

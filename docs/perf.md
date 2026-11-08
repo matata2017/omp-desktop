@@ -179,3 +179,20 @@ session-bound 对照（N=3，无 `tabs.list` 轮询）。隔离根必须复制 `
 根因：`tab:close` 不重置 `active_tab`；`tab:get-all` 无条件对 active 调 `ensure_tab_started`，而 `ensure_tab_started` 不校验 tab 是否仍注册 → 已关闭的 active 被复活成 ghost sidecar，每批 +1（约 500 MB/个）。
 
 修复：`tab:close` 在关闭 active 时把 active 切到剩余的第一个 tab；`ensure_tab_started` 对未注册 tab 直接返回；watcher 用 pid 比对忽略被替换的旧进程。00:51 构建复测 raw 路径 100 次：sidecar 恒 1，private 不增长。
+
+## 2026-11-09：WebView2 `--disable-gpu` A/B（N=3，视觉验收）
+
+方法：同一安装版、隔离 `OMP_DATA_DIR` + `PI_CODING_AGENT_DIR`，1 个 fresh tab；`measure.ps1` 新增 `-BrowserArgs` 传入 WebView2 开关；每轮取进程树 + CDP 检查 + 窗口截图。复现：`powershell -NoProfile -File scripts/perf/gpu-ab.ps1 -Runs 3`（需要桌面会话，会按名清理并重启 app）。
+
+| 指标（中位） | baseline | `--disable-gpu` | 差值 |
+|---|---|---|---|
+| 进程树 Private | 869.5 MB | **748.1 MB** | **−121.4 MB** |
+| 进程树 RSS | 743.0 MB | 724.4 MB | −18.6 MB |
+| WebView2 Private | 318.9 MB | 203.5 MB | −115.4 MB |
+| GPU 进程 Private | 144.8 MB | 30.1 MB | −114.7 MB |
+| 窗口可见 | 288 ms | 290 ms | 无回归 |
+| sidecar ready | 3778 ms | 3823 ms | 无回归 |
+
+视觉验收：两臂 `document.querySelector('#root').children.length=1`、DOM 节点 391；`.perf/gpu-ab/shots/baseline-1.png` 与 `disable-gpu-1.png` 逐项一致（侧栏、会话卡、字体、图标）。静态 UI 无回归。
+
+**不默认启用**：未验证流式输出、滚动、动画、WebGL/KaTeX/mermaid 渲染；软件渲染可能在负载下变慢。`--disable-gpu` 只作为可选开关，用户可在启动时设 `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--disable-gpu`（`measure.ps1` 的 `-BrowserArgs` 用于 A/B）。
