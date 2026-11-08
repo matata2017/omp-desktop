@@ -339,6 +339,14 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 - 显式 URL push 不会更新 `refs/remotes/origin/master`；核对远端用 `git ls-remote origin refs/heads/master`，
   与本地 HEAD 一致后再 `git update-ref refs/remotes/origin/master HEAD`。
 
+### 2026-11-09：改造 OMP fork 前的基线
+
+打 tag `pre-omp-rework-2026-11-09`（含本轮性能测量、修复与文档）。后续在 **OMP fork** 上做两件事，本仓库不动：
+
+- 加入**决策模型**（本轮未动 fork 代码）。
+- **共享 sidecar**：当前 `omp --mode rpc-ui` 一个进程只服务一个 active session，命令不带 `sessionId`、事件帧没有稳定的会话归属；11-06 的 `probe-shared.mjs` 实验（`docs/architecture.md` §9）显示切会话会丢在途 `message_update` / `agent_end`。因此并发共享需要改 RPC 协议：命令带 session、事件带归属、在途流隔离与恢复。**这个协议改动在 upstream fork，不在 Romp 仓库；已确认该方向可接受，随 fork 改造一并做。**
+- 本仓库侧已有的复用：同 workspace 切会话走 `switch_session` 原地复用（`ipc.rs::confirmed_switch_path`），不新起 ~500 MB 进程；这是**串行复用**，不是并发共享。
+
 许可（本仓库**同时**承载三方代码，必须随附声明）：
 
 | 目录 | 来源 | 许可 |
