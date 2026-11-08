@@ -206,6 +206,14 @@ pub async fn ipc_invoke(
             state.browser.close_tab(tab.as_str());
             state.blocking_requests.lock().remove(&tab);
             state.ready_tabs.lock().remove(&tab);
+            {
+                let mut active = state.active_tab.lock();
+                if *active == tab {
+                    if let Some(next) = state.pool.tabs().first().cloned() {
+                        *active = next;
+                    }
+                }
+            }
             crate::persist_layout(&state);
             Ok(json!(existed))
         }

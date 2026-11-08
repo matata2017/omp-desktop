@@ -574,6 +574,10 @@ pub(crate) fn ensure_tab_started(
         .copied()
         .unwrap_or(TabKind::Agent);
     let pending_session = state.tab_sessions.lock().get(tab).cloned();
+    if !state.pool.tabs().iter().any(|candidate| candidate == tab) {
+        // A closed tab can remain as the stale active id; never resurrect it as a sidecar.
+        return Ok(());
+    }
     // Phantom-tab investigation: log every call, including the no-op ones, so the trace shows
     // which surface asked for which tab (an unexpected tab then has a caller, not just an id).
     tracing::info!(
