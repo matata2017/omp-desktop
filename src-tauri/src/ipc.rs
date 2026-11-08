@@ -1103,17 +1103,31 @@ pub async fn ipc_invoke(
                         .collect()
                 })
                 .unwrap_or_default();
-            let port = state.stats.ensure_running().await.map_err(|e| e.to_string())?;
+            // The dashboard expects stats:fetch to RESOLVE failures as { error, unavailable }
+            // (stats-sync.ts bridgeFailure, use-stats.ts unavailableError). Rejecting here
+            // bypasses its 90s booting-retry budget and shows a dead-end error toast on the
+            // first lazy start. Mirrors upstream main/ipc.ts STATS_FETCH.
+            let port = match state.stats.ensure_running().await {
+                Ok(port) => port,
+                Err(err) => return Ok(json!({ "error": err.to_string(), "unavailable": true })),
+            };
             let client = {
                 let mut slot = state.stats_client.lock();
                 if slot.as_ref().is_none_or(|c| c.port() != port) {
-                    *slot = Some(Arc::new(
-                        omp_stats::StatsClient::new(port).map_err(|e| e.to_string())?,
-                    ));
+                    match omp_stats::StatsClient::new(port) {
+                        Ok(client) => *slot = Some(Arc::new(client)),
+                        Err(err) => {
+                            return Ok(json!({ "error": err.to_string(), "unavailable": true }));
+                        }
+                    }
                 }
                 slot.clone().expect("just populated")
             };
-            client.get(&path, &params).await.map_err(|e| e.to_string())
+            match client.get(&path, &params).await {
+                Ok(value) => Ok(value),
+                // A request that reached the server is a real failure, not a booting server.
+                Err(err) => Ok(json!({ "error": err.to_string(), "unavailable": false })),
+            }
         }
         "runtime:error-report" => {
             append_log(

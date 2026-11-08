@@ -29,13 +29,13 @@
 | 9 | 打包 / 深链 / 托盘 / 性能 | **3/3**：性能实测写进 `docs/perf.md`；NSIS x64 安装包已构建并校验；**`omp://` 深链与单实例转发、托盘（显示/退出）已接**（`omp://new` 实测新建会话） |
 | R | replica 侦察 | **完成** |
 
-### 已验证的事实（不是推断）
+### 已验证的事实（不是推断；含 11-05 快照，本轮最终数字见 8.1 与 docs/perf.md）
 
 ```
 bunx tsc --noEmit                                → 0 error
 bunx vite build                                  → 成功，vendor 分块与上游一致
-bun run test                                     → 186 files / 1570 passed，1 条抖动（单独跑 25/25 全过）
-cargo test --workspace                           → 142 passed（16 suites，0 failed）
+bun run test                                     → 11-05 快照：186 files / 1570 passed，1 条抖动；本轮最终 186 files / 1571 passed（0 failed）
+cargo test --workspace                           → 11-05 快照：142 passed（16 suites）；本轮最终 158 passed（16 suites，0 failed）
 cargo run -p omp-agent --example probe -- resources/omp.exe
   ready: protocolVersion=1 v2=true
   get_state / get_available_models / get_settings_schema
@@ -59,7 +59,7 @@ scheduler insights/notices                        → insights 12 字段齐（ru
 set_host_tools                                    → 用 parameters 字段返回 success:true（inputSchema 会被拒）
 tab 布局恢复                                       → 开 2 tab 重启后仍 2 tab、activeIndex 一致；tabs 按数字后缀排序
 app:quit                                          → 应用退出、D:\rust-omp 孤儿进程 0 个、runtime.log 无 panic
-性能（dev 构建）                                    → 冷启 137–321ms；1 tab 883–894MB；4 tab 1273MB；每 tab ≈235MB
+性能（dev 构建，11-05 旧构建，含预启动 stats）      → 冷启 137–321ms；1 tab 883–894MB；4 tab 1273MB；每 tab ≈235MB
 ```
 
 本机验证的关键启动修复：
@@ -121,7 +121,7 @@ src-tauri/      lib.rs（状态/事件路由/优雅退出）ipc.rs（唯一命�
                 models.rs（models.yml 读写）editor.rs（外部编辑器往返）bench.rs（`omp bench --json`）
                 scheduler.rs（运行 argv 策略 + 监督循环）host_tools.rs + host_tools_defs.json（agent 的定时任务工具）
                 tab_layout.rs（布局持久化）builtin_providers.rs（88 个内置 provider，生成）
-src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），改动仅限 main.tsx（`window.omp` + 首帧标记）、index.html、ChatStream.tsx（加载门 + 首会话标记）、use-session-switch.ts（原地切换）、common/LangSwitcher.tsx、layout/ContextStrategyBar.tsx（可访问名）、locales/{en,zh,ru}.ts（首轮文案清理）
+src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），改动仅限 main.tsx（`window.omp` + 首帧标记）、index.html、ChatStream.tsx（加载门 + 首会话标记）、use-session-switch.ts（原地切换）、common/LangSwitcher.tsx、layout/ContextStrategyBar.tsx、layout/ContextUsagePopover.tsx（可访问名）、layout/ContextUsagePopover.test.tsx（删 2 行钉旧 aria-label 的 incidental 断言）、locales/{en,zh,ru}.ts（首轮文案清理）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
@@ -319,9 +319,9 @@ powershell -File scripts/perf/gate.ps1 -Baseline .perf/release-idle.json -Curren
 
 启动里程碑来自 Rust 的 `boot` 日志（`epoch_ms`）与 renderer 的 `performance.mark`：`boot:first-paint`、`chat:first-session-rendered`。`drive.mjs` 负责开 tab、等 sidecar、读标记；`profile-stream.mjs` 录一次真实流式回答；`probe-shared.mjs` 验证共享 sidecar（已否决，见 `docs/architecture.md`）。
 
-`omp stats` 已从 setup 预启动改回懒启动：`ipc.rs` 的 `stats:url` 与 `stats:fetch` 都 `ensure_running()`，省掉空闲常驻的 97 MB（1 tab 840.8 → 712.0 MB，4 tab 1553.5 → 1442.7 MB）。`/trace` 只调 `stats:url`，所以懒启动必须同时改这里，否则不打开统计页就一直报“未就绪”。实测干净进程表：启动后 0 个 `omp.exe stats` 子进程，CDP 调 `stats.url()` 返回有效 URL 后变 1 个。强杀主进程仍会留下 stats 孤儿，要按可执行路径额外清理。
+`omp stats` 已从 setup 预启动改回懒启动：`ipc.rs` 的 `stats:url` 与 `stats:fetch` 都 `ensure_running()`，省掉空闲常驻的 97 MB（1 tab 840.8 → 712.0 MB，4 tab 1553.5 → 1442.7 MB；差值含跨次方差，见 `docs/perf.md`）。`/trace` 只调 `stats:url`，所以懒启动必须同时改这里。`ensure_running` 用 `tokio::sync::Mutex` 串行化避免并发首用双 spawn；`stats:fetch` 失败 resolve 成 `{error, unavailable}` 与渲染层对齐，reject 会绕过 90 s 重试预算。实测干净进程表：启动后 0 个 `omp.exe stats` 子进程，CDP 调 `stats.url()` 返回有效 URL 后变 1 个。强杀主进程仍会留下 stats 孤儿，要按可执行路径额外清理。
 
-UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），产出 `docs/ui-audit.md` 和 `docs/ui-audit/screen.png`。首轮 345 条文案命中，已处理 8 个高频键，剩 328 条留在报告里。axe 首轮 2 类 serious，现剩 2 类：`label-content-name-mismatch` 从 2 个节点降到 1 个（`LangSwitcher` 与 `ContextStrategyBar` 已修；`ContextUsagePopover` 保留，因为让它的 `aria-label` 包含可见文本会破坏上游既有的可访问名契约测试，需与上游一起改），`nested-interactive` 仍有 3 个节点（侧栏会话行、tab 内部按钮），属于上游结构。审计结果依赖当前页面状态：空白页会报 `landmark-one-main`，等 `window.omp` 与首页渲染完再跑。
+UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），产出 `docs/ui-audit.md` 和 `docs/ui-audit/screen.png`。首轮 345 条文案命中，已处理 8 个高频键，剩 328 条留在报告里。axe 的 `label-content-name-mismatch` 已清零：`LangSwitcher` 的可访问名包含当前语言短名，`ContextStrategyBar` 与 `ContextUsagePopover` 去掉与可见文本不一致的 `aria-label`，交给可见文本命名（`ContextUsagePopover.test.tsx` 里两行钉旧字符串的 incidental 断言随之删除，其余 textContent/dialog 断言保留）。`nested-interactive` 仍有 3 个节点（侧栏会话行、tab 内部按钮），属于上游结构，未改。审计结果依赖当前页面状态：空白页会报 `landmark-one-main`，等 `window.omp` 与首页渲染完再跑。
 
 ---
 
@@ -344,7 +344,8 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 | `src/renderer`、`src/shared` | `nornzach/oh-my-pi-gui` v0.9.35 | MIT（`LICENSES/oh-my-pi-gui-MIT.txt`，含原版权行） |
 | `.trellis/`、`.omp/skills/trellis-*` | `mindfold-ai/Trellis` 模板 | AGPL-3.0（`LICENSES/trellis-AGPL-3.0.txt`） |
 | `crates/`、`src-tauri/`、`src/bridge/`、`replica/`、`docs/` | 本工程 | MIT（`LICENSE`） |
+| `axe-core`（devDependency，仅审计期注入） | `dequelabs/axe-core` 4.14.0 | MPL-2.0（`node_modules/axe-core/LICENSE`） |
 
-发布或再分发时，三条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`、`use-session-switch.ts`、`common/LangSwitcher.tsx`、`layout/ContextStrategyBar.tsx`、`locales/en.ts`、`locales/zh.ts`、`locales/ru.ts`，其余保持上游。
+发布或再分发时，四条声明都要一起带上；`src/renderer` 的字节级修改仅限 `main.tsx`、`index.html`、`ChatStream.tsx`、`use-session-switch.ts`、`common/LangSwitcher.tsx`、`layout/ContextStrategyBar.tsx`、`layout/ContextUsagePopover.tsx`、`layout/ContextUsagePopover.test.tsx`、`locales/en.ts`、`locales/zh.ts`、`locales/ru.ts`，其余保持上游。
 
-本轮的 renderer 差异只有三类：启动/首会话的 `performance.mark`；`LangSwitcher` 的可访问名包含当前语言短名；`ContextStrategyBar` 去掉与可见文本不一致的 `aria-label`，交给可见文本命名。locale 只改了 8 个高频键的破折号/弯引号（`tabs.allTabsHidden`、`contextStrategy.title`、`notices.unread`、`unavailable.chatSession`、`settings.editors.kvDuplicateKey`、`sessionSwitch.busyBlocked`、`settings.display.pasteMenuThreshold`、`agents.openHint`），其余 300 余条命中留在 `docs/ui-audit.md`。`ContextUsagePopover` 试过同样改法，但会破坏上游既有的可访问名契约测试，已回退到上游原样。
+本轮的 renderer 差异只有四类：启动/首会话的 `performance.mark`；`LangSwitcher` 的可访问名包含当前语言短名；`ContextStrategyBar` 与 `ContextUsagePopover` 去掉与可见文本不一致的 `aria-label`，交给可见文本命名（WCAG 2.5.3 要求可见文字在可访问名里；axe 按屏幕可见文本判定，`aria-hidden` 变体无效，别再试）；`ContextUsagePopover.test.tsx` 删掉 2 行钉旧 `aria-label` 字符串的 incidental 断言。locale 只改了 8 个高频键的破折号/弯引号（`tabs.allTabsHidden`、`contextStrategy.title`、`notices.unread`、`unavailable.chatSession`、`settings.editors.kvDuplicateKey`、`sessionSwitch.busyBlocked`、`settings.display.pasteMenuThreshold`、`agents.openHint`），其余 300 余条命中留在 `docs/ui-audit.md`。

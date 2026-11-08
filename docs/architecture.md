@@ -144,3 +144,15 @@ M1 是分水岭：**先停止"每 tab 一个 sidecar"的设计，再谈释放**�
 - 命令不带 sessionId，事件帧也没有稳定的会话归属字段。
 
 结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 3）做 LRU 回收，同 workspace 切会话走 `switch_session` 原地复用。内存预算按 `docs/perf.md` 的“固定开销约 480 MB + 每 tab 约 240 MB”计。
+
+### 2026-11-08：stats 服务懒启动（刻意偏离蓝图）
+
+蓝图（`src/main/stats-server.ts`）要求 app start 就起 dashboard。实测它空闲常驻 97 MB，而多数会话不打开统计页。改为 `stats:url` / `stats:fetch` 首次调用时 `ensure_running()`，setup 删掉预启动 spawn，退出时仍 `terminate_now()`。
+
+三个必须同时成立的约束：
+
+- `/trace` 只调 `stats.url()`，不挂载统计组件；`stats:url` 必须自己懒启动，否则不打开统计页就一直报“未就绪”。
+- 懒启动后首次打开统计面板，dashboard 的 sync 与当前路由的 `useStats` 会并发进两个 `stats:fetch`。`ensure_running` 用 `tokio::sync::Mutex` 串行化，避免两者都见 `port() == None`、都 spawn，后者覆盖 child slot 借 `kill_on_drop` 杀掉前者。
+- `stats:fetch` 失败 resolve 成 `{ error, unavailable }`（对齐上游 `main/ipc.ts` 与渲染层 `stats-sync.ts` / `use-stats.ts`）：启动/超时 `unavailable: true` 走 90 s 快速重试，已到服务器的请求失败 `unavailable: false` 直接显示错误。reject 会绕过重试预算弹死路错误。
+
+实测：干净进程表 0 → `stats.url()` → 1 个本仓库 `omp.exe stats` 子进程；1 tab 空闲 840.8 → 712.0 MB、4 tab 1553.5 → 1442.7 MB（差值 97–129 MB 含跨次方差，见 `docs/perf.md`）。代价是首次 `/trace` 要等一次 spawn（端口等待上限 15 s），二次调用瞬时。

@@ -118,10 +118,6 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 
 	if (!contextUsage) return null;
 
-	const triggerLabel = capacityKnown
-		? t("contextUsage.open", { percent: Math.round(percent) })
-		: t("contextUsage.windowUnknown");
-
 	const popoverStyle: CSSProperties | undefined = anchor
 		? { bottom: anchor.bottom, left: anchor.left, top: anchor.top, width: anchor.width }
 		: undefined;
@@ -131,7 +127,6 @@ export function ContextUsagePopover({ autoCompactAt = null }: { autoCompactAt?: 
 			<button
 				aria-controls="omp-context-usage-popover"
 				aria-expanded={open}
-				aria-label={triggerLabel}
 				className={`omp-context-usage-trigger omp-pressable flex h-6 min-w-0 items-center gap-1.5 rounded-md px-1.5 ${
 					open
 						? "text-[var(--omp-link)] ring-1 ring-[var(--omp-link)]"

@@ -126,6 +126,7 @@ pub struct StatsServer {
     child: Mutex<Option<Child>>,
     port: Arc<Mutex<Option<u16>>>,
     budget: RestartBudget,
+    start_lock: tokio::sync::Mutex<()>,
 }
 
 impl StatsServer {
@@ -135,6 +136,7 @@ impl StatsServer {
             child: Mutex::new(None),
             port: Arc::new(Mutex::new(None)),
             budget: RestartBudget::default(),
+            start_lock: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -161,6 +163,11 @@ impl StatsServer {
     /// announced. A crashed child is noticed here, so a dead dashboard heals on the next read
     /// instead of answering with a stale port until the app restarts.
     pub async fn ensure_running(&self) -> Result<u16> {
+        // Two first-use readers (dashboard sync + a route's useStats) can arrive together
+        // once the server is lazy. Without a lock both see port() == None and both spawn;
+        // the second overwrites the child slot and kill_on_drop drops the first one, leaving
+        // a caller holding a port whose process is already gone.
+        let _start_guard = self.start_lock.lock().await;
         if let Some(port) = self.port() {
             if self.child_alive() {
                 return Ok(port);

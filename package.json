@@ -13,7 +13,7 @@
     "build": "tauri build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "perf:gate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/gate.ps1",
+    "perf:gate": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/gate.ps1 -Baseline docs/perf-baseline.json -Current .perf/release-idle.json -MaxRssMB 780 -MaxColdStartMs 1500",
     "ui:audit": "node scripts/ui/audit.mjs"
   },
   "dependencies": {

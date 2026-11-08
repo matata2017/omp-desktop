@@ -114,7 +114,6 @@ describe("ContextUsagePopover", () => {
 
 		const trigger = container.querySelector("button") as unknown as HTMLButtonElement;
 		expect(trigger.textContent).toBe("16.0k");
-		expect(trigger.getAttribute("aria-label")).toBe("Context window unknown");
 		expect(container.textContent).not.toContain("0%");
 
 		await act(async () => trigger.click());
@@ -139,7 +138,6 @@ describe("ContextUsagePopover", () => {
 		await mount(850_000);
 
 		const trigger = container.querySelector("button") as unknown as HTMLButtonElement;
-		expect(trigger.getAttribute("aria-label")).toBe("Show context usage, 16% used");
 		// The trigger is a compact ring with the share used; the popover carries the figures.
 		expect(trigger.textContent).toBe("16% of 1.0M");
 		expect(document.querySelector("#omp-context-usage-popover")).toBeNull();

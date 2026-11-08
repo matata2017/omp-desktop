@@ -10,7 +10,7 @@ dev 数字只能做结构相对比较（有/无 sidecar、1/4 tab），不能当
 
 ## 单测量器
 
-只用 `scripts/perf/measure.ps1`，输出 JSON 到 `-Out`，退出码 0 成功 / 2 无窗口 / 3 ready 超时 / 4 exe 不存在。配套 `drive.mjs`（CDP 驱动）、`gate.ps1`（预算门）、`profile-stream.mjs`、`probe-shared.mjs`。
+只用 `scripts/perf/measure.ps1`，输出 JSON 到 `-Out`。退出码：`0` 成功、`3` ready 超时；exe 不存在或 60 s 内无窗口会 `throw`（`-File` 下退出码 1）。`gate.ps1` 的 `2` 是 JSON 缺字段，别和 measure 的退出码串在一起。配套 `drive.mjs`（CDP 驱动）、`gate.ps1`（预算门）、`profile-stream.mjs`、`probe-shared.mjs`。具体命令与阈值以脚本为准。
 
 几条实测踩过的坑：
 

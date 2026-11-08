@@ -115,11 +115,13 @@ async function attempt() {
     }
     // The app starts its active tab on its own, a few seconds after the renderer mounts.
     // Activating a tab before that happens grabs a different tab as active and boots a
-    // second sidecar, so -Tabs 1 would report two. Wait for the natural one first.
-    const naturalDeadline = Date.now() + Math.min(${waitReady}, 8000);
+    // second sidecar, so -Tabs 1 would report two. Wait for the active tab itself to reach
+    // ready. Use the full budget: a fixed 8s bound falls through on a slow machine and
+    // activates a second tab anyway.
+    const naturalDeadline = Date.now() + ${waitReady};
     while (Date.now() < naturalDeadline) {
-      const readyNow = tabs.filter(tab => tab.status === "ready").length;
-      if (readyNow >= 1 || readyNow >= wanted) break;
+      const active = tabs.find(tab => tab.active);
+      if (active?.status === "ready") break;
       await new Promise(resolve => setTimeout(resolve, 200));
       tabs = await omp.tabs.list();
     }

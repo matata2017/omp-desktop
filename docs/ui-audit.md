@@ -1,6 +1,6 @@
 # UI audit
 
-Generated 2026-11-08T09:38:58.187Z from the locale files and a running window.
+Generated 2026-11-08T10:16:40.631Z from the locale files and a running window.
 
 ## Copy findings
 
@@ -115,7 +115,6 @@ Total findings: 328. Zero-use keys are likely stale; check before editing.
 
 | impact | id | nodes | help |
 |---|---|---:|---|
-| serious | label-content-name-mismatch | 1 | Elements must have their visible text as part of their accessible name |
 | serious | nested-interactive | 3 | Interactive controls must not be nested |
 
 Screenshot: `docs/ui-audit/screen.png`.

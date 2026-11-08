@@ -38,11 +38,22 @@ if ($cur.readyTimedOut -eq $true) {
 }
 
 $ratio = 1 + ($MaxRegressionPct / 100)
-$coldLimit = [math]::Round($base.coldStartMs * $ratio)
-if ($cur.coldStartMs -gt $coldLimit) {
-  $failures += "coldStartMs $($cur.coldStartMs) > $coldLimit (baseline $($base.coldStartMs), +$MaxRegressionPct%)"
+# Cold start is noisy (275-694 ms on the same machine, OS/WebView2 cache), so a tight
+# relative comparison flags normal variance. When an absolute budget is supplied, use it
+# for cold start instead; RSS is stable and keeps both relative and absolute checks.
+if ($MaxColdStartMs -gt 0) {
+  if ($cur.coldStartMs -gt $MaxColdStartMs) {
+    $failures += "coldStartMs $($cur.coldStartMs) > budget $MaxColdStartMs"
+  } else {
+    $notes += "coldStartMs $($cur.coldStartMs) <= budget $MaxColdStartMs"
+  }
 } else {
-  $notes += "coldStartMs $($cur.coldStartMs) <= $coldLimit"
+  $coldLimit = [math]::Round($base.coldStartMs * $ratio)
+  if ($cur.coldStartMs -gt $coldLimit) {
+    $failures += "coldStartMs $($cur.coldStartMs) > $coldLimit (baseline $($base.coldStartMs), +$MaxRegressionPct%)"
+  } else {
+    $notes += "coldStartMs $($cur.coldStartMs) <= $coldLimit"
+  }
 }
 
 $rssLimit = [math]::Round($base.treeRss.medianMB * $ratio, 1)
@@ -55,9 +66,7 @@ if ($cur.treeRss.medianMB -gt $rssLimit) {
 if ($MaxRssMB -gt 0 -and $cur.treeRss.medianMB -gt $MaxRssMB) {
   $failures += "treeRss.medianMB $($cur.treeRss.medianMB) > budget $MaxRssMB"
 }
-if ($MaxColdStartMs -gt 0 -and $cur.coldStartMs -gt $MaxColdStartMs) {
-  $failures += "coldStartMs $($cur.coldStartMs) > budget $MaxColdStartMs"
-}
+
 
 foreach ($note in $notes) { Write-Output "ok: $note" }
 if ($failures.Count -gt 0) {

@@ -1,0 +1,9 @@
+{
+  "label": "release-idle (2026-11-08, lazy stats)",
+  "coldStartMs": 327,
+  "treeRss": {
+    "medianMB": 712.0
+  },
+  "readyTimedOut": false,
+  "note": "Portable baseline for scripts/perf/gate.ps1. coldStartMs=327 is a representative run; clean-batch variance is 275-694 ms, so gate uses -MaxColdStartMs=1500 (absolute) instead of a tight relative cold-start check. treeRss.medianMB=712.0 is stable. Full measurement JSON (machine paths, timestamps) lives in the ignored .perf/ directory; see docs/perf.md."
+}
