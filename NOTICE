@@ -1,0 +1,32 @@
+Romp
+====
+
+This repository contains code from three sources under different licenses.
+The MIT LICENSE at the repository root covers the original Romp code only;
+it does not relicense the two imported components below.
+
+1. Original Romp code
+   Paths: crates/, src-tauri/, src/bridge/, scripts/, docs/, replica/,
+          README.md, NOTICE, and the root build/configuration files.
+   License: MIT. Full text in LICENSE.
+   Copyright (c) 2026 Romp contributors.
+
+2. Upstream renderer
+   Paths: src/renderer/, src/shared/
+   Source: nornzach/oh-my-pi-gui v0.9.35
+           https://github.com/nornzach/oh-my-pi-gui
+   License: MIT. Full text and original copyright line in
+            LICENSES/oh-my-pi-gui-MIT.txt.
+   Copyright (c) 2026 nornzach.
+   The byte-level changes made to these files are listed in
+   docs/handoff.md section 9.
+
+3. Trellis workflow template
+   Paths: .trellis/, .omp/skills/trellis-*
+   Source: mindfold-ai/Trellis
+           https://github.com/mindfold-ai/Trellis
+   License: GNU Affero General Public License v3.0. Full text in
+            LICENSES/trellis-AGPL-3.0.txt.
+
+When redistributing this repository or a build of it, include all three
+notices and the corresponding license texts.
