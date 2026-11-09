@@ -11,7 +11,7 @@
 2. **agent 是子进程，不是应用运行时。** 一个活动会话一个 `omp --mode rpc`；回合结束后的空闲宽限期释放；tab 本身不拥有进程。
 3. **tab 是会话的视图。** tab 只在成为活动路由时申请一个 sidecar 槽位；聚焦期间保持 warm，失焦且租约归零后释放。打开/切换时 transcript 先由 Rust 缓存渲染，composer 在 sidecar ready 前保持现有禁用态。
 4. **不让 tab 数进入内存公式。** 进程数 = 活动回合数 + 至多 1 个空闲预热槽；默认并发回合上限 2，超出排队并显示"等待 agent"。
-5. **保留上游 renderer 复用。** 不重写 React、不换纯 Rust UI；所有改动在 Rust 侧与 `src/bridge/omp-api.ts`。已记录的两个例外：`ChatStream.tsx` 加载门（ready 但 transcript 未到时继续显示骨架）与 `use-session-switch.ts` 常驻 sidecar 原地切换（Codex 式线程切换）。
+5. **保留上游 renderer 复用。** 不重写 React、不换纯 Rust UI；所有改动在 Rust 侧与 `src/bridge/omp-api.ts`。已记录的两个例外：`ChatStream.tsx` 加载门（ready 但 transcript 未到时继续显示骨架）与 `use-session-switch.ts` 空白 tab 原地切 / 有会话的 tab 多开（让会话可并行运行）。
 
 ## 1. 从 OpenIDEA 学什么
 
@@ -143,7 +143,7 @@ M1 是分水岭：**先停止"每 tab 一个 sidecar"的设计，再谈释放**�
 - 切回 A 也不恢复 `message_update`。
 - 命令不带 sessionId，事件帧也没有稳定的会话归属字段。
 
-结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 6）做 LRU 回收，同 workspace 切会话走 `switch_session` 原地复用。内存预算分两套口径、不可相加：WorkingSet 历史口径为“固定开销约 480 MB + 每 tab 约 240 MB”（`docs/perf.md`）；2026-11-08 安装版 Private 实测：每活跃 sidecar 约 490–540 MB（N=3），固定部分约 388 MB（单样本待复核），4 个活跃 tab 的 sidecar Private 合计约 2.0 GB。
+结论：一个进程只有一个可见流。切换把在途回合从观察者手里摘走，事件无法按 tab 路由。共享 sidecar 需要改 RPC 协议（命令带 session、事件带归属），不在本任务范围。当前实现保持每 tab 一个进程，用 `ROMP_MAX_SIDECARS`（默认 6）做 LRU 回收；UI 默认在已绑定会话的 tab 上点击另一会话时新开一个进程，只有空白 tab 才用 `switch_session` 原地切换。内存预算分两套口径、不可相加：WorkingSet 历史口径为“固定开销约 480 MB + 每 tab 约 240 MB”（`docs/perf.md`）；2026-11-08 安装版 Private 实测：每活跃 sidecar 约 490–540 MB（N=3），固定部分约 388 MB（单样本待复核），4 个活跃 tab 的 sidecar Private 合计约 2.0 GB。
 
 ### 2026-11-08：stats 服务懒启动（刻意偏离蓝图）
 

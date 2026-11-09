@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "复核跨层数据流与 owned/kind-mismatch 两种 refusal 是否仍被正确处理"}
+{"file": ".trellis/tasks/11-09-sidebar-parallel-tabs/research/current-switch-behavior.md", "reason": "验收账本第 45/165 行与 8 处文档同步位置（parity.md 超 32KB 会截断）"}
+{"file": "README.md", "reason": "ROMP_MAX_SIDECARS 上限说明与 bun 验证命令"}

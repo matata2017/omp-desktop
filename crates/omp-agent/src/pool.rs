@@ -453,6 +453,23 @@ mod tests {
         pool.claim_session(&tab("b"), path).unwrap();
     }
 
+	#[test]
+	fn releasing_a_process_keeps_the_session_binding_for_resume() {
+		let pool: SidecarPool<FakeHandle> = SidecarPool::new();
+		let (handle, _, disposed) = fake();
+		pool.attach(tab("a"), handle);
+		let path = Path::new("C:/s/x.jsonl");
+		pool.claim_session(&tab("a"), path).unwrap();
+		assert!(pool.release_process(&tab("a")));
+		assert_eq!(disposed.load(Ordering::Relaxed), 1);
+		// The tab stays registered so it can resume on focus; until then no other
+		// tab may claim its transcript. This is why `tab:spawn` claims BEFORE it
+		// starts a sidecar rather than checking ownership and claiming later.
+		assert_eq!(pool.tab_count(), 1);
+		assert_eq!(pool.session_owner(path), Some(tab("a")));
+		assert!(pool.claim_session(&tab("b"), path).is_err());
+	}
+
     #[test]
     fn requests_route_back_to_origin_tab_once() {
         let pool: SidecarPool<FakeHandle> = SidecarPool::new();

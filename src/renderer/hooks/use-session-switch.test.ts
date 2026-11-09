@@ -503,29 +503,54 @@ describe("openSessionFromSidebar (gui#29)", () => {
 			bundles: new Map(),
 		});
 		useSessionStore.setState({ sessionId: "s0", cwd: "/srv", messageCount: blank ? 0 : 4 });
+		if (!blank) {
+			// Restored tabs have no renderer-side sessionPath; hydrated history is the signal.
+			useMessagesStore.setState({
+				messages: [{ id: "m1", role: "user", content: "earlier work" } as never],
+				liveMessages: [],
+			});
+		}
 	}
 
-	it("switches the resident tab in place, even when it holds history", async () => {
+	it("opens a new tab when the focused tab already has a session", async () => {
 		seedFocusedTab(false);
-		omp.rpc.getState.mockResolvedValue(ok(serverState({ sessionId: "a", messageCount: 2 })));
+		expect(useTabsStore.getState().tabs[0]?.sessionPath).toBeUndefined();
+		omp.tabs.spawn
+			.mockResolvedValueOnce({ tabId: "t-spawned-a" })
+			.mockResolvedValueOnce({ tabId: "t-spawned-b" });
 
-		// The resident sidecar switches onto the clicked session; no new process/tab.
 		await openSessionFromSidebar(session("/sessions/a.jsonl"));
-		expect(omp.rpc.switchSession).toHaveBeenCalledWith("/sessions/a.jsonl");
-		expect(omp.tabs.spawn).not.toHaveBeenCalled();
-
-		// A second open reuses the same sidecar.
 		await openSessionFromSidebar(session("/sessions/b.jsonl"));
-		expect(omp.rpc.switchSession).toHaveBeenLastCalledWith("/sessions/b.jsonl");
-		expect(omp.tabs.spawn).not.toHaveBeenCalled();
 
-		// Even after a turn ran and the tab is ready again, the next open switches in place.
-		const status = { kind: "agent", tabId: "t0", cwd: "/srv", sessionPath: "/sessions/b.jsonl" } as const;
-		useTabsStore.getState().applyTabStatus({ ...status, status: "running" });
-		useTabsStore.getState().applyTabStatus({ ...status, status: "ready" });
-		await openSessionFromSidebar(session("/sessions/c.jsonl"));
-		expect(omp.rpc.switchSession).toHaveBeenLastCalledWith("/sessions/c.jsonl");
-		expect(omp.tabs.spawn).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledTimes(2);
+		expect(omp.tabs.spawn).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({ sessionPath: "/sessions/a.jsonl" }),
+		);
+		expect(omp.tabs.spawn).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({ sessionPath: "/sessions/b.jsonl" }),
+		);
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(useTabsStore.getState().tabs).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ id: "t-spawned-a", sessionPath: "/sessions/a.jsonl" }),
+				expect.objectContaining({ id: "t-spawned-b", sessionPath: "/sessions/b.jsonl" }),
+			]),
+		);
+	});
+
+	it("opens a new tab when only unflushed live rows remain", async () => {
+		seedFocusedTab(true);
+		useMessagesStore.setState({
+			messages: [],
+			liveMessages: [{ id: "live-1", role: "assistant", content: "draft" } as never],
+		});
+
+		await openSessionFromSidebar(session("/sessions/a.jsonl"));
+
+		expect(omp.rpc.switchSession).not.toHaveBeenCalled();
+		expect(omp.tabs.spawn).toHaveBeenCalledWith(expect.objectContaining({ sessionPath: "/sessions/a.jsonl" }));
 	});
 
 	it("never switches a streaming tab", async () => {

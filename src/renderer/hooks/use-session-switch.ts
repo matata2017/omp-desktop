@@ -239,10 +239,10 @@ export async function switchSessionNow(session: SessionInfo, model?: SessionMode
 }
 
 /**
- * Whether the focused `tab` may switch onto `session` in place: the resident
- * sidecar's thread changes, so the tab must be idle, of the session's kind
- * and workspace, with no pending approval/extension UI/queue entry and no
- * unsent composer input.
+ * Whether the focused `tab` may switch onto `session` in place: only a truly
+ * blank tab may repurpose its resident sidecar. A tab holding a conversation
+ * opens a new parallel tab; all existing idle, kind, workspace, pending-work,
+ * and composer guards still apply.
  */
 function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	if (tab.kind !== (session.kind === "chat" ? "chat" : "agent") || tab.worktree || tab.pendingSessionPath)
@@ -252,6 +252,14 @@ function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	// `tab.cwd` is the sidecar's process cwd; `state.cwd` can drift to whatever
 	// session a fresh sidecar auto-resumed, so it must not widen the guard.
 	if (session.cwd !== tab.cwd) return false;
+	// A tab holding a conversation must not be repurposed: switching its resident
+	// sidecar aborts the in-flight turn and leaves the other session unable to run
+	// alongside the clicked one. Restored tabs have no renderer-side sessionPath
+	// (Rust's tab:get-all / TAB_STATUS don't send it), so hydrated transcript rows
+	// are the reliable signal; sessionPath covers a sidebar-opened tab before its
+	// first hydrate, liveMessages covers rows not yet flushed to the transcript.
+	const messages = useMessagesStore.getState();
+	if (tab.sessionPath || messages.messages.length > 0 || messages.liveMessages.length > 0) return false;
 	const composer = useComposerStore.getState();
 	if (composer.sending || composer.draft.trim() !== "" || composer.images.length > 0) return false;
 	// Never abandon work that is waiting on the user: approvals, extension UI,
@@ -260,16 +268,16 @@ function canBrowseInPlace(tab: SessionTab, session: SessionInfo): boolean {
 	if (usePlanApprovalStore.getState().pending !== null) return false;
 	const queue = useQueueStore.getState();
 	if (queue.steering.length > 0 || queue.followUp.length > 0) return false;
-	// Idle, same-workspace tab: switch the resident sidecar onto the clicked
-	// session instead of booting a new process/tab (Codex-style thread switch).
+	// Truly blank same-workspace tab: switch the resident sidecar onto the
+	// clicked session instead of booting a new process/tab.
 	return true;
 }
 
 /**
- * Open `session` from the sidebar (gui#29). An idle same-workspace tab switches
- * its resident sidecar onto the session in place (thread switch, no new
- * process). Busy tabs, cross-workspace/kind sessions, and tabs holding pending
- * work open a new tab instead.
+ * Open `session` from the sidebar (gui#29). A truly blank same-workspace tab
+ * switches its resident sidecar in place. A tab holding conversation history
+ * opens a new parallel tab/sidecar; busy tabs, cross-workspace/kind sessions,
+ * and tabs holding pending work also open a new tab.
  */
 export async function openSessionFromSidebar(session: SessionInfo): Promise<void> {
 	const tabs = useTabsStore.getState();

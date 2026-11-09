@@ -24,6 +24,7 @@ These guides help you **ask the right questions before coding**.
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | Identify patterns and reduce duplication | When you notice repeated patterns |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | Think through data flow across layers | Features spanning multiple layers |
 | [Performance Measurement](./performance-measurement.md) | Release builds, measurement harness, process lifecycle, budgets | When measuring startup/memory, or touching boot and sidecar lifecycle |
+| [Session / Tab Ownership](./session-tab-ownership.md) | Claim-before-spawn, blank-tab reuse signals, delivering to the installed binary | When opening sessions, touching tab/sidecar ownership, or shipping a packaged app change |
 
 ---
 

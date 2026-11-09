@@ -20,7 +20,7 @@
 | 0.5 | LSP + 调试器 | **适配器已验证**：codelldb 与 debugpy 的 DAP `initialize` 都返回 `success:true`（codelldb: configurationDone/函数断点/条件断点；debugpy: configurationDone/setVariable）；断点续跑的完整会话未做 |
 | 1 | Rust workspace + RPC 传输 + sidecar | **完成**（6 条协议探针全 success，证明是 fork 版） |
 | 2 | Tauri 外壳 + `window.omp` shim | **完成**：起窗、ready、会话列表、完整 prompt→流式→工具卡→agent_end；终端帧路由实测 |
-| 3 | 会话 / 多标签 | **3/5**：原地 `switch_session`、会话增删改查、per-tab client/batcher、布局持久化与重启恢复、**LRU 回收的租约判定**（活动/流式/待审批/浏览器页面 均挡住回收）已完成；剩 phantom tab、会话归档/树/branch-fork |
+| 3 | 会话 / 多标签 | **3/5**：空白 tab 原地切 + 有会话 tab 并行新开、会话增删改查、per-tab client/batcher、布局持久化与重启恢复、**LRU 回收的租约判定**（活动/流式/待审批/浏览器页面 均挡住回收）已完成；剩 phantom tab、会话归档/树/branch-fork |
 | 4 | 对话面与系统通道 | **4/5**：模型指示器、system 对话框/剪贴板/通知、`editor:open-external`、**会话搜索（FTS5）**已完成；剩会话树/分支/导出 |
 | 5 | 模型 / Provider / 设置 | **3/4**：`models:*` 全套（含 models.yml 原子读写与内置 id 守卫）、schema 驱动设置页（读写都验过）、命令面板已完成；剩 provider 登录/登出 |
 | 6 | 统计 | **完成**：`crates/omp-stats` 懒启动改 setup 预启动、17 路径白名单 + `/api/request/:id`、`bench:run/abort`、与 `stats.db` 同窗口对账通过（2026-11-08 已改回懒启动，见 8.1） |
@@ -68,8 +68,8 @@ app:quit                                          → 应用退出、D:\rust-omp
 - sidecar 改为 `tab:get-all` / `tab:set-active` 时懒启动；`sidecar:status-get` 回放当前状态，避免 ready 事件早于订阅。
 - `runtime.log` 落盘到 `%APPDATA%\dev.romp.desktop\runtime.log`，`scripts/dev.ps1` 自动设置 MSVC/PATH。
 - `ChatStream.tsx` 的 `awaitingTranscript` 增加“ready 且 tab 有历史且 rows===0”分支：sidecar ready 早于 `get_messages` 时继续显示骨架，避免三段式闪烁（已记入 parity 已知偏差）。
-- **会话切换改为常驻 sidecar 原地切**（对标 Codex `app-server` 的 `thread/resume`）：同 workspace 的空闲 tab 直接
-  `switch_session`，不再每次新起 244 MB 进程；跨 workspace、kind 不匹配、流式/草稿/审批/队列未清时仍新开 tab。
+- **会话打开默认于 2026-11-09 改为并行优先**：同 workspace 的空白、未绑定 tab 仍用 `switch_session` 原地切；
+  已绑定会话的 tab 点击另一会话时新开独立 tab/sidecar，避免 resident sidecar 切换中止在途回合，让两个会话可并行运行。跨 workspace、kind 不匹配、流式/草稿/审批/队列未清时也仍新开 tab。
   配套：Rust 补发 `tab:status` 快照（上游 main 本来就发，缺它时 renderer 的 tab store 永远看不到 `ready`）。
 - 终端帧路由：`terminal_opened/output/exit/closed` → `terminal:frame`，payload 用渲染层要求的 `{tabId, frame}`。
 
@@ -121,7 +121,7 @@ src-tauri/      lib.rs（状态/事件路由/优雅退出）ipc.rs（唯一命�
                 models.rs（models.yml 读写）editor.rs（外部编辑器往返）bench.rs（`omp bench --json`）
                 scheduler.rs（运行 argv 策略 + 监督循环）host_tools.rs + host_tools_defs.json（agent 的定时任务工具）
                 tab_layout.rs（布局持久化）builtin_providers.rs（88 个内置 provider，生成）
-src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），改动仅限 main.tsx（`window.omp` + 首帧标记）、index.html、ChatStream.tsx（加载门 + 首会话标记）、use-session-switch.ts（原地切换）、common/LangSwitcher.tsx、layout/ContextStrategyBar.tsx、layout/ContextUsagePopover.tsx（可访问名）、layout/ContextUsagePopover.test.tsx（删 2 行钉旧 aria-label 的 incidental 断言）、locales/{en,zh,ru}.ts（首轮文案清理）
+src/renderer/   上游 v0.9.35 原样拷贝（567 文件 / 111,400 行），改动仅限 main.tsx（`window.omp` + 首帧标记）、index.html、ChatStream.tsx（加载门 + 首会话标记）、use-session-switch.ts（空白 tab 原地切 / 有会话 tab 新开）、common/LangSwitcher.tsx、layout/ContextStrategyBar.tsx、layout/ContextUsagePopover.tsx（可访问名）、layout/ContextUsagePopover.test.tsx（删 2 行钉旧 aria-label 的 incidental 断言）、locales/{en,zh,ru}.ts（首轮文案清理）
 src/shared/     上游类型与 rpc-client.ts 原样拷贝（合同的唯一来源）
 src/bridge/omp-api.ts   Electron preload 的 Tauri 移植：OmpApi → ipc_invoke
 replica/        侦察产物（recon.md、parts/*、features.csv）
@@ -157,8 +157,8 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
    660 s，export_html/reload_plugins 120 s，reset credits 60 s，set_model/cycle_model/get_transcript/
    get_messages 30 s，其余 8 s。渲染层会自己算 `timeoutMs` 传下来，`ipc.rs` 必须透传。
 8. **agent 是常驻子进程，会话是线程**（对标 `openai/codex` 的 `app-server`：`thread/start`/`thread/resume`）。
-   一个 tab 持有一个 sidecar；同 workspace 切换会话用 `switch_session` 原地换线程，**不再为每次点击新起进程**。
-   跨 workspace 不能原地切（sidecar 返回 `cancelled:true`），才新开 tab。
+   一个 tab 持有一个 sidecar；2026-11-09 起，同 workspace 的空白、未绑定 tab 用 `switch_session` 原地换线程，已绑定会话的 tab 则新开独立 tab/sidecar，使两个会话可并行运行并避免切换中止在途回合。
+   跨 workspace 也不能原地切（sidecar 返回 `cancelled:true`），必须新开 tab。
 9. **归属只认 sidecar 明确确认的切换**：`success:true && cancelled:false` 才更新 `tab_sessions` 与 pool
    ownership；`get_state` 返回的 `sessionFile` 用来记录 fresh tab 自己的会话，避免被回收后恢复成新会话。
 10. **事件形状有三种**（不是两种）：`{tabId,payload}`、`{request,tabId}`、终端的 `{tabId,frame}`。
@@ -345,7 +345,7 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 
 - 加入**决策模型**（本轮未动 fork 代码）。
 - **共享 sidecar**：11-06 的 `probe-shared.mjs` 实验（`docs/architecture.md` §9）显示切会话会丢在途 `message_update` / `agent_end`；本节下面的 2026-11-09 重跑在**当前打包 fork** 上确认同一结论。并发共享需要改 RPC 协议：命令带 session、事件带归属、在途流隔离与恢复。**这个协议改动在 upstream fork，不在 Romp 仓库；已确认该方向可接受，随 fork 改造一并做。**
-- 本仓库侧已有的复用：同 workspace 切会话走 `switch_session` 原地复用（`ipc.rs::confirmed_switch_path`），不新起 ~500 MB 进程；这是**串行复用**，不是并发共享。
+- 本仓库侧已有的复用：空白、未绑定 tab 可用 `switch_session` 原地复用（`ipc.rs::confirmed_switch_path`）；这是**串行复用，不是并发共享**。UI 默认在已绑定会话的 tab 上点击另一会话时新开第二个进程，让两个会话并行运行。
 
 2026-11-09 对**打包的 fork**（`omp/18.15.0`、ready `protocolVersion:1`、supported `[1,2]`）发 RPC 命令（`scripts/perf/rpc-caps.ps1`，104 条命令的 input schema 与响应全部落盘 `.perf/rpc-caps/commands.json`）：
 

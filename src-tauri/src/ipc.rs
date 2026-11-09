@@ -151,13 +151,16 @@ pub async fn ipc_invoke(
                 .get("sessionPath")
                 .and_then(Value::as_str)
                 .map(PathBuf::from);
+            let number = state.next_tab.fetch_add(1, Ordering::SeqCst);
+            let tab = TabId::new(format!("tab-{number}"));
+            // Claim before spawning. A check-then-claim window here let two concurrent
+            // spawns both start a sidecar for the same transcript (F-OWN).
             if let Some(path) = &session_path {
-                if let Some(owner) = state.pool.session_owner(path) {
+                if state.pool.claim_session(&tab, path).is_err() {
+                    let owner = state.pool.session_owner(path);
                     return Ok(json!({ "tabId": null, "ownerTabId": owner, "ownerWinId": 1, "refusal": "owned" }));
                 }
             }
-            let number = state.next_tab.fetch_add(1, Ordering::SeqCst);
-            let tab = TabId::new(format!("tab-{number}"));
             // Phantom-tab investigation: record who asked for this tab and for what.
             tracing::info!(
                 tab = %tab,
@@ -179,13 +182,18 @@ pub async fn ipc_invoke(
                 fresh_launch: session_path.is_none(),
                 ..LaunchOptions::default()
             };
-            start_tab(&app, tab.clone(), launch)?;
+            if let Err(err) = start_tab(&app, tab.clone(), launch) {
+                if let Some(path) = &session_path {
+                    state.pool.release_session(path);
+                }
+                state.tab_cwds.lock().remove(&tab);
+                state.tab_kinds.lock().remove(&tab);
+                state.tab_sessions.lock().remove(&tab);
+                return Err(err);
+            }
             // The renderer switches to a spawned tab right away; keep main's active view
             // in sync so a reconcile does not snap back to the previous tab.
             *state.active_tab.lock() = tab.clone();
-            if let Some(path) = session_path {
-                let _ = state.pool.claim_session(&tab, &path);
-            }
             // Persist last: the saved activeIndex must point at the tab the renderer just opened.
             crate::persist_layout(&state);
             Ok(json!({ "tabId": tab, "cwd": cwd.to_string_lossy() }))
