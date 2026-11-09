@@ -1,0 +1,4 @@
+{"file":".trellis/tasks/11-06-romp-deep-performance/prd.md","reason":"User intent, fixed snapshot, scope and acceptance criteria"}
+{"file":".trellis/tasks/11-06-romp-deep-performance/research/expert-method.md","reason":"Evidence-first method, conditional optimization order and independent proof chain"}
+{"file":".trellis/tasks/11-06-romp-deep-performance/research/runtime-audit.md","reason":"Source-verified runtime ownership facts and falsification questions"}
+{"file":".trellis/tasks/11-06-romp-deep-performance/research/measurement-audit.md","reason":"Existing benchmark limitations and reusable measurement assets"}

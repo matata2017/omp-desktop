@@ -14,7 +14,9 @@ import { setFocusedSessionRuntime } from "../../stores/session-runtime-context";
 import { LinkMenuHost } from "../common/LinkMenu";
 import { FilesPanel } from "./FilesPanel";
 
-const { document, window, Event, HTMLElement, Node } = parseHTML("<html><body></body></html>");
+const { document, window, Event, HTMLElement, Node } = parseHTML(
+	"<html><body></body></html>",
+);
 
 const globals = globalThis as Record<string, unknown>;
 globals.document = document;
@@ -23,8 +25,12 @@ globals.Event = Event;
 globals.HTMLElement = HTMLElement;
 globals.Node = Node;
 globals.IS_REACT_ACT_ENVIRONMENT = true;
-globals.requestAnimationFrame = (callback: () => void) => setTimeout(callback, 0);
-Object.defineProperties(window, { innerWidth: { value: 1440 }, innerHeight: { value: 900 } });
+globals.requestAnimationFrame = (callback: () => void) =>
+	setTimeout(callback, 0);
+Object.defineProperties(window, {
+	innerWidth: { value: 1440 },
+	innerHeight: { value: 900 },
+});
 
 const ompWindow = window as unknown as { omp?: unknown };
 
@@ -33,128 +39,164 @@ let resolvePaths: Mock;
 let revealPath: Mock;
 
 async function flush(): Promise<void> {
- await act(async () => {
-  const { promise, resolve } = Promise.withResolvers<void>();
-  setTimeout(resolve, 0);
-  await promise;
- });
+	await act(async () => {
+		const { promise, resolve } = Promise.withResolvers<void>();
+		setTimeout(resolve, 0);
+		await promise;
+	});
 }
 
 /** Dispatch inside act(); linkedom's Event has a getter-only eventPhase React writes to. */
-async function dispatch(target: Element, event: InstanceType<typeof Event>): Promise<void> {
- Object.defineProperty(event, "eventPhase", { value: 0, writable: true, configurable: true });
- await act(async () => {
-  target.dispatchEvent(event);
- });
- await flush();
+async function dispatch(
+	target: Element,
+	event: InstanceType<typeof Event>,
+): Promise<void> {
+	Object.defineProperty(event, "eventPhase", {
+		value: 0,
+		writable: true,
+		configurable: true,
+	});
+	await act(async () => {
+		target.dispatchEvent(event);
+	});
+	await flush();
 }
 
 afterEach(async () => {
- if (root) {
-  await act(async () => root?.unmount());
-  root = null;
- }
- document.body.innerHTML = "";
- delete ompWindow.omp;
- setFocusedSessionRuntime(null);
- clearPathResolutionCache();
+	if (root) {
+		await act(async () => root?.unmount());
+		root = null;
+	}
+	document.body.innerHTML = "";
+	delete ompWindow.omp;
+	setFocusedSessionRuntime(null);
+	clearPathResolutionCache();
 });
 
 describe("FilesPanel right-click", () => {
- it("reveals the right-clicked file of the panel's own tab", async () => {
-  const onDisk: IpcResolvedPath = { absolutePath: "/work/b/README.md", kind: "file", relativePath: "README.md" };
-  resolvePaths = vi.fn(async (paths: string[]) => paths.map(() => onDisk));
-  revealPath = vi.fn(async () => ({ ok: true }));
-  ompWindow.omp = {
-   fs: {
-    list: vi.fn(async () => ({
-     ok: true,
-     entries: [{ name: "README.md", path: "README.md", kind: "file" }],
-     truncated: false,
-    })),
-   },
-   system: { resolvePaths, revealPath, openPath: vi.fn(async () => ({ ok: true })) },
-  };
-  setFocusedSessionRuntime("tab-b");
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host as unknown as Element);
-  await act(async () => {
-   root?.render(
-    <I18nProvider>
-     <FilesPanel />
-     <LinkMenuHost />
-    </I18nProvider>,
-   );
-  });
-  await flush();
+	it("reveals the right-clicked file of the panel's own tab", async () => {
+		const onDisk: IpcResolvedPath = {
+			absolutePath: "/work/b/README.md",
+			kind: "file",
+			relativePath: "README.md",
+		};
+		resolvePaths = vi.fn(async (paths: string[]) => paths.map(() => onDisk));
+		revealPath = vi.fn(async () => ({ ok: true }));
+		ompWindow.omp = {
+			fs: {
+				list: vi.fn(async () => ({
+					ok: true,
+					entries: [{ name: "README.md", path: "README.md", kind: "file" }],
+					truncated: false,
+				})),
+			},
+			system: {
+				resolvePaths,
+				revealPath,
+				openPath: vi.fn(async () => ({ ok: true })),
+			},
+		};
+		setFocusedSessionRuntime("tab-b");
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		root = createRoot(host as unknown as Element);
+		await act(async () => {
+			root?.render(
+				<I18nProvider>
+					<FilesPanel />
+					<LinkMenuHost />
+				</I18nProvider>,
+			);
+		});
+		await flush();
 
-  const row = document.querySelector('[data-tree-id="file:README.md"]');
-  if (!row) throw new Error("README.md row missing");
-  const event = new Event("contextmenu", { bubbles: true, cancelable: true });
-  Object.defineProperties(event, { clientX: { value: 40 }, clientY: { value: 60 } });
-  await dispatch(row as unknown as Element, event);
+		const row = document.querySelector('[data-tree-id="file:README.md"]');
+		if (!row) throw new Error("README.md row missing");
+		const event = new Event("contextmenu", { bubbles: true, cancelable: true });
+		Object.defineProperties(event, {
+			clientX: { value: 40 },
+			clientY: { value: 60 },
+		});
+		await dispatch(row as unknown as Element, event);
 
-  expect(event.defaultPrevented).toBe(true);
-  expect(resolvePaths).toHaveBeenCalledWith(["README.md"], "tab-b");
-  const reveal = [...document.querySelectorAll('[role="menuitem"]')].find(item =>
-   /Reveal|Show in/.test(item.textContent ?? ""),
-  );
-  if (!reveal) throw new Error("no reveal item");
-  await dispatch(reveal as unknown as Element, new Event("click", { bubbles: true, cancelable: true }));
-  expect(revealPath).toHaveBeenCalledWith("/work/b/README.md");
- });
+		expect(event.defaultPrevented).toBe(true);
+		expect(resolvePaths).toHaveBeenCalledWith(["README.md"], "tab-b");
+		const reveal = [...document.querySelectorAll('[role="menuitem"]')].find(
+			(item) => /Reveal|Show in/.test(item.textContent ?? ""),
+		);
+		if (!reveal) throw new Error("no reveal item");
+		await dispatch(
+			reveal as unknown as Element,
+			new Event("click", { bubbles: true, cancelable: true }),
+		);
+		expect(revealPath).toHaveBeenCalledWith("/work/b/README.md");
+	});
 });
 
 describe("FilesPanel tree", () => {
- it("renders the nested fs:list shape as folders, files and indentation", async () => {
-  ompWindow.omp = {
-   fs: {
-    list: vi.fn(async () => ({
-     ok: true,
-     entries: [
-      {
-       name: "src",
-       path: "src",
-       kind: "dir",
-       children: [{ name: "main.ts", path: "src/main.ts", kind: "file" }],
-      },
-      { name: "README.md", path: "README.md", kind: "file" },
-     ],
-     truncated: false,
-    })),
-   },
-   system: { resolvePaths: vi.fn(async () => []), revealPath: vi.fn(async () => ({ ok: true })) },
-  };
-  setFocusedSessionRuntime("tab-b");
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  root = createRoot(host as unknown as Element);
-  await act(async () => {
-   root?.render(
-    <I18nProvider>
-     <FilesPanel />
-    </I18nProvider>,
-   );
-  });
-  await flush();
+	it("renders the nested fs:list shape as folders, files and indentation", async () => {
+		ompWindow.omp = {
+			fs: {
+				list: vi.fn(async () => ({
+					ok: true,
+					entries: [
+						{
+							name: "src",
+							path: "src",
+							kind: "dir",
+							children: [
+								{ name: "main.ts", path: "src/main.ts", kind: "file" },
+							],
+						},
+						{ name: "README.md", path: "README.md", kind: "file" },
+					],
+					truncated: false,
+				})),
+			},
+			system: {
+				resolvePaths: vi.fn(async () => []),
+				revealPath: vi.fn(async () => ({ ok: true })),
+			},
+		};
+		setFocusedSessionRuntime("tab-b");
+		const host = document.createElement("div");
+		document.body.appendChild(host);
+		root = createRoot(host as unknown as Element);
+		await act(async () => {
+			root?.render(
+				<I18nProvider>
+					<FilesPanel />
+				</I18nProvider>,
+			);
+		});
+		await flush();
 
-  // The count comes from walking nested files, and folders sort before files.
-  const search = document.querySelector("input[placeholder]");
-  expect(search?.getAttribute("placeholder")).toBe("Search 2 files");
-  const dirRow = document.querySelector('[data-tree-id="dir:src"]');
-  if (!dirRow) throw new Error("folder row missing");
-  expect((dirRow as unknown as HTMLElement).style.paddingLeft).toBe("6px");
-  expect(dirRow.querySelector("button.omp-disclosure-chevron")).not.toBeNull();
-  expect(document.querySelector('[data-tree-id="file:README.md"]')).not.toBeNull();
+		// The count comes from walking nested files, and folders sort before files.
+		const search = document.querySelector("input[placeholder]");
+		expect(search?.getAttribute("placeholder")).toBe("Search 2 files");
+		const dirRow = document.querySelector('[data-tree-id="dir:src"]');
+		if (!dirRow) throw new Error("folder row missing");
+		expect((dirRow as unknown as HTMLElement).style.paddingLeft).toBe("6px");
+		expect(
+			dirRow.querySelector("button.omp-disclosure-chevron"),
+		).not.toBeNull();
+		expect(
+			document.querySelector('[data-tree-id="file:README.md"]'),
+		).not.toBeNull();
 
-  await act(async () => {
-   (dirRow.querySelector("button.omp-disclosure-chevron") as unknown as HTMLElement).click();
-  });
-  await flush();
+		await act(async () => {
+			(
+				dirRow.querySelector(
+					"button.omp-disclosure-chevron",
+				) as unknown as HTMLElement
+			).click();
+		});
+		await flush();
 
-  const childRow = document.querySelector('[data-tree-id="file:src/main.ts"]');
-  if (!childRow) throw new Error("nested file row missing after expanding");
-  expect((childRow as unknown as HTMLElement).style.paddingLeft).toBe("18px");
- });
+		const childRow = document.querySelector(
+			'[data-tree-id="file:src/main.ts"]',
+		);
+		if (!childRow) throw new Error("nested file row missing after expanding");
+		expect((childRow as unknown as HTMLElement).style.paddingLeft).toBe("18px");
+	});
 });
