@@ -355,17 +355,32 @@ UI 审计：`bun run ui:audit`（需要运行中的窗口与 9222 端口），�
 
 ## 9. Git 与许可
 
-- 远端：`git@github.com:matata2017/omp-desktop.git`（private），分支 `master`。
+- 远端仓库：`matata2017/omp-desktop`（private），分支 `master`。**传输方式按机器不同，见下**，
+  不要照抄本条假设某一种可用。
 - 进度快照：`2026-11-04` tag（未推送）。`2026-11-05` 之后的推进全部在 `master` 上，
   单日新增 12 个提交（stats / bench / scheduler / 会话搜索 / 布局恢复 / models / editor / system / argv 契约门）。
 - `.gitignore` 覆盖 `target/`、`node_modules/`、`.research/`、`.resources/`、`resources/*.exe`、
   `.probe/`、`replica/screens/`、`src-tauri/gen/schemas/`，以及侦察期的 JSON/清单/zip 临时产物。
-- 本机 SSH 认证为 `matata2017`。2026-11-09 实测 `ssh -T git@github.com` 与 `ssh -p 443 -T git@ssh.github.com` 都直接成功；
-  `origin` 已改为 `git@github.com:matata2017/omp-desktop.git`，推送用 `git push origin master`。
-- HTTPS 当前不可用：直连被 reset，`127.0.0.1:7897` 代理下 TLS 报 `unexpected eof`。旧的
-  `credential.helper=manager + http.sslBackend=openssl + http.proxy` 组合曾可用，2026-11-09 复测失败，仅作历史记录。
-- 显式 URL push 不会更新 `refs/remotes/origin/master`；核对远端用 `git ls-remote origin refs/heads/master`，
-  与本地 HEAD 一致后再 `git update-ref refs/remotes/origin/master HEAD`。
+- **推送通道分机器记录（2026-11-09 补充）**。原先本节把单一机器的网络实况写成了通用事实，
+  导致「活通道被记成死、死通道被记成活」。分列如下。
+  - **本机 `C:\Users\Admin`（家用机，2026-11-09 实测）**：`origin` = `https://github.com/matata2017/omp-desktop.git`，
+    `credential.helper = manager`，Windows 凭据管理器里有 `git:https://github.com`（账号 `matata2017`）。
+    `fetch` / `pull` / `push origin master` **全部实测可用**（`a5849c2..55a1b78`，推后 `git fetch`
+    核对 `LOCAL == REMOTE`、待推 0，`refs/remotes/origin/master` 自动更新）。
+    SSH 在本机**不可用**：`~/.ssh/config` 里没有 `Host github.com` 条目，`id_rsa`/`id_dsa`/`id_ecdsa`/
+    `id_ed25519`/`id_xmss` 全部不存在（`ssh -v` 显示 `type -1`），一把 key 都 Offer 不出去，
+    `ssh -T git@github.com` 与 `ssh -p 443` 均 `Permission denied (publickey)`。
+    `git config` 里**没有** `url.*.insteadOf` 重写。
+    **不要把本机 origin 改成 SSH**——改完就没有任何可用推送通道（本机无密钥、HTTPS 被换掉）。
+  - **另一台机器（原文档记录，本机无法验证，原样保留）**：`origin` = `git@github.com:matata2017/omp-desktop.git`，
+    实测 `ssh -T git@github.com` 与 `ssh -p 443 -T git@ssh.github.com` 都成功；HTTPS 当时不可用——
+    直连被 reset，`127.0.0.1:7897` 代理下 TLS 报 `unexpected eof`，旧的
+    `credential.helper=manager + http.sslBackend=openssl + http.proxy` 组合复测失败。
+    那条机器上还提到：显式 URL push 不会更新 `refs/remotes/origin/master`，需
+    `git ls-remote origin refs/heads/master` 核对后手工 `git update-ref refs/remotes/origin/master HEAD`。
+    **本机不需要这套**：`git push origin master` 会正常更新远端跟踪引用。
+  - 两条记录互不否定：同一账号在不同网络上通道可用性不同。改本节时保留双方并标明归属机器，
+    别再写成全局事实（同决策 18 的 codelldb 路径病灶）。
 
 ### 2026-11-09：改造 OMP fork 前的基线
 
