@@ -7,16 +7,41 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use serde_json::{Value, json};
-use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_dialog::DialogExt;
 use crate::{AppState, ensure_tab_started, start_tab};
 use omp_agent::argv::{LaunchOptions, TabKind};
 use omp_core::{TabId, WindowId};
+use serde_json::{Value, json};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::DialogExt;
 
 const FS_READ_CAP: u64 = 8 * 1024 * 1024;
 const FS_LIST_MAX_DEPTH: usize = 8;
 const FS_LIST_MAX_ENTRIES: usize = 2000;
+
+/// Directories `fs:list` never walks. Same set as the upstream GUI's `FS_IGNORED_DEFAULTS`
+/// (plus the `bazel-*` prefix), so the panel lists the same tree on both implementations.
+const FS_IGNORED_DIRS: [&str; 16] = [
+    ".git",
+    ".hg",
+    ".svn",
+    "node_modules",
+    "dist",
+    "out",
+    ".next",
+    "target",
+    "build",
+    ".turbo",
+    "coverage",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".cache",
+    ".codegraph",
+];
+
+fn is_ignored_dir(name: &str) -> bool {
+    FS_IGNORED_DIRS.contains(&name) || name.starts_with("bazel-")
+}
 
 #[tauri::command]
 pub async fn ipc_invoke(
@@ -110,7 +135,11 @@ pub async fn ipc_invoke(
                 .tabs()
                 .into_iter()
                 .map(|tab| {
-                    let status = if ready.contains(&tab) { "ready" } else { "starting" };
+                    let status = if ready.contains(&tab) {
+                        "ready"
+                    } else {
+                        "starting"
+                    };
                     let cwd = cwds
                         .get(&tab)
                         .map(|p| p.to_string_lossy().into_owned())
@@ -158,7 +187,9 @@ pub async fn ipc_invoke(
             if let Some(path) = &session_path {
                 if state.pool.claim_session(&tab, path).is_err() {
                     let owner = state.pool.session_owner(path);
-                    return Ok(json!({ "tabId": null, "ownerTabId": owner, "ownerWinId": 1, "refusal": "owned" }));
+                    return Ok(
+                        json!({ "tabId": null, "ownerTabId": owner, "ownerWinId": 1, "refusal": "owned" }),
+                    );
                 }
             }
             // Phantom-tab investigation: record who asked for this tab and for what.
@@ -303,12 +334,18 @@ pub async fn ipc_invoke(
 
         // ---- Sessions -------------------------------------------------------------------
         "sessions:list" => {
-            let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
+            let scope = payload
+                .get("scope")
+                .and_then(Value::as_str)
+                .unwrap_or("local");
             serde_json::to_value(omp_session::list(scope, &state.cwd)).map_err(|e| e.to_string())
         }
         "sessions:search" => {
             let query = payload.get("query").and_then(Value::as_str).unwrap_or("");
-            let scope = payload.get("scope").and_then(Value::as_str).unwrap_or("local");
+            let scope = payload
+                .get("scope")
+                .and_then(Value::as_str)
+                .unwrap_or("local");
             Ok(json!(omp_session::search(query, scope, &state.cwd)))
         }
         "sessions:delete" => {
@@ -388,7 +425,10 @@ pub async fn ipc_invoke(
         // ---- Prefs ----------------------------------------------------------------------
         "prefs:get" => Ok(read_json_or(&state.data_dir.join("prefs.json"), json!({}))),
         "prefs:set" => {
-            let merged = merge_json(read_json_or(&state.data_dir.join("prefs.json"), json!({})), payload);
+            let merged = merge_json(
+                read_json_or(&state.data_dir.join("prefs.json"), json!({})),
+                payload,
+            );
             write_json(&state.data_dir.join("prefs.json"), &merged)?;
             Ok(merged)
         }
@@ -587,9 +627,7 @@ pub async fn ipc_invoke(
                     let refs: Vec<&str> = extensions.iter().map(String::as_str).collect();
                     dialog = dialog.add_filter(name, &refs);
                 }
-                dialog
-                    .blocking_save_file()
-                    .map(|path| path.to_string())
+                dialog.blocking_save_file().map(|path| path.to_string())
             })
             .await
             .map_err(|e| e.to_string())
@@ -650,12 +688,7 @@ pub async fn ipc_invoke(
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            let _ = app
-                .notification()
-                .builder()
-                .title(title)
-                .body(body)
-                .show();
+            let _ = app.notification().builder().title(title).body(body).show();
             Ok(Value::Null)
         }
 
@@ -704,7 +737,10 @@ pub async fn ipc_invoke(
 
         // ---- browser panel ---------------------------------------------------------------
         "browser:get-state" => {
-            let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             state.browser.refresh_active_history(tab);
             Ok(state.browser.state(tab, false))
         }
@@ -722,7 +758,10 @@ pub async fn ipc_invoke(
             let window = app
                 .get_window("main")
                 .ok_or_else(|| "main window is gone".to_owned())?;
-            state.browser.open(&app, &window, &tab, &url, "user").map_err(|e| e.to_string())
+            state
+                .browser
+                .open(&app, &window, &tab, &url, "user")
+                .map_err(|e| e.to_string())
         }
         "browser:action" => {
             let tab = payload
@@ -753,7 +792,10 @@ pub async fn ipc_invoke(
             Ok(Value::Null)
         }
         "browser:capture" => {
-            let tab = payload.get("tabId").and_then(Value::as_str).unwrap_or_default();
+            let tab = payload
+                .get("tabId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             Ok(match state.browser.capture(tab) {
                 Some(data_url) => Value::String(data_url),
                 None => Value::Null,
@@ -795,44 +837,85 @@ pub async fn ipc_invoke(
             Ok(json!({ "id": id, "problems": [] }))
         }
         "scheduler:update" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "update requires a taskId".to_owned())?;
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "update requires a taskId".to_owned())?;
             let patch = payload.get("config").cloned().unwrap_or_else(|| json!({}));
             let store = scheduler_store(&state)?;
             let revision = store.update(id, &patch).map_err(|e| e.to_string())?;
             Ok(json!({ "revision": revision, "problems": [] }))
         }
         "scheduler:set-enabled" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "set-enabled requires a taskId".to_owned())?;
-            let enabled = payload.get("enabled").and_then(Value::as_bool).unwrap_or(true);
-            scheduler_store(&state)?.set_enabled(id, enabled).map_err(|e| e.to_string())?;
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "set-enabled requires a taskId".to_owned())?;
+            let enabled = payload
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            scheduler_store(&state)?
+                .set_enabled(id, enabled)
+                .map_err(|e| e.to_string())?;
             Ok(Value::Null)
         }
         "scheduler:archive" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "archive requires a taskId".to_owned())?;
-            scheduler_store(&state)?.archive(id).map_err(|e| e.to_string())?;
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "archive requires a taskId".to_owned())?;
+            scheduler_store(&state)?
+                .archive(id)
+                .map_err(|e| e.to_string())?;
             Ok(Value::Null)
         }
         "scheduler:delete" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "delete requires a taskId".to_owned())?;
-            scheduler_store(&state)?.delete(id).map_err(|e| e.to_string())?;
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "delete requires a taskId".to_owned())?;
+            scheduler_store(&state)?
+                .delete(id)
+                .map_err(|e| e.to_string())?;
             Ok(Value::Null)
         }
         "scheduler:task-runs" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "task-runs requires taskId".to_owned())?;
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "task-runs requires taskId".to_owned())?;
             let limit = payload.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
-            Ok(json!(scheduler_store(&state)?.runs(id, limit).map_err(|e| e.to_string())?))
+            Ok(json!(
+                scheduler_store(&state)?
+                    .runs(id, limit)
+                    .map_err(|e| e.to_string())?
+            ))
         }
         "scheduler:revisions" => {
-            let id = payload.get("taskId").and_then(Value::as_str).ok_or_else(|| "revisions requires taskId".to_owned())?;
-            Ok(json!(scheduler_store(&state)?.revisions(id).map_err(|e| e.to_string())?))
+            let id = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "revisions requires taskId".to_owned())?;
+            Ok(json!(
+                scheduler_store(&state)?
+                    .revisions(id)
+                    .map_err(|e| e.to_string())?
+            ))
         }
         "scheduler:set-paused" => {
-            let paused = payload.get("paused").and_then(Value::as_bool).unwrap_or(false);
+            let paused = payload
+                .get("paused")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             state.scheduler_runs.set_paused(paused);
             Ok(Value::Null)
         }
         "scheduler:cancel-run" => {
-            let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
+            let run_id = payload
+                .get("runId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             Ok(json!(state.scheduler_runs.cancel(run_id)))
         }
         "scheduler:insights" => {
@@ -841,7 +924,10 @@ pub async fn ipc_invoke(
                 .and_then(Value::as_u64)
                 .unwrap_or(7)
                 .clamp(1, 365);
-            let only_task = payload.get("taskId").and_then(Value::as_str).map(str::to_owned);
+            let only_task = payload
+                .get("taskId")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
             let store = scheduler_store(&state)?;
             let now = chrono::Utc::now().timestamp_millis();
             tauri::async_runtime::spawn_blocking(move || {
@@ -870,10 +956,13 @@ pub async fn ipc_invoke(
                 .map_err(|e| e.to_string())?
         }
         "scheduler:mark-notices-read" => {
-            let ids: Option<Vec<String>> = payload
-                .get("ids")
-                .and_then(Value::as_array)
-                .map(|list| list.iter().filter_map(Value::as_str).map(str::to_owned).collect());
+            let ids: Option<Vec<String>> =
+                payload.get("ids").and_then(Value::as_array).map(|list| {
+                    list.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_owned)
+                        .collect()
+                });
             let store = scheduler_store(&state)?;
             let now = chrono::Utc::now().timestamp_millis();
             let app_for_notices = app.clone();
@@ -883,8 +972,12 @@ pub async fn ipc_invoke(
                     .as_array()
                     .map(|list| {
                         list.iter()
-                            .filter(|notice| notice.get("read").and_then(Value::as_bool) == Some(false))
-                            .filter_map(|notice| notice.get("id").and_then(Value::as_str).map(str::to_owned))
+                            .filter(|notice| {
+                                notice.get("read").and_then(Value::as_bool) == Some(false)
+                            })
+                            .filter_map(|notice| {
+                                notice.get("id").and_then(Value::as_str).map(str::to_owned)
+                            })
                             .collect()
                     })
                     .unwrap_or_default();
@@ -910,9 +1003,14 @@ pub async fn ipc_invoke(
                 .unwrap_or_default()
                 .to_owned();
             if decision != "accepted" && decision != "rejected" {
-                return Err(format!("decision must be accepted or rejected, not {decision}"));
+                return Err(format!(
+                    "decision must be accepted or rejected, not {decision}"
+                ));
             }
-            let note = payload.get("note").and_then(Value::as_str).map(str::to_owned);
+            let note = payload
+                .get("note")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
             let store = scheduler_store(&state)?;
             let now = chrono::Utc::now().timestamp_millis();
             let run_id_for_read = run_id.clone();
@@ -923,14 +1021,19 @@ pub async fn ipc_invoke(
                 let runs = store.all_runs(0, 500).map_err(|e| e.to_string())?;
                 Ok(runs
                     .into_iter()
-                    .find(|run| run.get("id").and_then(Value::as_str) == Some(run_id_for_read.as_str()))
+                    .find(|run| {
+                        run.get("id").and_then(Value::as_str) == Some(run_id_for_read.as_str())
+                    })
                     .unwrap_or(Value::Null))
             })
             .await
             .map_err(|e| e.to_string())?
         }
         "scheduler:get-run" => {
-            let run_id = payload.get("runId").and_then(Value::as_str).unwrap_or_default();
+            let run_id = payload
+                .get("runId")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
             let store = scheduler_store(&state)?;
             let tasks = store.list(true).map_err(|e| e.to_string())?;
             for task in tasks {
@@ -956,9 +1059,16 @@ pub async fn ipc_invoke(
                 .into_iter()
                 .find(|t| t.get("id").and_then(Value::as_str) == Some(task_id))
                 .ok_or_else(|| format!("unknown task: {task_id}"))?;
-            let policy = task.get("tools").and_then(Value::as_str).unwrap_or("read_only");
+            let policy = task
+                .get("tools")
+                .and_then(Value::as_str)
+                .unwrap_or("read_only");
             let model = task.get("model").and_then(Value::as_str);
-            let prompt = task.get("prompt").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let prompt = task
+                .get("prompt")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
             let run_cwd = task
                 .get("cwd")
                 .and_then(Value::as_str)
@@ -1111,7 +1221,9 @@ pub async fn ipc_invoke(
         // has to live here too, not only in stats:fetch.
         "stats:url" => match state.stats.ensure_running().await {
             Ok(port) => Ok(json!({ "url": format!("http://127.0.0.1:{port}/") })),
-            Err(err) => Ok(json!({ "url": Value::Null, "unavailable": true, "error": err.to_string() })),
+            Err(err) => {
+                Ok(json!({ "url": Value::Null, "unavailable": true, "error": err.to_string() }))
+            }
         },
         "stats:fetch" => {
             let path = payload
@@ -1170,12 +1282,7 @@ pub async fn ipc_invoke(
                 .and_then(Value::as_u64)
                 .unwrap_or(200) as usize;
             let text = fs::read_to_string(state.data_dir.join("runtime.log")).unwrap_or_default();
-            let mut lines: Vec<String> = text
-                .lines()
-                .rev()
-                .take(max)
-                .map(str::to_owned)
-                .collect();
+            let mut lines: Vec<String> = text.lines().rev().take(max).map(str::to_owned).collect();
             lines.reverse();
             Ok(json!(lines))
         }
@@ -1205,9 +1312,7 @@ fn replay_ready(app: &AppHandle, state: &AppState, tab: &TabId) {
 fn sync_session_binding(state: &AppState, tab: &TabId, command: &Value, response: &Value) {
     let path = match command.get("type").and_then(Value::as_str) {
         Some("switch_session") => confirmed_switch_path(command, response),
-        Some("get_state")
-            if response.get("success").and_then(Value::as_bool) == Some(true) =>
-        {
+        Some("get_state") if response.get("success").and_then(Value::as_bool) == Some(true) => {
             response
                 .get("data")
                 .and_then(|data| data.get("sessionFile"))
@@ -1329,10 +1434,12 @@ const FS_IMAGE_MAX_BYTES: u64 = 25_000_000;
 /// `fs:read-image`: sniff, then return the file as a data URL. Only real image
 /// bytes pass, so a markdown `![alt](path)` cannot turn into a generic file read.
 fn read_image(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
-    let fail = |error: &str| {
-        json!({ "ok": false, "dataUrl": Value::Null, "mime": Value::Null, "size": 0, "error": error })
-    };
-    let Some(raw) = payload.get("path").and_then(Value::as_str).filter(|path| !path.is_empty()) else {
+    let fail = |error: &str| json!({ "ok": false, "dataUrl": Value::Null, "mime": Value::Null, "size": 0, "error": error });
+    let Some(raw) = payload
+        .get("path")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+    else {
         return Ok(fail("Invalid path"));
     };
     let Some(path) = resolve_target(raw, &cwd) else {
@@ -1358,7 +1465,7 @@ fn read_image(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
     let Ok(bytes) = fs::read(&path) else {
         return Ok(fail("Invalid path"));
     };
-    use base64::prelude::{Engine as _, BASE64_STANDARD};
+    use base64::prelude::{BASE64_STANDARD, Engine as _};
     let data_url = format!("data:{mime};base64,{}", BASE64_STANDARD.encode(&bytes));
     Ok(json!({ "ok": true, "dataUrl": data_url, "mime": mime, "size": bytes.len() }))
 }
@@ -1400,25 +1507,31 @@ fn sniff_image_mime(header: &[u8]) -> Option<&'static str> {
 /// `fs:read-plan`: read the configured plan file, else the newest `*plan.md`
 /// under the session-local root. Confined to the workspace and the sessions dir.
 fn read_plan(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
-    let fail =
-        |error: &str| json!({ "ok": false, "path": Value::Null, "content": Value::Null, "error": error });
-    let Some(raw) = payload.get("fsPath").and_then(Value::as_str).filter(|path| !path.is_empty()) else {
+    let fail = |error: &str| json!({ "ok": false, "path": Value::Null, "content": Value::Null, "error": error });
+    let Some(raw) = payload
+        .get("fsPath")
+        .and_then(Value::as_str)
+        .filter(|path| !path.is_empty())
+    else {
         return Ok(fail("Invalid path"));
     };
     let sessions = omp_session::sessions_root();
-    let Some(target) =
-        resolve_within(&cwd, raw).or_else(|| resolve_within(&sessions, raw))
-    else {
+    let Some(target) = resolve_within(&cwd, raw).or_else(|| resolve_within(&sessions, raw)) else {
         return Ok(fail("Path escapes allowed roots"));
     };
-    let local_root =
-        match payload.get("localRoot").and_then(Value::as_str).filter(|root| !root.is_empty()) {
-            Some(root) => match resolve_within(&cwd, root).or_else(|| resolve_within(&sessions, root)) {
+    let local_root = match payload
+        .get("localRoot")
+        .and_then(Value::as_str)
+        .filter(|root| !root.is_empty())
+    {
+        Some(root) => {
+            match resolve_within(&cwd, root).or_else(|| resolve_within(&sessions, root)) {
                 Some(path) => Some(path),
                 None => return Ok(fail("Path escapes allowed roots")),
-            },
-            None => None,
-        };
+            }
+        }
+        None => None,
+    };
     let picked = if target.is_file() {
         Some(target)
     } else {
@@ -1428,7 +1541,9 @@ fn read_plan(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
         return Ok(json!({ "ok": true, "path": Value::Null, "content": Value::Null }));
     };
     match fs::read_to_string(&picked) {
-        Ok(content) => Ok(json!({ "ok": true, "path": picked.to_string_lossy(), "content": content })),
+        Ok(content) => {
+            Ok(json!({ "ok": true, "path": picked.to_string_lossy(), "content": content }))
+        }
         Err(err) => Ok(fail(&err.to_string())),
     }
 }
@@ -1438,7 +1553,12 @@ fn read_plan(cwd: PathBuf, payload: &Value) -> Result<Value, String> {
 fn newest_plan_file(root: &Path) -> Option<PathBuf> {
     let mut best: Option<(std::time::SystemTime, PathBuf)> = None;
     for entry in fs::read_dir(root).ok()?.flatten() {
-        if !entry.file_name().to_string_lossy().to_ascii_lowercase().ends_with("plan.md") {
+        if !entry
+            .file_name()
+            .to_string_lossy()
+            .to_ascii_lowercase()
+            .ends_with("plan.md")
+        {
             continue;
         }
         let Ok(meta) = entry.metadata() else { continue };
@@ -1689,16 +1809,15 @@ fn dialog_filters(payload: &Value) -> Vec<(String, Vec<String>)> {
 }
 
 /// The bell's current notices: runs waiting on a person plus runs that broke.
-fn notifications(
-    store: &omp_scheduler::TaskStore,
-    now: i64,
-) -> Result<Value, String> {
+fn notifications(store: &omp_scheduler::TaskStore, now: i64) -> Result<Value, String> {
     let runs = store
         .all_runs(now - 7 * 86_400_000, 200)
         .map_err(|e| e.to_string())?;
     let tasks = store.list(true).map_err(|e| e.to_string())?;
     let read = store.read_notice_ids().map_err(|e| e.to_string())?;
-    Ok(json!(omp_scheduler::derive_notices(&runs, &tasks, &read, 20)))
+    Ok(json!(omp_scheduler::derive_notices(
+        &runs, &tasks, &read, 20
+    )))
 }
 
 /// Open the scheduler database on first use; an unreadable one disables the feature rather than
@@ -1750,7 +1869,8 @@ fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
         .and_then(Value::as_u64)
         .unwrap_or(FS_READ_CAP)
         .min(FS_READ_CAP);
-    let resolved = resolve_target(path, &cwd).ok_or_else(|| "path escapes the workspace".to_owned())?;
+    let resolved =
+        resolve_target(path, &cwd).ok_or_else(|| "path escapes the workspace".to_owned())?;
     let bytes = std::fs::read(&resolved).map_err(|e| e.to_string())?;
     let size = bytes.len() as u64;
     let truncated = size > max_bytes;
@@ -1765,6 +1885,81 @@ fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
     }))
 }
 
+/// Case-insensitive name order, with a raw tie-break so case-folded duplicates stay stable.
+fn cmp_name(a: &str, b: &str) -> std::cmp::Ordering {
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .cmp(b.chars().flat_map(char::to_lowercase))
+        .then_with(|| a.cmp(b))
+}
+
+/// Walks one workspace into the shape `fs:list` is declared to return — `FsTreeEntry` in
+/// `src/shared/ipc-types.ts`: workspace-relative POSIX paths, a `kind` discriminator, nested
+/// `children`, directories before files.
+struct TreeWalk<'a> {
+    root: &'a Path,
+    max_depth: usize,
+    max_files: usize,
+    files: usize,
+    truncated: bool,
+}
+
+impl TreeWalk<'_> {
+    fn dir(&mut self, dir: &Path, depth: usize) -> Vec<Value> {
+        if self.truncated {
+            return Vec::new();
+        }
+        let Ok(read) = std::fs::read_dir(dir) else {
+            return Vec::new();
+        };
+        let mut dirs = Vec::new();
+        let mut plain = Vec::new();
+        for entry in read.flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if is_ignored_dir(&name) {
+                continue;
+            }
+            let path = entry.path();
+            let rel = path
+                .strip_prefix(self.root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            if path.is_dir() {
+                let children = if depth < self.max_depth {
+                    self.dir(&path, depth + 1)
+                } else {
+                    Vec::new()
+                };
+                dirs.push((name, rel, children));
+            } else {
+                plain.push((name, rel));
+            }
+        }
+        dirs.sort_by(|a, b| cmp_name(&a.0, &b.0));
+        plain.sort_by(|a, b| cmp_name(&a.0, &b.0));
+        let mut out = Vec::with_capacity(dirs.len() + plain.len());
+        for (name, path, children) in dirs {
+            let mut node = json!({ "name": name, "path": path, "kind": "dir" });
+            if !children.is_empty() {
+                if let Some(map) = node.as_object_mut() {
+                    map.insert("children".to_owned(), Value::Array(children));
+                }
+            }
+            out.push(node);
+        }
+        for (name, path) in plain {
+            if self.files >= self.max_files {
+                self.truncated = true;
+                break;
+            }
+            self.files += 1;
+            out.push(json!({ "name": name, "path": path, "kind": "file" }));
+        }
+        out
+    }
+}
+
 fn list_tree(cwd: PathBuf, payload: Value) -> Result<Value, String> {
     let root = match payload.get("path").and_then(Value::as_str) {
         Some(path) => {
@@ -1772,43 +1967,23 @@ fn list_tree(cwd: PathBuf, payload: Value) -> Result<Value, String> {
         }
         None => cwd,
     };
-    let mut entries = Vec::new();
-    let mut truncated = false;
-    let mut stack = vec![(root.clone(), 0usize)];
-    while let Some((dir, depth)) = stack.pop() {
-        if depth > FS_LIST_MAX_DEPTH {
-            continue;
-        }
-        let read = match std::fs::read_dir(&dir) {
-            Ok(read) => read,
-            Err(_) => continue,
-        };
-        for entry in read.flatten() {
-            if entries.len() >= FS_LIST_MAX_ENTRIES {
-                truncated = true;
-                break;
-            }
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if matches!(name.as_str(), ".git" | "node_modules" | "target") {
-                continue;
-            }
-            let path = entry.path();
-            let is_dir = path.is_dir();
-            let rel = path
-                .strip_prefix(&root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .replace('\\', "/");
-            entries.push(json!({ "path": rel, "name": name, "dir": is_dir }));
-            if is_dir {
-                stack.push((path, depth + 1));
-            }
-        }
-        if truncated {
-            break;
-        }
-    }
-    Ok(json!({ "ok": true, "entries": entries, "truncated": truncated }))
+    let max_depth = payload
+        .get("maxDepth")
+        .and_then(Value::as_u64)
+        .map_or(FS_LIST_MAX_DEPTH, |depth| depth as usize);
+    let max_files = payload
+        .get("maxEntries")
+        .and_then(Value::as_u64)
+        .map_or(FS_LIST_MAX_ENTRIES, |entries| entries as usize);
+    let mut walk = TreeWalk {
+        root: &root,
+        max_depth,
+        max_files,
+        files: 0,
+        truncated: false,
+    };
+    let entries = walk.dir(&root, 0);
+    Ok(json!({ "ok": true, "entries": entries, "truncated": walk.truncated }))
 }
 
 fn delete_session_file(path: &Path) -> Result<(), String> {
@@ -1850,29 +2025,66 @@ mod tests {
     #[test]
     fn every_lease_blocks_eviction() {
         let cases: [(&str, EvictionFacts); 4] = [
-            ("active", EvictionFacts { is_active: true, ..free_tab() }),
-            ("streaming", EvictionFacts { streaming: true, ..free_tab() }),
-            ("awaiting approval", EvictionFacts { pending_approval: true, ..free_tab() }),
-            ("browser pages", EvictionFacts { browser_pages: 1, ..free_tab() }),
+            (
+                "active",
+                EvictionFacts {
+                    is_active: true,
+                    ..free_tab()
+                },
+            ),
+            (
+                "streaming",
+                EvictionFacts {
+                    streaming: true,
+                    ..free_tab()
+                },
+            ),
+            (
+                "awaiting approval",
+                EvictionFacts {
+                    pending_approval: true,
+                    ..free_tab()
+                },
+            ),
+            (
+                "browser pages",
+                EvictionFacts {
+                    browser_pages: 1,
+                    ..free_tab()
+                },
+            ),
         ];
         for (name, facts) in cases {
             assert!(!is_evictable(&facts), "{name} must block eviction");
         }
         // A tab without a client or a session is not a candidate at all.
-        assert!(!is_evictable(&EvictionFacts { has_client: false, ..free_tab() }));
-        assert!(!is_evictable(&EvictionFacts { has_session: false, ..free_tab() }));
+        assert!(!is_evictable(&EvictionFacts {
+            has_client: false,
+            ..free_tab()
+        }));
+        assert!(!is_evictable(&EvictionFacts {
+            has_session: false,
+            ..free_tab()
+        }));
     }
-
 
     #[test]
     fn respond_payload_id_is_read_from_the_nested_response() {
         assert_eq!(
-            response_request_id(&json!({ "response": { "type": "confirm", "id": "req-7", "value": true } })),
+            response_request_id(
+                &json!({ "response": { "type": "confirm", "id": "req-7", "value": true } })
+            ),
             Some("req-7")
         );
         // Legacy flat shape still resolves, and a payload without an id does not panic.
-        assert_eq!(response_request_id(&json!({ "requestId": "req-8" })), Some("req-8"));
-        assert_eq!(response_request_id(&json!({ "response": { "type": "confirm" } })), None);
+        assert_eq!(
+            response_request_id(&json!({ "requestId": "req-8" })),
+            Some("req-8")
+        );
+        assert_eq!(
+            response_request_id(&json!({ "response": { "type": "confirm" } })),
+            None
+        );
     }
 
     #[test]
@@ -1899,17 +2111,83 @@ mod tests {
         assert!(decode_bytes(&json!("not base64!!")).is_err());
     }
 
+    /// Flattens a tree the way the renderer consumes it: `kind:path`, depth first.
+    fn walk_paths(entries: &[Value], out: &mut Vec<String>) {
+        for entry in entries {
+            let kind = entry["kind"].as_str().expect("every entry carries kind");
+            let path = entry["path"].as_str().expect("every entry carries path");
+            out.push(format!("{kind}:{path}"));
+            if let Some(children) = entry["children"].as_array() {
+                walk_paths(children, out);
+            }
+        }
+    }
+
+    fn fixture(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("{name}-{}", std::process::id()));
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::create_dir_all(&root).unwrap();
+        root
+    }
+
     #[test]
-    fn list_tree_skips_heavy_dirs() {
-        let root = std::env::temp_dir().join("omp-list-test");
-        std::fs::create_dir_all(root.join("keep")).unwrap();
+    fn list_tree_returns_the_declared_tree_shape() {
+        let root = fixture("omp-list-shape");
+        std::fs::create_dir_all(root.join("keep/nested")).unwrap();
+        std::fs::create_dir_all(root.join(".git")).unwrap();
         std::fs::create_dir_all(root.join("node_modules")).unwrap();
+        std::fs::create_dir_all(root.join("dist")).unwrap();
+        std::fs::create_dir_all(root.join("bazel-out")).unwrap();
         std::fs::write(root.join("keep/a.txt"), "x").unwrap();
+        std::fs::write(root.join("keep/nested/c.txt"), "x").unwrap();
+        std::fs::write(root.join(".git/HEAD"), "x").unwrap();
         std::fs::write(root.join("node_modules/b.txt"), "x").unwrap();
-        let result = list_tree(root.clone(), json!({})).unwrap();
+        std::fs::write(root.join("dist/app.js"), "x").unwrap();
+        std::fs::write(root.join("bazel-out/app.js"), "x").unwrap();
+        std::fs::write(root.join("z.txt"), "x").unwrap();
+
+        let result = list_tree(root.clone(), json!({ "maxDepth": 1 })).unwrap();
         let entries = result["entries"].as_array().unwrap();
-        assert!(entries.iter().any(|e| e["path"] == "keep/a.txt"));
-        assert!(!entries.iter().any(|e| e["name"] == "node_modules"));
+        assert_eq!(result["truncated"], false);
+        // Directories before files, and the shape is `kind` + nested `children`, not a flat list.
+        let mut paths = Vec::new();
+        walk_paths(entries, &mut paths);
+        assert_eq!(
+            paths,
+            vec![
+                "dir:keep",
+                "dir:keep/nested",
+                "file:keep/a.txt",
+                "file:z.txt"
+            ]
+        );
+        // The depth cap stops descending: a directory at the cap has no children.
+        let keep = entries[0]["children"].as_array().unwrap();
+        assert!(keep[0].get("children").is_none());
+        // Heavy and generated directories never reach the output.
+        assert!(paths.iter().all(|path| {
+            !path.contains(".git")
+                && !path.contains("node_modules")
+                && !path.contains("dist")
+                && !path.contains("bazel-")
+        }));
+        std::fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn list_tree_caps_files_and_reports_truncation() {
+        let root = fixture("omp-list-cap");
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            std::fs::write(root.join(name), "x").unwrap();
+        }
+        let result = list_tree(root.clone(), json!({ "maxEntries": 2 })).unwrap();
+        let mut paths = Vec::new();
+        walk_paths(result["entries"].as_array().unwrap(), &mut paths);
+        assert_eq!(
+            paths,
+            vec!["file:a.txt".to_owned(), "file:b.txt".to_owned()]
+        );
+        assert_eq!(result["truncated"], true);
         std::fs::remove_dir_all(root).ok();
     }
 
@@ -1956,9 +2234,7 @@ mod tests {
             )
             .is_none()
         );
-        assert!(
-            confirmed_switch_path(&command, &json!({ "success": true, "data": {} })).is_none()
-        );
+        assert!(confirmed_switch_path(&command, &json!({ "success": true, "data": {} })).is_none());
         assert!(
             confirmed_switch_path(
                 &json!({ "type": "get_state" }),
@@ -2013,14 +2289,23 @@ mod tests {
 
     #[test]
     fn sniff_image_mime_recognises_the_shipped_formats() {
-        assert_eq!(sniff_image_mime(&[0x89, b'P', b'N', b'G', 0, 0, 0, 0]), Some("image/png"));
+        assert_eq!(
+            sniff_image_mime(&[0x89, b'P', b'N', b'G', 0, 0, 0, 0]),
+            Some("image/png")
+        );
         assert_eq!(sniff_image_mime(&[0xff, 0xd8, 0xff, 0]), Some("image/jpeg"));
         assert_eq!(sniff_image_mime(b"GIF89a...."), Some("image/gif"));
         assert_eq!(sniff_image_mime(b"RIFF....WEBP"), Some("image/webp"));
         assert_eq!(sniff_image_mime(b"....ftypavif"), Some("image/avif"));
         assert_eq!(sniff_image_mime(b"BM......"), Some("image/bmp"));
-        assert_eq!(sniff_image_mime(&[0x00, 0x00, 0x01, 0x00]), Some("image/x-icon"));
-        assert_eq!(sniff_image_mime(b"  <svg xmlns=\"\">"), Some("image/svg+xml"));
+        assert_eq!(
+            sniff_image_mime(&[0x00, 0x00, 0x01, 0x00]),
+            Some("image/x-icon")
+        );
+        assert_eq!(
+            sniff_image_mime(b"  <svg xmlns=\"\">"),
+            Some("image/svg+xml")
+        );
         assert_eq!(sniff_image_mime(b"plain text"), None);
     }
 
@@ -2052,7 +2337,12 @@ mod tests {
         assert_eq!(value["ok"], true);
         assert_eq!(value["mime"], "image/png");
         assert_eq!(value["size"].as_u64(), Some(bytes.len() as u64));
-        assert!(value["dataUrl"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(
+            value["dataUrl"]
+                .as_str()
+                .unwrap()
+                .starts_with("data:image/png;base64,")
+        );
         std::fs::remove_dir_all(root).ok();
     }
 
@@ -2072,13 +2362,19 @@ mod tests {
         let root = std::env::temp_dir().join(format!("romp-plan-read-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("plan.md"), "# Steps\n").unwrap();
-        let found =
-            read_plan(root.clone(), &json!({ "fsPath": "plan.md", "localRoot": null })).unwrap();
+        let found = read_plan(
+            root.clone(),
+            &json!({ "fsPath": "plan.md", "localRoot": null }),
+        )
+        .unwrap();
         assert_eq!(found["ok"], true);
         assert_eq!(found["content"], "# Steps\n");
         assert!(found["path"].as_str().unwrap().ends_with("plan.md"));
-        let missing =
-            read_plan(root.clone(), &json!({ "fsPath": "nope.md", "localRoot": null })).unwrap();
+        let missing = read_plan(
+            root.clone(),
+            &json!({ "fsPath": "nope.md", "localRoot": null }),
+        )
+        .unwrap();
         assert_eq!(missing["ok"], true);
         assert!(missing["path"].is_null());
         assert!(missing["content"].is_null());
@@ -2089,8 +2385,11 @@ mod tests {
     fn read_plan_refuses_paths_outside_allowed_roots() {
         let root = std::env::temp_dir().join(format!("romp-plan-escape-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
-        let value =
-            read_plan(root.clone(), &json!({ "fsPath": "../escape.md", "localRoot": null })).unwrap();
+        let value = read_plan(
+            root.clone(),
+            &json!({ "fsPath": "../escape.md", "localRoot": null }),
+        )
+        .unwrap();
         assert_eq!(value["ok"], false);
         assert_eq!(value["error"], "Path escapes allowed roots");
         std::fs::remove_dir_all(root).ok();

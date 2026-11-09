@@ -103,7 +103,7 @@
 
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
-| 工作区文件树：`fs:list` 深度 8、总文件数 2000、跳过 `.git`/`node_modules` 等 | should | rust | wip（`ipc.rs` 已通；上游的 16 深度 / 20000 文件上限未做） |
+| 工作区文件树：`fs:list` 返回嵌套 `FsTreeEntry`（`kind`+`children`，目录在前）、默认深度 8、文件数 2000、忽略目录与上游 `FS_IGNORED_DEFAULTS` 一致 | should | rust | wip（形状与忽略表已对齐；渲染端仍请求 8/2000，上游默认 16/20000 未做；根 `.gitignore` 过滤未做，故 `.probe`/`.perf` 仍会列出） |
 | 文件预览与 @mention 插入：markdown/代码渲染、截断、按行定位、图片 data URL | should | hybrid | wip（`fs:read`、`fs:read-image`、`fs:read-plan` 已实现；图片按 magic bytes 嗅探、25 MB 上限；`fs:read` 上限 8 MiB，与上游 200 KB/2 MB 不同；@mention 补全在 `InputArea`，行号定位有 renderer 测试） |
 | 打开/在文件管理器中显示/系统编辑器，路径右键菜单 | should | plugin | wip（`system:open-path`/`reveal-path`/`resolve-paths` 已通；系统编辑器与右键菜单未做） |
 | Git 变更视图：仓库状态、逐文件 diff、working tree 自动刷新 | should | hybrid | todo |
