@@ -9,6 +9,7 @@
 3. **Persist everything** — research, decisions, and lessons all go to files; conversations get compacted, files don't
 4. **Incremental development** — one task at a time
 5. **Capture learnings** — after each task, review and write new knowledge back to spec
+6. **LSP first** — symbol-level questions (definition, references, implementations, diagnostics, renames) go through `xd://lsp`, never grep; see `.trellis/spec/guides/code-navigation-lsp.md`
 
 ---
 
