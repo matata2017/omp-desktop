@@ -6,7 +6,8 @@ const raw = process.argv[2] ?? "1 + 1";
 // `@path` reads the expression from a UTF-8 file so native argv quoting cannot
 // mangle backslashes or embedded quotes (PowerShell 5.1 strips them).
 const expression = raw.startsWith("@") ? readFileSync(raw.slice(1), "utf8") : raw;
-const targets = await (await fetch("http://127.0.0.1:9222/json")).json();
+const port = process.env.CDP_PORT ?? "9222";
+const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
 // Prefer the dev server, then the installed app's tauri origin, then any other
 // non-http page. Matching tauri.localhost explicitly matters: the installed
 // build serves http://tauri.localhost/, which the old !startsWith("http") test
