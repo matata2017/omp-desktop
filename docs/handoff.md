@@ -193,6 +193,21 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
     且规则生效；文档内 `style` 标签 3/3 有 sheet、0 被拦。
     验证判据用**有效响应头**（`style-src` 不含 `'nonce-`）而非 dist 资源名——只改配置时
     `index-*.js` 文件名不变，旧验证法会误判「没装上」。
+18. **机器专属绝对路径不进仓库；删共享条目要通知另一台机器**（2026-11-09，`dc82350`）。
+    `.omp/dap.json` 是 git 跟踪的共享文件，原先 `codelldb.command` 写死
+    `C:/Users/666/.omp/tools/codelldb/extension/adapter/codelldb.exe`——那是另一台机器的
+    profile。两台机器共用一份仓库配置，谁改都会覆盖对方。已把 codelldb 从仓库移除，只留 debugpy。
+    **副作用（必须知道）**：`666` 那台机器原来正是靠这条才能调 Rust，拉到 `dc82350` 之后
+    **它的 Rust DAP 会失效**，表现为「莫名其妙坏了」。恢复办法是在**那台机器自己的**
+    `~/.omp/agent/dap.json` 里补一条 codelldb，写它本机的绝对路径——不要放回仓库文件。
+    本机（`Admin`）**没有**新增该条目：全盘无 codelldb，`lldb-dap`/`lldb`/`gdb`/`dlv` 全缺，
+    写一个不解析的 path 就是第三次重演「配置在、二进制不在」（前两次：rustup shim 未装组件、
+    666 路径）。**先装成功并 `--version` 验过，再写实测路径。**
+    Java 侧不受影响：`custom-jvm` 在用户级，链路已用真实 DAP `initialize` 握手验过
+    （`success:true`、`supportsConfigurationDoneRequest:true`、事件 `initialized`→`output`、stderr 空）。
+    将来要装 codelldb：GitHub 直连该资产名返回字面 `Not Found`、API 被 IP 限流，
+    改用 `https://github.com/vadimcn/codelldb/releases/expanded_assets/<tag>` 这段 HTML
+    列真实资产名（无需鉴权、不计 API 配额），再按 `github-release-install` 走镜像 + 官方 checksums 校验。
 
 ---
 
