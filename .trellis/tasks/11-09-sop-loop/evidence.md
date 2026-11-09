@@ -82,3 +82,34 @@ SOP 正文在 `~/.omp/agent/managed-skills/`，**仓库外、无持续版本控�
 ## 改前快照已落盘
 
 `sop-before.md` —— 改动前那份 86 行 SOP 的完整副本。SOP 在 `~/.omp/` 仓库外、无版本控制，又被 `manage_skill` 全量覆盖过三次，原文一度**只存在于会话 read 输出里**，一次 compaction 就既无法证明丢了什么、也无法回滚。落盘后核验 `SECTIONS=9 LINES=86`，与 `baseline.env` 完全一致，转录忠实。今后改 SOP 有 before/after 可 diff。
+
+## 外环响应：改做法本身，不是再补一条内环规则
+
+触发条件命中 SOP 自己写的「同一类错误第二次出现」：
+
+1. 本次 SOP 重写（`manage_skill` 全量覆盖）丢掉 `doctor full`、`只查当前任务 SPEC`、意图冲突定义等六处
+2. 随后 `omp-lsp-windows` skill 重写（同样全量覆盖）把 `-configuration` 改坏成 `<jdtls>/jdtls/config_win`
+
+两次都是**段内改字或丢句**，关键词 grep 全绿。所以 governing 变量不是「记得留快照」，而是**「用全量覆盖去改既有文档」这个做法**。
+
+**已改 SOP 工具自举节**（用 `edit` 而非覆盖，实践新规则）：
+
+> 改既有 agent 文档（本 SOP、各 skill）默认用 edit/追加，全量覆盖仅限新建。前置门：改前落盘快照 + 改后**逐行 diff** 作独立裁判，diff 里每条删除行都要能说明是有意的；grep 只作补充。
+
+diff 正是外环要求的「独立裁判」——它比对原文与现文，不依赖我想到了哪些锚点。
+
+### 本次 skill 改动的 diff 验证
+
+改前快照 `snapshots/omp-lsp-windows-before.md` 从 read 原文重建，其内容哈希 `#52AD` 与原文件 read 时的 tag **完全一致**，证明重建逐字节精确。
+
+`diff -u` 结果：**删除 3 行 / 新增 32 行**。三条删除全部是有意改写：
+
+| 删除行 | 有意原因 |
+|---|---|
+| `description:` | 扩围到 rust-analyzer / typescript-language-server |
+| `Use when …` | 补 "a server reports failed" 情形 |
+| 规则 1 | 补 `typescript-language-server.cmd` 到 shim 黑名单 |
+
+`config_win` **未出现在删除行**，即与原文一致——先前那处改坏已修回并经 diff 确认。
+
+SOP 自身裁判复跑：`46 锚点 / sections 9<=9 / lines 86<=86` → `VERDICT=GREEN`（新规则用加长句实现，未加行）。
