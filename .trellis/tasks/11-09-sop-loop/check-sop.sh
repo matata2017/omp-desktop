@@ -70,7 +70,8 @@ DELETION=(
   '改前落盘快照'
 )
 
-miss=0
+amiss=0    # 契约锚点缺失
+tfail=0    # 硬阈值超限（与锚点缺失分开计，避免混在一个 MISSING 里）
 check() {
   local tier="$1"; shift
   for a in "$@"; do
@@ -79,7 +80,7 @@ check() {
       printf 'HIT  [%s] %s\n' "$tier" "$a"
     else
       printf 'MISS [%s] %s\n' "$tier" "$a"
-      miss=$((miss + 1))
+      amiss=$((amiss + 1))
     fi
   done
 }
@@ -109,11 +110,11 @@ if [ "$MODE" = "--against" ]; then
   NOW_S=$(grep -c '^## ' "$FILE")
   NOW_L=$(wc -l < "$FILE" | tr -d ' ')
   echo "THRESHOLD sections $NOW_S <= $B_SECTIONS ; lines $NOW_L <= $B_LINES"
-  [ "$NOW_S" -le "$B_SECTIONS" ] || { echo "FAIL sections grew"; miss=$((miss+1)); }
-  [ "$NOW_L" -le "$B_LINES" ]      || { echo "FAIL lines grew";    miss=$((miss+1)); }
+  [ "$NOW_S" -le "$B_SECTIONS" ] || { echo "FAIL sections grew"; tfail=$((tfail+1)); }
+  [ "$NOW_L" -le "$B_LINES" ]      || { echo "FAIL lines grew";    tfail=$((tfail+1)); }
 fi
 
-echo "TOTAL_ANCHORS=$(( ${#POLARITY[@]} + ${#DELETION[@]} )) MISSING=$miss"
+echo "ANCHORS=$(( ${#POLARITY[@]} + ${#DELETION[@]} )) ANCHOR_MISSING=$amiss THRESHOLD_FAILS=$tfail"
 echo "NOTE: deletion 档只防删除不防翻义，须人工过语义（见 prd.md A2）"
-[ "$miss" -eq 0 ] || exit 1
+[ "$((amiss + tfail))" -eq 0 ] || exit 1
 if [ "$MODE" = "--capture" ]; then echo "VERDICT=BASELINE"; else echo "VERDICT=GREEN"; fi

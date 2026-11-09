@@ -120,7 +120,28 @@ SOP 自身裁判复跑：`46 锚点 / sections 9<=9 / lines 86<=86` → `VERDICT
 
 已补 4 条锚点：polarity 加 `全量覆盖仅限新建`、`默认用 edit/追加`；deletion 加 `逐行 diff`、`改前落盘快照`。
 
-- 正常跑：`TOTAL_ANCHORS=50 MISSING=0`、`sections 9<=9`、`lines 86<=86` → `VERDICT=GREEN`
+- 正常跑：50 锚点 `ANCHOR_MISSING=0`、阈值 `THRESHOLD_FAILS=0`（当时输出仍为旧字段名 `TOTAL_ANCHORS/MISSING`，见下方「混合计数器」一节的改名）→ `VERDICT=GREEN`
 - 红证：把 `全量覆盖仅限新建` 改成 `覆盖随便用` → `MISS [polarity] 全量覆盖仅限新建`，exit **1**
 
 锚点选的是**带限定的整句**而非裸词：`覆盖` 二字在翻义后仍存在，只有 `全量覆盖仅限新建` 这个限定才能抓住反转。
+
+### 裁判自身第三类缺陷：混合计数器（后补）
+
+`check-sop.sh` 把「锚点缺失」和「硬阈值超限」累加进同一个 `miss`。后果：一次
+`MISSING=1` 让我去找一条**并不存在**的丢失锚点——50 条其实全 HIT，真正的失败是
+`FAIL lines grew`（87 > 86）。拆成 `amiss` / `tfail` 两个计数器后输出
+`ANCHOR_MISSING=0 THRESHOLD_FAILS=0`，失败原因一眼可辨。
+
+注意 `tfail` 必须先初始化：脚本开了 `set -uo pipefail`，只初始化 `amiss` 会让
+阈值分支在 `set -u` 下 unbound variable 崩溃——那又是一次「把崩溃当成判红」（本任务
+已经踩过一次 `set -u` 和一次空字符串 `-le`）。
+
+### 86 行上界的回归与修法
+
+发现 SOP 涨到 87 行（mtime 17:36:32，在我最后一次编辑之后，且当时**没留快照**，
+无法 diff 出多出的是哪一行——这正是「改前落盘快照」规则我自己没执行到位的代价，
+随后已改为每次编辑前都快照）。
+
+修法**不是**把 baseline 从 86 抬到 87（那是给违规盖章），而是真减一行：把「原始素材」
+段的两行正文并成一行的 reflow，逐行 diff 确认只有一个 hunk、文字一字未减。
+终态 `lines=86 sections=9`，50 锚点全 HIT，GREEN。
