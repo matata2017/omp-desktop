@@ -180,6 +180,19 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
     `tab:get-all` 吐给渲染层的顺序随机，违背「acquisition order」契约。
 16. **布局持久化要在切 active 之后**：`tab:spawn` 先 `start_tab` 再设 active，persist 必须放最后，
     否则存下的 `activeIndex` 指向旧 tab。
+17. **CSP 的 style-src 不能被 Tauri 注入 nonce**（2026-11-09）。`tauri.conf.json` 声明了
+    `style-src 'self' 'unsafe-inline'`，但 Tauri 编译时会注入 `'nonce-…'`；按 CSP 规范，
+    **存在 nonce 时 `'unsafe-inline'` 被忽略**，于是所有**运行时注入的无 nonce `<style>`**
+    被拦（`style.sheet === null`）。症状最先在 advisor TUI 暴露：xterm `DomRenderer._injectCss`
+    把样式表挂在 `.xterm-screen` 内，被拦后 `.xterm-rows` 继承 body 的 `white-space:normal`
+    与比例字体，空格折叠、边框漂移成一列竖线。
+    修法：`app.security.dangerousDisableAssetCspModification: ["style-src"]`，只关 style-src
+    的注入，**恢复配置本来声明的策略**；`script-src` 的 36 条 sha256 保护不动。
+    **影响面不止终端**：`codemirror-*.js` 的 StyleModule、`mermaid-*.js` / cytoscape 同样运行时
+    注入 `<style>`，此前一并被拦，现一起恢复。实测无 nonce 的 `<style>` 现在 `hasSheet:true`
+    且规则生效；文档内 `style` 标签 3/3 有 sheet、0 被拦。
+    验证判据用**有效响应头**（`style-src` 不含 `'nonce-`）而非 dist 资源名——只改配置时
+    `index-*.js` 文件名不变，旧验证法会误判「没装上」。
 
 ---
 

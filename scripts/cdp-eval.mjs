@@ -7,9 +7,14 @@ const raw = process.argv[2] ?? "1 + 1";
 // mangle backslashes or embedded quotes (PowerShell 5.1 strips them).
 const expression = raw.startsWith("@") ? readFileSync(raw.slice(1), "utf8") : raw;
 const targets = await (await fetch("http://127.0.0.1:9222/json")).json();
-// A tab with the Browser panel open has a second page target; drive the app one.
+// Prefer the dev server, then the installed app's tauri origin, then any other
+// non-http page. Matching tauri.localhost explicitly matters: the installed
+// build serves http://tauri.localhost/, which the old !startsWith("http") test
+// rejected, silently falling through to "first page" (wrong when the Browser
+// panel adds a second target).
 const target =
   targets.find(item => item.type === "page" && item.url.includes("localhost:1420")) ??
+  targets.find(item => item.type === "page" && item.url.includes("tauri.localhost")) ??
   targets.find(item => item.type === "page" && !item.url.startsWith("http")) ??
   targets.find(item => item.type === "page");
 if (!target) {
