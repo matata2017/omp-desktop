@@ -1,0 +1,20 @@
+{
+  "adapters": {
+    "codelldb": {
+      "command": "C:/Users/666/.omp/tools/codelldb/extension/adapter/codelldb.exe",
+      "args": ["--port", "0"],
+      "languages": ["rust", "c"],
+      "fileTypes": [".rs", ".c", ".cpp"],
+      "rootMarkers": ["Cargo.toml"],
+      "launchDefaults": { "request": "launch", "stopOnEntry": true }
+    },
+    "debugpy": {
+      "command": "python",
+      "args": ["-m", "debugpy.adapter"],
+      "languages": ["python"],
+      "fileTypes": [".py"],
+      "rootMarkers": ["pyproject.toml", "setup.py", ".git"],
+      "launchDefaults": { "request": "launch", "stopOnEntry": true, "justMyCode": false }
+    }
+  }
+}

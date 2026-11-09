@@ -1,0 +1,20 @@
+{
+	"adapters": {
+		"custom-jvm": {
+			"command": "node",
+			"args": ["C:/Users/Admin/.omp/agent/dap/dap-ordering-proxy.js"],
+			"languages": ["java", "kotlin"],
+			"fileTypes": [".java", ".kt", ".kts"],
+			"rootMarkers": ["pom.xml", "build.gradle", "build.gradle.kts"],
+			"launchDefaults": {
+				"request": "launch",
+				"projectRoot": "."
+			},
+			"attachDefaults": {
+				"request": "attach",
+				"hostName": "127.0.0.1",
+				"timeout": 5000
+			}
+		}
+	}
+}
