@@ -71,4 +71,14 @@ VERDICT=GREEN
 
 ## 已知缺口（未在本任务解决）
 
-SOP 正文在 `~/.omp/agent/managed-skills/`，**仓库外、无版本控制**。本提交固化的是判据脚本、基线与证据；SOP 本身若被误改无法 diff 回溯。
+SOP 正文在 `~/.omp/agent/managed-skills/`，**仓库外、无持续版本控制**。已落盘 `sop-before.md` 保住改前原文，本次可 diff、可回滚；但后续每次改 SOP 仍需手动留快照，否则同样问题会复发。根治（把 managed-skills 纳入某个仓或加自动快照）未在本任务解决。
+
+## 裁判自身的三次加固（后续复核发现）
+
+1. **fail-open 后门**：`*)` 兜底原本只 echo 一句 anchors-only 就继续走到末尾打印 GREEN。MODE 缺失或拼错（`--againt`）时**跳过阈值比对仍返回 0**——裁判给自己开了假通过路径。改为 fail-closed `exit 1`；`--capture` 输出 `VERDICT=BASELINE` 与 `--against` 的 GREEN 区分。实测：拼错模式 exit 1、缺模式 exit 1。
+2. **新机制无护栏**：原 39 条锚点全是旧契约，删掉「知识阈值 / 可证伪 / 外环 / 宁可误报 / 未压缩」照样全绿，而这些正是本次交付物本身。补 7 条后共 **46** 条（polarity 24 / deletion 22）。实测把「外环」全替换成「内圈」→ `MISS [deletion] 外环` exit 1。
+3. **锚标签 vs 锚实质**：`意图冲突` 这条锚点在丢失发生时**照样 HIT**——丢的从来不是这个词，而是它的定义（文档写"必须/禁止"而代码违背，或代码像 bug）。真正抓住实质的是同时加的 `必须/禁止`。**锚点要锚判据本身，不锚它的名字。**
+
+## 改前快照已落盘
+
+`sop-before.md` —— 改动前那份 86 行 SOP 的完整副本。SOP 在 `~/.omp/` 仓库外、无版本控制，又被 `manage_skill` 全量覆盖过三次，原文一度**只存在于会话 read 输出里**，一次 compaction 就既无法证明丢了什么、也无法回滚。落盘后核验 `SECTIONS=9 LINES=86`，与 `baseline.env` 完全一致，转录忠实。今后改 SOP 有 before/after 可 diff。

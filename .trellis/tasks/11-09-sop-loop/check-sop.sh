@@ -37,6 +37,8 @@ POLARITY=(
   '只查当前任务 SPEC'
   '范围就是用户说的范围'
   '原文逐行'
+  '宁可误报'
+  '连续两次内修无效'
 )
 # 删除锚点：只防消失，不防翻义 —— 必须人工过一眼
 DELETION=(
@@ -57,6 +59,11 @@ DELETION=(
   '必须/禁止'
   'matata2017/doc-drift'
   '文档漂移 · doc-drift'
+  '知识阈值'
+  '可证伪'
+  '外环'
+  '未压缩'
+  '对立观点或独立裁判'
 )
 
 miss=0
@@ -88,7 +95,7 @@ case "$MODE" in
     [ -f "$BASE" ] || { echo "no baseline: $BASE"; exit 1; }
     ;;
   *)
-    echo "MODE=anchors-only (no baseline compare)"
+    echo "unknown MODE: '$MODE' (need --capture|--against)"; exit 1
     ;;
 esac
 
@@ -105,4 +112,4 @@ fi
 echo "TOTAL_ANCHORS=$(( ${#POLARITY[@]} + ${#DELETION[@]} )) MISSING=$miss"
 echo "NOTE: deletion 档只防删除不防翻义，须人工过语义（见 prd.md A2）"
 [ "$miss" -eq 0 ] || exit 1
-echo "VERDICT=GREEN"
+if [ "$MODE" = "--capture" ]; then echo "VERDICT=BASELINE"; else echo "VERDICT=GREEN"; fi
