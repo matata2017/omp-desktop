@@ -1090,6 +1090,40 @@ describe("useRpcEvents mode-state sync", () => {
 		expect(useSessionStore.getState().loopMode).toMatchObject({ enabled: true, prompt: "new loop" });
 	});
 
+	it("keeps a paused goal visible when its goal_updated frame arrives", async () => {
+		const { emitBatch } = installMockOmp();
+		await mount(<RpcEventsProbe />);
+		await flush();
+		useSessionStore.setState({ goal: { objective: "Ship it" }, goalState: { status: "active" } });
+
+		await act(async () =>
+			emitBatch([
+				{
+					type: "goal_updated",
+					goal: { objective: "Ship it", status: "paused" },
+					state: { enabled: false, goal: { objective: "Ship it", status: "paused" } },
+				},
+			]),
+		);
+
+		expect(useSessionStore.getState().goal?.objective).toBe("Ship it");
+		expect(useSessionStore.getState().goalState?.status).toBe("paused");
+	});
+
+	it("hydrates a paused goal instead of clearing it", async () => {
+		const { omp } = installMockOmp();
+		await mount(<RpcEventsProbe />);
+		await flush();
+		omp.rpc.getGoal.mockResolvedValue(
+			success({ enabled: false, status: "paused", objective: "Paused objective" }),
+		);
+
+		await act(async () => hydrateSession());
+
+		expect(useSessionStore.getState().goal?.objective).toBe("Paused objective");
+		expect(useSessionStore.getState().goalState?.status).toBe("paused");
+	});
+
 	it("hydrates loop, vibe, and project-scoped display settings into the active tab", async () => {
 		const { omp } = installMockOmp();
 		// Loop/vibe aren't on the get_state wire — hydration must pull the

@@ -9,6 +9,7 @@ import type {
 	RpcSessionState,
 	RpcVibeModeState,
 } from "../../shared/rpc-types";
+import { goalExists } from "../lib/goal-state";
 import { type MessagesStore, mergeFetchedTranscript, useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
 import { type QueueStore, useQueueStore } from "../stores/queue";
@@ -184,7 +185,7 @@ export function applyModelInfo(model: unknown, tabId: string | null): void {
 
 type HydrationGuard = () => boolean;
 
-/** Fetch the live goal state (get_goal) into the session store; clears when no goal is active. */
+/** Fetch the live goal state (get_goal) into the session store; clears only when no goal exists. */
 export async function syncGoal(tabId: string, command: TabCommand, isCurrent: HydrationGuard): Promise<void> {
 	const before = withSessionRuntime(tabId, () => useSessionStore.getState());
 	try {
@@ -198,14 +199,16 @@ export async function syncGoal(tabId: string, command: TabCommand, isCurrent: Hy
 		)
 			return;
 		// get_goal wire payload is RpcGoalState; `data` crosses the bridge as unknown.
+		// A paused goal reports enabled=false but still owns an objective — keep it
+		// so the dock bar / editor can resume or drop it after session switches.
 		const data = res.data as RpcGoalState | undefined;
 		withSessionRuntime(tabId, () => {
-			if (data?.enabled !== true) {
+			if (!data || !goalExists(data)) {
 				useSessionStore.setState({ goal: null, goalState: null });
 				return;
 			}
 			useSessionStore.setState({
-				goal: typeof data.objective === "string" ? { objective: data.objective } : null,
+				goal: { objective: data.objective },
 				goalState: { status: data.status },
 			});
 		});

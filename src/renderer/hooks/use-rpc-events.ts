@@ -34,6 +34,7 @@ import {
 	type SubagentFrame,
 } from "../../shared/rpc-types";
 import { formatClock } from "../lib/format";
+import { goalPatchFromEvent } from "../lib/goal-state";
 import { translate } from "../lib/i18n";
 import { normalizeLoopUpdate } from "../lib/loop-mode";
 import { acceptsActiveTabEvents } from "../lib/tab-routing";
@@ -258,38 +259,7 @@ function tabOnScreen(tabId: string): boolean {
 	return focused && visibleTabIds(useTabsStore.getState()).includes(tabId);
 }
 
-/** Goal statuses past which no live goal remains — the composer chip must clear. */
-const TERMINAL_GOAL_STATUSES: Record<string, true> = { dropped: true, complete: true };
-
-/** Narrow an untyped goal payload to the fields the session store tracks. */
-function goalFields(value: unknown): { objective?: string; status?: string } | null {
-	if (!value || typeof value !== "object") return null;
-	const objective = "objective" in value && typeof value.objective === "string" ? value.objective : undefined;
-	const status = "status" in value && typeof value.status === "string" ? value.status : undefined;
-	return { objective, status };
-}
-
-/**
- * Normalize a goal_updated frame into a session-store patch. A drop/complete
- * emits the TERMINAL goal object (status "dropped"/"complete") alongside
- * state.enabled=false — storing it verbatim leaves the composer chip stuck
- * ON (`!!goal`), so terminal/disabled frames clear the store instead.
- */
-function goalPatchFromEvent(
-	goal: unknown,
-	state: unknown,
-): { goal: { objective?: string } | null; goalState: { status?: string } | null } {
-	const goalInfo = goalFields(goal);
-	const stateGoal = state && typeof state === "object" && "goal" in state ? goalFields(state.goal) : null;
-	const enabled =
-		state && typeof state === "object" && "enabled" in state && typeof state.enabled === "boolean"
-			? state.enabled
-			: undefined;
-	const status = stateGoal?.status ?? goalInfo?.status;
-	const terminal = status !== undefined && TERMINAL_GOAL_STATUSES[status] === true;
-	if (terminal || enabled === false || !goalInfo) return { goal: null, goalState: null };
-	return { goal: { objective: goalInfo.objective }, goalState: { status } };
-}
+/** `goal_updated` normalization is shared with hydration in lib/goal-state.ts. */
 
 /**
  * Subscribes to batched RPC events from the sidecar and dispatches
@@ -543,9 +513,9 @@ export function useRpcEvents(heartbeatMs = 15_000): void {
 							break;
 						}
 						case "goal_updated": {
-							// Goal state is passive display — store in session store for the
-							// sidebar card / composer chip. Normalized: drop/complete frames
-							// carry the terminal goal object, which must CLEAR the store.
+							// Goal state is passive display — keep the store in sync for the
+							// dock bar / composer chip. A paused frame keeps its goal object
+							// with enabled=false; only drop/complete clears the store.
 							useSessionStore.setState(goalPatchFromEvent(event.goal, event.state));
 							break;
 						}

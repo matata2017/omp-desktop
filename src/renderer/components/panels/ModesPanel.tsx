@@ -24,6 +24,7 @@ import type {
 	RpcVibeModeState,
 } from "../../../shared/rpc-types";
 import { formatDuration, formatTokens } from "../../lib/format";
+import { goalExists } from "../../lib/goal-state";
 import { useT } from "../../lib/i18n";
 import { loopLimitText, normalizeLoopUpdate, parseLoopLimit } from "../../lib/loop-mode";
 import { acceptsActiveTabEvents } from "../../lib/tab-routing";
@@ -602,7 +603,7 @@ function GoalTab({ rpc }: { rpc: ModeRpc<RpcGoalState> }) {
 			{state && (
 				<div className="flex flex-col gap-4">
 					<p className="text-omp-sm leading-relaxed text-(--omp-muted)">{t("modesPanel.goal.desc")}</p>
-					{state.enabled ? <GoalEnabledView rpc={rpc} state={state} /> : <GoalStartForm rpc={rpc} />}
+					{goalExists(state) ? <GoalEnabledView rpc={rpc} state={state} /> : <GoalStartForm rpc={rpc} />}
 				</div>
 			)}
 		</ModeFrame>
