@@ -313,12 +313,7 @@ pub async fn ipc_invoke(
         "sidecar:status-get" => {
             let active = state.active_tab();
             let ready = state.ready_tabs.lock().contains(&active);
-            let cwd = state
-                .tab_cwds
-                .lock()
-                .get(&active)
-                .map(|p| p.to_string_lossy().into_owned())
-                .unwrap_or_else(|| state.cwd.to_string_lossy().into_owned());
+            let cwd = current_cwd(&state).to_string_lossy().into_owned();
             Ok(json!({
                 "status": if ready { "ready" } else { "starting" },
                 "cwd": cwd,
@@ -331,6 +326,37 @@ pub async fn ipc_invoke(
             state.ready_tabs.lock().clear();
             Ok(json!({ "ok": true }))
         }
+        "sidecar:select-project" => {
+            let default_cwd = current_cwd(&state);
+            let app_for_dialog = app.clone();
+            let picked = tauri::async_runtime::spawn_blocking(move || {
+                app_for_dialog
+                    .dialog()
+                    .file()
+                    .set_directory(&default_cwd)
+                    .set_title("Open project")
+                    .blocking_pick_folder()
+                    .map(|path| path.to_string())
+            })
+            .await
+            .map_err(|err| err.to_string())?;
+            let Some(cwd) = picked else {
+                return Ok(Value::Null);
+            };
+            let ok = switch_project(&app, &state, PathBuf::from(&cwd))?;
+            Ok(if ok { json!(cwd) } else { Value::Null })
+        }
+        "sidecar:set-project" => {
+            let Some(cwd) = payload
+                .get("cwd")
+                .and_then(Value::as_str)
+                .map(PathBuf::from)
+            else {
+                return Ok(json!(false));
+            };
+            let ok = switch_project(&app, &state, cwd)?;
+            Ok(json!(ok))
+        }
 
         // ---- Sessions -------------------------------------------------------------------
         "sessions:list" => {
@@ -338,7 +364,8 @@ pub async fn ipc_invoke(
                 .get("scope")
                 .and_then(Value::as_str)
                 .unwrap_or("local");
-            serde_json::to_value(omp_session::list(scope, &state.cwd)).map_err(|e| e.to_string())
+            serde_json::to_value(omp_session::list(scope, &current_cwd(&state)))
+                .map_err(|e| e.to_string())
         }
         "sessions:search" => {
             let query = payload.get("query").and_then(Value::as_str).unwrap_or("");
@@ -346,7 +373,11 @@ pub async fn ipc_invoke(
                 .get("scope")
                 .and_then(Value::as_str)
                 .unwrap_or("local");
-            Ok(json!(omp_session::search(query, scope, &state.cwd)))
+            Ok(json!(omp_session::search(
+                query,
+                scope,
+                &current_cwd(&state)
+            )))
         }
         "sessions:delete" => {
             let Some(path) = payload.get("sessionPath").and_then(Value::as_str) else {
@@ -470,8 +501,14 @@ pub async fn ipc_invoke(
         "updater:getStatus" => Ok(json!({ "status": "idle" })),
 
         // ---- Files ----------------------------------------------------------------------
-        "fs:read" => read_file(state.cwd.clone(), payload),
-        "fs:list" => list_tree(state.cwd.clone(), payload),
+        "fs:read" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
+            read_file(tab_cwd(&state, tab.as_ref()), payload)
+        }
+        "fs:list" => {
+            let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
+            list_tree(tab_cwd(&state, tab.as_ref()), payload)
+        }
         "fs:read-image" => {
             let tab = payload.get("tabId").and_then(Value::as_str).map(TabId::new);
             let cwd = tab_cwd(&state, tab.as_ref());
@@ -1073,7 +1110,7 @@ pub async fn ipc_invoke(
                 .get("cwd")
                 .and_then(Value::as_str)
                 .map(PathBuf::from)
-                .unwrap_or_else(|| state.cwd.clone());
+                .unwrap_or_else(|| current_cwd(&state));
             let binary = state
                 .sidecar_binary
                 .clone()
@@ -1359,10 +1396,47 @@ fn confirmed_switch_path(command: &Value, response: &Value) -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Workspace root of a tab, falling back to the window's cwd.
+/// Workspace root of a tab, falling back to the current project's cwd.
 fn tab_cwd(state: &AppState, tab: Option<&TabId>) -> PathBuf {
     tab.and_then(|id| state.tab_cwds.lock().get(id).cloned())
+        .unwrap_or_else(|| current_cwd(state))
+}
+
+/// Workspace root of the current project: the active tab's cwd, or the launch cwd.
+fn current_cwd(state: &AppState) -> PathBuf {
+    let active = state.active_tab();
+    state
+        .tab_cwds
+        .lock()
+        .get(&active)
+        .cloned()
         .unwrap_or_else(|| state.cwd.clone())
+}
+
+/// Restart the active tab's sidecar in `cwd` (upstream's `sidecar.restart(cwd)`).
+/// A fresh session is required: resuming the old project's transcript in the new
+/// root would pin the renderer to the wrong workspace.
+fn switch_project(app: &AppHandle, state: &AppState, cwd: PathBuf) -> Result<bool, String> {
+    if !cwd.is_dir() {
+        return Ok(false);
+    }
+    let tab = state.active_tab();
+    if let Some(path) = state.tab_sessions.lock().remove(&tab) {
+        state.pool.release_session(&path);
+    }
+    state.pool.release_process(&tab);
+    state.clients.lock().remove(&tab);
+    if let Some(batcher) = state.batchers.lock().remove(&tab) {
+        batcher.dispose();
+    }
+    state.ready_tabs.lock().remove(&tab);
+    state.tab_activity.lock().remove(&tab);
+    state.tab_cwds.lock().insert(tab.clone(), cwd.clone());
+    // `ensure_tab_started` emits status=starting with the new cwd: the renderer
+    // resets its per-session stores and shows the new project.
+    ensure_tab_started(app, state, &tab, "sidecar:set-project")?;
+    tracing::info!(tab = %tab, cwd = %cwd.display(), "switched project");
+    Ok(true)
 }
 
 /// Resolve a path named by the renderer the way the upstream main process did.
@@ -1713,7 +1787,7 @@ fn open_path_in_os(state: &AppState, payload: &Value, reveal: bool) -> Result<Va
     let candidate = if Path::new(raw).is_absolute() {
         PathBuf::from(raw)
     } else {
-        state.cwd.join(raw)
+        current_cwd(&state).join(raw)
     };
     if !candidate.exists() {
         return Ok(json!({ "ok": false, "error": "path does not exist" }));
