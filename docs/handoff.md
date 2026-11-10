@@ -209,6 +209,22 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
     改用 `https://github.com/vadimcn/codelldb/releases/expanded_assets/<tag>` 这段 HTML
     列真实资产名（无需鉴权、不计 API 配额），再按 `github-release-install` 走镜像 + 官方 checksums 校验。
 
+19. **暂停目标不等于「没有目标」（2026-11-10，`daf02df`）——有意分叉上游 GUI**。
+    上游 `D:/ompgui/resources/app.asar:out/renderer/assets/index-OR9z36DX.js` 与本仓改前的
+    `src/renderer` 都把 `state.enabled === false`（`goal_updated` 帧）和 `get_goal` 的
+    `data?.enabled !== true` 当成无目标而清空 store；但随包 sidecar 暂停时发出的是
+    `goal: {status:"paused"}` + `state.enabled=false`，`get_goal` 也返回
+    `{enabled:false, status:"paused", objective:...}`（CDP 实取，非源码推断）。后果是
+    dock 栏「已暂停的目标」直接消失、ModesPanel 退回「开始目标」表单，而 sidecar 的
+    create 对已存在的 paused 目标抛错，用户被卡死。
+    现按 status 判定：仅 `dropped`/`complete` 或缺失 goal 对象才清空；新增
+    `src/renderer/lib/goal-state.ts` 统一 `goalPatchFromEvent` / `goalExists`，
+    `use-rpc-events.ts`、`session-hydration.ts`、`ModesPanel.tsx` 共用。
+    **composer chip 显式选「已配置即 checked」**：`ComposerModes.tsx:38` 的 `!!s.goal`
+    在 paused 时仍为 true，chip 保持勾选并带 objective；状态由 dock 栏的
+    「已暂停的目标」表达，不再把 chip 关掉（否则又退回「停止后消失」）。
+    该改动落在 `src/renderer` 字节级白名单之外，按约定登记为分叉。
+
 ---
 
 ## 5. 如何运行
