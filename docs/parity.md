@@ -262,7 +262,7 @@
 | 会话信息对话框：getSessionStats 的身份、消息/工具计数、token 拆分、premium 请求、成本、上下文 | sessions | could | reuse | todo |
 | Handoff：让 agent 总结当前会话并在新会话继续，保留原会话 | sessions | should | reuse | todo |
 | 分享与导入会话：preview_share_session / share_session 上传链接；Claude/Codex 会话导入为新 OMP 会话 | sessions | could | reuse | todo |
-| 工作区切换器：列已知工作区、跳转或新增目录（原生目录选择） | sessions | should | hybrid | wip（`sidecar:select-project` / `sidecar:set-project` 已补齐，切换会重启 active tab 的 sidecar 并更新 fs/sessions 的当前 cwd；实测新增目录、跳转、状态与文件树跟随均通；`lastProject` 偏好与 upstream 的窗口级 cwd 记录未做） |
+| 工作区切换器：列已知工作区、跳转或新增目录（原生目录选择） | sessions | should | hybrid | wip（`sidecar:select-project` / `sidecar:set-project` 通道已补齐，共用 `switch_project`：重启 active tab 的 sidecar、更新 tab_cwds，并让 fs/sessions 的当前 cwd 跟随；实测 `set-project` 跳转、状态与文件树跟随均通，`select-project` 仅验到取消返回 `null`，选中目录后返回 cwd 并触发切换待真机点按验证；`lastProject` 偏好与 upstream 的窗口级 cwd 记录未做） |
 | 模型恢复：会话保存的模型不可用时，选择用当前模型打开或留在原地 | sessions | could | reuse | todo |
 | Diff 面板四 scope：repository/current/timeline/artifacts，unified/split、多文件选择、单文件错误隔离 | panels | should | reuse | todo |
 | PR Center：PR 列表 + CI 徽标 + diff 统计、详情 markdown、按文件懒加载 diff、checkout 到 worktree | pr | should | hybrid | todo |
