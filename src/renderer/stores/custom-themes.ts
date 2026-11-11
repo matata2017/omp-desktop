@@ -33,7 +33,21 @@ export const useCustomThemesStore = create<CustomThemesState>()(set => ({
 }));
 
 export function loadCustomThemes(themes: IpcCustomThemes): void {
-	const entries = themes.files.map(parseCustomThemeFile);
+	const used = new Set<CustomThemeSelection>();
+	const entries = themes.files.map(file => {
+		const entry = parseCustomThemeFile(file);
+		if (!used.has(entry.selection)) {
+			used.add(entry.selection);
+			return entry;
+		}
+		// Two files may declare the same id. Keep both selectable by falling back
+		// to the file-name id for the later file (file names are unique in a dir).
+		let fallback = `custom:${file.id}` as CustomThemeSelection;
+		let suffix = 2;
+		while (used.has(fallback)) fallback = `custom:${file.id}#${suffix++}` as CustomThemeSelection;
+		used.add(fallback);
+		return { ...entry, selection: fallback };
+	});
 	const usable = new Map<CustomThemeSelection, ThemeDefinition>();
 	for (const entry of entries) {
 		const theme = entry.theme ?? lastGood.get(entry.selection);

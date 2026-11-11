@@ -2011,6 +2011,12 @@ fn is_known_pref_key(key: &str) -> bool {
         || key.starts_with("gui.")
 }
 
+/// Languages the renderer can actually switch to; a stray value must not be
+/// broadcast as `prefs:language-changed` (subscribers store it verbatim).
+fn is_language(value: &str) -> bool {
+    matches!(value, "en" | "ru" | "zh")
+}
+
 /// Repair a store written by the old `prefs:set`, which merged `{key, value}`
 /// into the file instead of storing `store[key] = value`. Only the last write
 /// is recoverable, and only when its key is one the renderer actually writes.
@@ -2033,10 +2039,12 @@ fn migrate_legacy_prefs(store: &mut Value) -> bool {
 /// Read prefs under the write lock, migrating a legacy `{key,value}` store and
 /// persisting the repair so later keyed reads see the recovered value.
 fn prefs_read(path: &Path, payload: &Value) -> Result<Value, String> {
-    let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
+    let _guard = PREFS_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut store = read_json_or(path, json!({}));
     if migrate_legacy_prefs(&mut store) {
-        write_json(path, &store)?;
+        let _ = write_json(path, &store);
     }
     Ok(match payload.get("key").and_then(Value::as_str) {
         Some(key) => pref_get(&store, key),
@@ -2052,10 +2060,13 @@ fn prefs_write(path: &Path, payload: &Value) -> Result<Option<String>, String> {
         return Err("Invalid preference key".to_owned());
     };
     let value = payload.get("value").cloned().unwrap_or(Value::Null);
-    let language = (key == "language")
-        .then(|| value.as_str().map(str::to_owned))
-        .flatten();
-    let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
+    let language = match (key, value.as_str()) {
+        ("language", Some(code)) if is_language(code) => Some(code.to_owned()),
+        _ => None,
+    };
+    let _guard = PREFS_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let mut store = read_json_or(path, json!({}));
     migrate_legacy_prefs(&mut store);
     pref_set(&mut store, key, value);
@@ -2351,6 +2362,10 @@ mod tests {
         );
         assert_eq!(
             prefs_write(&path, &json!({ "key": "themeName", "value": "nord" })).unwrap(),
+            None
+        );
+        assert_eq!(
+            prefs_write(&path, &json!({ "key": "language", "value": "xx" })).unwrap(),
             None
         );
         std::fs::remove_file(&path).ok();

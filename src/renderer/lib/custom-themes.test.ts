@@ -8,6 +8,7 @@ import { parseHTML } from "linkedom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseCustomThemeFile } from "./custom-themes";
 import { applyThemeByName, setCustomThemes, THEMES, type ThemeDefinition } from "./themes";
+import { loadCustomThemes, useCustomThemesStore } from "../stores/custom-themes";
 
 function parse(data: unknown) {
 	return parseCustomThemeFile({ id: "midnight", fileName: "midnight.json", data });
@@ -166,5 +167,22 @@ describe("a custom theme on screen", () => {
 		applyThemeByName("nord", { persist: false });
 		setCustomThemes(themes(midnight("#111111")));
 		expect(accent()).toBe(THEMES.nord.tokens["--omp-accent"]);
+	});
+});
+
+describe("custom theme ids", () => {
+	it("falls back to the file name when two files declare the same id", () => {
+		useCustomThemesStore.getState().reset();
+		loadCustomThemes({
+			dir: "/themes",
+			files: [
+				{ id: "a", fileName: "a.json", data: { id: "midnight", extends: "nord" } },
+				{ id: "b", fileName: "b.json", data: { id: "midnight", extends: "nord" } },
+			],
+		});
+		const selections = useCustomThemesStore.getState().entries.map(entry => entry.selection);
+		expect(selections).toEqual(["custom:midnight", "custom:b"]);
+		expect(new Set(selections).size).toBe(2);
+		useCustomThemesStore.getState().reset();
 	});
 });
