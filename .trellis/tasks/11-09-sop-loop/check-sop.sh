@@ -42,6 +42,11 @@ POLARITY=(
   '全量覆盖仅限新建'
   '默认用 edit/追加'
   '报 MISS 先怀疑模式写法'
+  '非平凡任务的默认开局'
+  '收敛前不动产品代码'
+  'trellis-before-dev'
+  'tracer-bullet'
+  '红→绿一次一片'
 )
 # 删除锚点：只防消失，不防翻义 —— 必须人工过一眼
 DELETION=(

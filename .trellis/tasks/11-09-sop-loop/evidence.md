@@ -170,3 +170,22 @@ mtime 就是我那次编辑。**是我的脚本写错，不是文件坏了。**
 
 顺带确认 baseline 未被改动：没有把上界从 86 抬到 87 来「消解」违规，而是真减一行。
 
+
+### grill-me 成为默认开局 + 项目 skill 触发门 + tdd/to-tickets（2026-11-11）
+
+- `grill-me` 已在本机且与上游 `mattpocock/skills` **逐字节一致**（`diff --strip-trailing-cr` → IDENTICAL），本身只是 `Call the Skill tool with "grilling".` 的转发桩；真正正文在 `grilling`。故无需安装，只把它写进 SOP 作**入口别名**（用户说 grill me / drill me 即走）。
+- SOP `:52` 改为「非平凡任务的默认开局」：design tree 分轮、每轮问完 frontier、逐条编号 + 推荐答案、等答复再进下一轮、frontier 空且用户确认 shared understanding 才收敛、**收敛前不动产品代码**。
+- `:22` 加**项目触发门**并保持全局 SOP 不写死：项目**同时**有 `.trellis/` 与 `.omp/skills/` 时才走 `trellis-before-dev` / `trellis-check` / `trellis-update-spec` / `trellis-break-loop`，skill 名留在项目侧。
+- `trellis-break-loop` 按它自述（"When debug is complete"）挂在**外环触发①之后**，不当循环中途 gate。
+- `:57` 把 Trellis 角色扩为「`to-tickets` 拆 tracer-bullet 纵向切片 → `tdd` 红→绿一次一片；重构不属于循环，留给 review」。
+
+行数仍 **86 / 9 节**（88 行的 ub-mode 增量靠 `:67-69` 三行 reflow 成一行抵回，内容一字未减，抽查 `不臆造任务系统`/`抗压缩的持久记忆`/`保证一条不漏`/`不改代码`/`不替用户提交`/`只查当前任务 SPEC`/`doctor full` 全部 HIT）。
+
+裁判：`ANCHORS=56 ANCHOR_MISSING=0 THRESHOLD_FAILS=0 → GREEN`。新门均跑过红证：
+- 删 `trellis-before-dev` → `MISS [polarity]` exit 1
+- `tracer-bullet 纵向切片` → `纵向切片` → `MISS [polarity]` exit 1
+- 删 `非平凡任务的默认开局` / 把 `收敛前不动产品代码` 改反 → 各 `MISS [polarity]` exit 1
+
+**未采纳**：`--capture` 重捕基线到 88——那会把刚报出的 `FAIL lines grew` 直接消解，与本文件记录的「不靠改 baseline 消解违规」冲突；`baseline.env` 全程未动。
+
+**发现**：`.trellis/scripts/` 里**没有 `trellis mem`**（只有 task.py / get_context.py / add_session.py 等），故 `trellis-session-insight` 在本仓未必可用，未写进触发门，待确认。
