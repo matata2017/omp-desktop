@@ -459,23 +459,12 @@ pub async fn ipc_invoke(
 
         // ---- Prefs ----------------------------------------------------------------------
         "prefs:get" => {
-            let store = read_json_or(&state.data_dir.join("prefs.json"), json!({}));
-            match payload.get("key").and_then(Value::as_str) {
-                Some(key) => Ok(pref_get(&store, key)),
-                None => Ok(store),
-            }
+            let path = state.data_dir.join("prefs.json");
+            prefs_read(&path, &payload)
         }
         "prefs:set" => {
-            let Some(key) = payload.get("key").and_then(Value::as_str) else {
-                return Err("Invalid preference key".to_owned());
-            };
-            let value = payload.get("value").cloned().unwrap_or(Value::Null);
             let path = state.data_dir.join("prefs.json");
-            let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
-            let mut store = read_json_or(&path, json!({}));
-            migrate_legacy_prefs(&mut store);
-            pref_set(&mut store, key, value);
-            write_json(&path, &store)?;
+            prefs_write(&path, &payload)?;
             Ok(Value::Null)
         }
 
@@ -1987,20 +1976,53 @@ fn pref_set(store: &mut Value, key: &str, value: Value) {
 /// Repair a store written by the old `prefs:set`, which merged `{key, value}`
 /// into the file instead of storing `store[key] = value`. Only the last write
 /// is recoverable.
-fn migrate_legacy_prefs(store: &mut Value) {
+fn migrate_legacy_prefs(store: &mut Value) -> bool {
     let legacy = store
         .get("key")
         .and_then(Value::as_str)
         .map(str::to_owned)
         .zip(store.get("value").cloned());
     let Some((key, value)) = legacy else {
-        return;
+        return false;
     };
     if let Some(map) = store.as_object_mut() {
         map.remove("key");
         map.remove("value");
     }
     pref_set(store, &key, value);
+    true
+}
+
+/// Read prefs under the write lock, migrating a legacy `{key,value}` store and
+/// persisting the repair so later keyed reads see the recovered value.
+fn prefs_read(path: &Path, payload: &Value) -> Result<Value, String> {
+    let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
+    let mut store = read_json_or(path, json!({}));
+    if migrate_legacy_prefs(&mut store) {
+        write_json(path, &store)?;
+    }
+    Ok(match payload.get("key").and_then(Value::as_str) {
+        Some(key) => pref_get(&store, key),
+        None => store,
+    })
+}
+
+/// Apply one `prefs:set` payload. Holding the lock across the read-modify-write
+/// keeps `themeName` and `theme` (two fire-and-forget writes from
+/// `applyThemeByName`) from overwriting each other.
+fn prefs_write(path: &Path, payload: &Value) -> Result<(), String> {
+    let Some(key) = payload.get("key").and_then(Value::as_str) else {
+        return Err("Invalid preference key".to_owned());
+    };
+    let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
+    let mut store = read_json_or(path, json!({}));
+    migrate_legacy_prefs(&mut store);
+    pref_set(
+        &mut store,
+        key,
+        payload.get("value").cloned().unwrap_or(Value::Null),
+    );
+    write_json(path, &store)
 }
 
 fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
@@ -2267,8 +2289,65 @@ mod tests {
             "value": ["hi"],
             "themeName": "nord"
         });
-        migrate_legacy_prefs(&mut store);
+        assert!(migrate_legacy_prefs(&mut store));
+        assert!(!migrate_legacy_prefs(&mut store));
         assert_eq!(store, json!({ "inputHistory": ["hi"], "themeName": "nord" }));
+    }
+
+    fn temp_prefs_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("romp-prefs-{name}-{}", std::process::id()))
+    }
+
+    #[test]
+    fn prefs_io_honors_the_payload_contract() {
+        let path = temp_prefs_path("contract");
+        std::fs::remove_file(&path).ok();
+        prefs_write(&path, &json!({ "key": "themeName", "value": "nord" })).unwrap();
+        prefs_write(&path, &json!({ "key": "theme", "value": "dark" })).unwrap();
+        prefs_write(&path, &json!({ "key": "gui.panelWidth", "value": 420 })).unwrap();
+        assert_eq!(prefs_read(&path, &json!({ "key": "themeName" })).unwrap(), json!("nord"));
+        assert_eq!(prefs_read(&path, &json!({ "key": "theme" })).unwrap(), json!("dark"));
+        assert_eq!(prefs_read(&path, &json!({ "key": "gui.panelWidth" })).unwrap(), json!(420));
+        assert_eq!(prefs_read(&path, &json!({})).unwrap()["themeName"], json!("nord"));
+        assert!(prefs_write(&path, &json!({ "value": 1 })).is_err());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn prefs_read_migrates_a_legacy_store_on_disk() {
+        let path = temp_prefs_path("migrate");
+        std::fs::write(
+            &path,
+            r#"{"key":"inputHistory","value":["hi"],"themeName":"nord"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            prefs_read(&path, &json!({ "key": "inputHistory" })).unwrap(),
+            json!(["hi"])
+        );
+        let on_disk: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(on_disk, json!({ "inputHistory": ["hi"], "themeName": "nord" }));
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn concurrent_prefs_writes_keep_every_key() {
+        let path = temp_prefs_path("concurrent");
+        std::fs::remove_file(&path).ok();
+        std::thread::scope(|scope| {
+            for index in 0..8 {
+                let path = &path;
+                scope.spawn(move || {
+                    prefs_write(&path, &json!({ "key": format!("k{index}"), "value": index })).unwrap();
+                });
+            }
+        });
+        let store = prefs_read(&path, &json!({})).unwrap();
+        for index in 0..8 {
+            let key = format!("k{index}");
+            assert_eq!(store.get(key.as_str()), Some(&json!(index)));
+        }
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]
