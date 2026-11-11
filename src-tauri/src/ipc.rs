@@ -464,7 +464,9 @@ pub async fn ipc_invoke(
         }
         "prefs:set" => {
             let path = state.data_dir.join("prefs.json");
-            prefs_write(&path, &payload)?;
+            if let Some(language) = prefs_write(&path, &payload)? {
+                let _ = app.emit(crate::events::LANGUAGE_CHANGED, language);
+            }
             Ok(Value::Null)
         }
 
@@ -1973,16 +1975,51 @@ fn pref_set(store: &mut Value, key: &str, value: Value) {
         .insert(parts[parts.len() - 1].to_owned(), value);
 }
 
+/// Preference keys the renderer writes. Only these can be recovered from the
+/// legacy `{key, value}` pair; anything else is left untouched, because a store
+/// may legitimately contain its own `key` and `value` entries.
+fn is_known_pref_key(key: &str) -> bool {
+    matches!(
+        key,
+        "themeName"
+            | "theme"
+            | "language"
+            | "inputHistory"
+            | "sidebar"
+            | "skillReview"
+            | "approvalMode"
+            | "keymapOverrides"
+            | "sidebarWidth"
+            | "fontSize"
+            | "proxyUrl"
+            | "compactDensity"
+            | "colorBlindMode"
+            | "followAgentTheme"
+            | "defaultPanelTab"
+            | "tabWidth"
+            | "tabRows"
+            | "notifications"
+            | "notificationsWhenFocused"
+            | "thinkingExpanded"
+            | "sidebarQuotas"
+            | "transcriptDetail"
+            | "codeLineNumbers"
+            | "pasteMenuThreshold"
+            | "launchProfiles"
+            | "trayState"
+    ) || key.starts_with("displayPreferences.")
+        || key.starts_with("gui.")
+}
+
 /// Repair a store written by the old `prefs:set`, which merged `{key, value}`
 /// into the file instead of storing `store[key] = value`. Only the last write
-/// is recoverable.
+/// is recoverable, and only when its key is one the renderer actually writes.
 fn migrate_legacy_prefs(store: &mut Value) -> bool {
-    let legacy = store
-        .get("key")
-        .and_then(Value::as_str)
-        .map(str::to_owned)
-        .zip(store.get("value").cloned());
-    let Some((key, value)) = legacy else {
+    let key = match store.get("key").and_then(Value::as_str) {
+        Some(key) if is_known_pref_key(key) => key.to_owned(),
+        _ => return false,
+    };
+    let Some(value) = store.get("value").cloned() else {
         return false;
     };
     if let Some(map) = store.as_object_mut() {
@@ -2010,19 +2047,20 @@ fn prefs_read(path: &Path, payload: &Value) -> Result<Value, String> {
 /// Apply one `prefs:set` payload. Holding the lock across the read-modify-write
 /// keeps `themeName` and `theme` (two fire-and-forget writes from
 /// `applyThemeByName`) from overwriting each other.
-fn prefs_write(path: &Path, payload: &Value) -> Result<(), String> {
+fn prefs_write(path: &Path, payload: &Value) -> Result<Option<String>, String> {
     let Some(key) = payload.get("key").and_then(Value::as_str) else {
         return Err("Invalid preference key".to_owned());
     };
+    let value = payload.get("value").cloned().unwrap_or(Value::Null);
+    let language = (key == "language")
+        .then(|| value.as_str().map(str::to_owned))
+        .flatten();
     let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
     let mut store = read_json_or(path, json!({}));
     migrate_legacy_prefs(&mut store);
-    pref_set(
-        &mut store,
-        key,
-        payload.get("value").cloned().unwrap_or(Value::Null),
-    );
-    write_json(path, &store)
+    pref_set(&mut store, key, value);
+    write_json(path, &store)?;
+    Ok(language)
 }
 
 fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
@@ -2265,10 +2303,17 @@ mod tests {
         let mut store = json!({});
         pref_set(&mut store, "themeName", json!("nord"));
         pref_set(&mut store, "gui.panelWidth", json!(420));
-        pref_set(&mut store, "displayPreferences.hideThinkingBlock", json!(true));
+        pref_set(
+            &mut store,
+            "displayPreferences.hideThinkingBlock",
+            json!(true),
+        );
         assert_eq!(pref_get(&store, "themeName"), json!("nord"));
         assert_eq!(pref_get(&store, "gui.panelWidth"), json!(420));
-        assert_eq!(pref_get(&store, "displayPreferences.hideThinkingBlock"), json!(true));
+        assert_eq!(
+            pref_get(&store, "displayPreferences.hideThinkingBlock"),
+            json!(true)
+        );
         assert_eq!(pref_get(&store, "gui.missing"), Value::Null);
         assert_eq!(store["gui"]["panelWidth"], json!(420));
     }
@@ -2291,7 +2336,34 @@ mod tests {
         });
         assert!(migrate_legacy_prefs(&mut store));
         assert!(!migrate_legacy_prefs(&mut store));
-        assert_eq!(store, json!({ "inputHistory": ["hi"], "themeName": "nord" }));
+        assert_eq!(
+            store,
+            json!({ "inputHistory": ["hi"], "themeName": "nord" })
+        );
+    }
+    #[test]
+    fn prefs_write_reports_a_language_change() {
+        let path = temp_prefs_path("language");
+        std::fs::remove_file(&path).ok();
+        assert_eq!(
+            prefs_write(&path, &json!({ "key": "language", "value": "zh" })).unwrap(),
+            Some("zh".to_owned())
+        );
+        assert_eq!(
+            prefs_write(&path, &json!({ "key": "themeName", "value": "nord" })).unwrap(),
+            None
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn legacy_pair_with_an_unknown_key_is_left_alone() {
+        let mut store = json!({ "key": "foo", "value": 1, "themeName": "nord" });
+        assert!(!migrate_legacy_prefs(&mut store));
+        assert_eq!(
+            store,
+            json!({ "key": "foo", "value": 1, "themeName": "nord" })
+        );
     }
 
     fn temp_prefs_path(name: &str) -> PathBuf {
@@ -2305,10 +2377,22 @@ mod tests {
         prefs_write(&path, &json!({ "key": "themeName", "value": "nord" })).unwrap();
         prefs_write(&path, &json!({ "key": "theme", "value": "dark" })).unwrap();
         prefs_write(&path, &json!({ "key": "gui.panelWidth", "value": 420 })).unwrap();
-        assert_eq!(prefs_read(&path, &json!({ "key": "themeName" })).unwrap(), json!("nord"));
-        assert_eq!(prefs_read(&path, &json!({ "key": "theme" })).unwrap(), json!("dark"));
-        assert_eq!(prefs_read(&path, &json!({ "key": "gui.panelWidth" })).unwrap(), json!(420));
-        assert_eq!(prefs_read(&path, &json!({})).unwrap()["themeName"], json!("nord"));
+        assert_eq!(
+            prefs_read(&path, &json!({ "key": "themeName" })).unwrap(),
+            json!("nord")
+        );
+        assert_eq!(
+            prefs_read(&path, &json!({ "key": "theme" })).unwrap(),
+            json!("dark")
+        );
+        assert_eq!(
+            prefs_read(&path, &json!({ "key": "gui.panelWidth" })).unwrap(),
+            json!(420)
+        );
+        assert_eq!(
+            prefs_read(&path, &json!({})).unwrap()["themeName"],
+            json!("nord")
+        );
         assert!(prefs_write(&path, &json!({ "value": 1 })).is_err());
         std::fs::remove_file(&path).ok();
     }
@@ -2325,8 +2409,12 @@ mod tests {
             prefs_read(&path, &json!({ "key": "inputHistory" })).unwrap(),
             json!(["hi"])
         );
-        let on_disk: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(on_disk, json!({ "inputHistory": ["hi"], "themeName": "nord" }));
+        let on_disk: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(
+            on_disk,
+            json!({ "inputHistory": ["hi"], "themeName": "nord" })
+        );
         std::fs::remove_file(&path).ok();
     }
 
@@ -2338,7 +2426,11 @@ mod tests {
             for index in 0..8 {
                 let path = &path;
                 scope.spawn(move || {
-                    prefs_write(&path, &json!({ "key": format!("k{index}"), "value": index })).unwrap();
+                    prefs_write(
+                        &path,
+                        &json!({ "key": format!("k{index}"), "value": index }),
+                    )
+                    .unwrap();
                 });
             }
         });

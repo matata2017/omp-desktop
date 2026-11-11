@@ -1135,7 +1135,7 @@ export interface IpcMemoryChange {
  * renderer checks its colors and fills it from a built-in theme.
  */
 export interface IpcCustomThemeFile {
-	/** File name without `.json`: the theme's stable id. */
+	/** File name without `.json`; fallback id when the file declares none. */
 	id: string;
 	fileName: string;
 	/** Parsed JSON; absent when the file could not be read or parsed. */

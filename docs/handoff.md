@@ -225,6 +225,13 @@ resources/omp.exe  fork sidecar（gitignored，需按第 4 节重建）
     「已暂停的目标」表达，不再把 chip 关掉（否则又退回「停止后消失」）。
     该改动落在 `src/renderer` 字节级白名单之外，按约定登记为分叉。
 
+20. **自定义主题用文件内 `id` 保持选择**（2026-11-11）。
+    上游与本仓历史都把主题 id 绑定文件名（`custom:<文件名>`），重命名 JSON 后
+    `custom:<旧名>` 必然失配，picker 只能显示 missing/fallback。`parseCustomThemeFile`
+    现在优先读文件里的 `id`（trim，最多 60 字符），缺失才回退文件名；label 同样优先
+    `id`。旧文件不写 `id` 时行为不变。该改动在 `src/renderer` 字节级白名单之外，
+    按约定登记为分叉。
+
 ---
 
 ## 5. 如何运行

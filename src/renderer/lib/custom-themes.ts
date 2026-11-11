@@ -59,11 +59,19 @@ function text(value: unknown, max: number): string {
 }
 
 export function parseCustomThemeFile(file: IpcCustomThemeFile): CustomThemeEntry {
-	const entry: CustomThemeEntry = { selection: `custom:${file.id}`, fileName: file.fileName, skipped: [] };
-	if (file.error !== undefined) return { ...entry, problem: "unreadable", detail: file.error };
+	const fallback: CustomThemeEntry = { selection: `custom:${file.id}`, fileName: file.fileName, skipped: [] };
+	if (file.error !== undefined) return { ...fallback, problem: "unreadable", detail: file.error };
 	const data = file.data;
-	if (typeof data !== "object" || data === null || Array.isArray(data)) return { ...entry, problem: "notObject" };
+	if (typeof data !== "object" || data === null || Array.isArray(data)) return { ...fallback, problem: "notObject" };
 	const json = data as Record<string, unknown>;
+	// `id` is the stable selection key: a renamed file keeps the user's choice.
+	// Files without one keep the historical file-name id.
+	const declaredId = typeof json.id === "string" ? json.id.trim().slice(0, MAX_LABEL) : "";
+	const entry: CustomThemeEntry = {
+		selection: `custom:${declaredId || file.id}`,
+		fileName: file.fileName,
+		skipped: [],
+	};
 
 	if (json.scheme !== undefined && json.scheme !== "dark" && json.scheme !== "light") {
 		return { ...entry, problem: "badScheme" };
@@ -96,7 +104,7 @@ export function parseCustomThemeFile(file: IpcCustomThemeFile): CustomThemeEntry
 	return {
 		...entry,
 		theme: {
-			label: text(json.name, MAX_LABEL) || file.id,
+			label: text(json.name, MAX_LABEL) || declaredId || file.id,
 			description: text(json.description, MAX_DESCRIPTION),
 			scheme: json.scheme === "dark" || json.scheme === "light" ? json.scheme : base.scheme,
 			tokens,

@@ -230,7 +230,7 @@
 | 功能 | 优先级 | 载体 | 状态 |
 |---|---|---|---|
 | 内置主题：12 套命名主题 + system 跟随系统，119 个 `--omp-*` token 全量写入 | should | reuse | todo |
-| 自定义主题目录：`~/.omp/gui/themes/*.json`，extends/tokens 校验、热更新、错误提示 | could | hybrid | wip（`themes:list`/`themes:open-folder` 已通，含解析错误字段；热更新事件未做） |
+| 自定义主题目录：`~/.omp/gui/themes/*.json`，extends/tokens 校验、热更新、错误提示；文件可声明稳定 `id`，改名不丢选择 | could | hybrid | wip（`themes:list`/`themes:open-folder` 已通，含解析错误字段；热更新事件未做；无 `id` 的旧文件仍按文件名作 id） |
 | Agent/插件主题叠加与首帧引导：follow agent theme、终端调色板、插件 token overlay、pre-paint | could | reuse | todo |
 
 ### tools

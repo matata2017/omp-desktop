@@ -30,6 +30,20 @@ describe("parseCustomThemeFile", () => {
 		});
 	});
 
+	it("uses an id declared in the file so renaming the file keeps the selection", () => {
+		const entry = parseCustomThemeFile({
+			id: "renamed-file",
+			fileName: "renamed-file.json",
+			data: { id: "midnight", name: "Midnight", extends: "nord" },
+		});
+		expect(entry.selection).toBe("custom:midnight");
+	});
+
+	it("falls back to the file name when the declared id is blank", () => {
+		const entry = parseCustomThemeFile({ id: "midnight", fileName: "midnight.json", data: { id: "  " } });
+		expect(entry.selection).toBe("custom:midnight");
+	});
+
 	it("starts from light for a light scheme without a base, and names the theme after its file", () => {
 		const entry = parse({ scheme: "light" });
 		expect(entry.theme).toMatchObject({ label: "midnight", scheme: "light", tokens: THEMES.light.tokens });

@@ -48,6 +48,7 @@ pub mod events {
     pub const DICTATION_FRAME: &str = "dictation:frame";
     pub const BTW_FRAME: &str = "btw:frame";
     pub const MENU_ACTION: &str = "menu:action";
+    pub const LANGUAGE_CHANGED: &str = "prefs:language-changed";
     pub const DEEP_LINK: &str = "deep-link";
     pub const SCHEDULER_PROGRESS: &str = "scheduler:progress";
     pub const SCHEDULER_SNAPSHOT: &str = "scheduler:snapshot";
