@@ -18,6 +18,10 @@ const FS_READ_CAP: u64 = 8 * 1024 * 1024;
 const FS_LIST_MAX_DEPTH: usize = 8;
 const FS_LIST_MAX_ENTRIES: usize = 2000;
 
+/// Serializes `prefs.json` read-modify-write. The renderer fires `themeName`
+/// and `theme` without awaiting, and both write the same file.
+static PREFS_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Directories `fs:list` never walks. Same set as the upstream GUI's `FS_IGNORED_DEFAULTS`
 /// (plus the `bazel-*` prefix), so the panel lists the same tree on both implementations.
 const FS_IGNORED_DIRS: [&str; 16] = [
@@ -454,14 +458,25 @@ pub async fn ipc_invoke(
         }
 
         // ---- Prefs ----------------------------------------------------------------------
-        "prefs:get" => Ok(read_json_or(&state.data_dir.join("prefs.json"), json!({}))),
+        "prefs:get" => {
+            let store = read_json_or(&state.data_dir.join("prefs.json"), json!({}));
+            match payload.get("key").and_then(Value::as_str) {
+                Some(key) => Ok(pref_get(&store, key)),
+                None => Ok(store),
+            }
+        }
         "prefs:set" => {
-            let merged = merge_json(
-                read_json_or(&state.data_dir.join("prefs.json"), json!({})),
-                payload,
-            );
-            write_json(&state.data_dir.join("prefs.json"), &merged)?;
-            Ok(merged)
+            let Some(key) = payload.get("key").and_then(Value::as_str) else {
+                return Err("Invalid preference key".to_owned());
+            };
+            let value = payload.get("value").cloned().unwrap_or(Value::Null);
+            let path = state.data_dir.join("prefs.json");
+            let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
+            let mut store = read_json_or(&path, json!({}));
+            migrate_legacy_prefs(&mut store);
+            pref_set(&mut store, key, value);
+            write_json(&path, &store)?;
+            Ok(Value::Null)
         }
 
         // ---- System ---------------------------------------------------------------------
@@ -610,15 +625,17 @@ pub async fn ipc_invoke(
                 .to_owned();
             let patch = payload.get("patch").cloned().unwrap_or_else(|| json!({}));
             let path = state.data_dir.join("prefs.json");
+            let _guard = PREFS_LOCK.lock().map_err(|err| err.to_string())?;
             let mut prefs = read_json_or(&path, json!({}));
-            let mut profiles = prefs
-                .get("launchProfiles")
-                .cloned()
-                .unwrap_or_else(|| json!({}));
+            migrate_legacy_prefs(&mut prefs);
+            let mut profiles = pref_get(&prefs, "launchProfiles");
+            if !profiles.is_object() {
+                profiles = json!({});
+            }
             let profile = profiles.get(&cwd).cloned().unwrap_or_else(|| json!({}));
             let profile = merge_json(profile, patch);
             profiles[&cwd] = profile.clone();
-            prefs["launchProfiles"] = profiles;
+            pref_set(&mut prefs, "launchProfiles", profiles);
             write_json(&path, &prefs)?;
             Ok(profile)
         }
@@ -1923,7 +1940,7 @@ fn write_json(path: &Path, value: &Value) -> Result<(), String> {
     std::fs::rename(&tmp, path).map_err(|e| e.to_string())
 }
 
-/// Shallow merge: `prefs:set` carries only the keys the renderer changed.
+/// Shallow merge for a launch-profile patch: only the keys the renderer changed.
 fn merge_json(mut base: Value, patch: Value) -> Value {
     if let (Some(base_map), Some(patch_map)) = (base.as_object_mut(), patch.as_object()) {
         for (key, value) in patch_map {
@@ -1931,6 +1948,59 @@ fn merge_json(mut base: Value, patch: Value) -> Value {
         }
     }
     base
+}
+
+/// Read a GUI preference by electron-store-style dotted path (`gui.panelWidth`,
+/// `displayPreferences.hideThinkingBlock`). Missing paths read as JSON null.
+fn pref_get(store: &Value, key: &str) -> Value {
+    let mut current = store;
+    for part in key.split('.') {
+        match current.get(part) {
+            Some(next) => current = next,
+            None => return Value::Null,
+        }
+    }
+    current.clone()
+}
+
+/// Write a GUI preference by dotted path, creating intermediate objects the way
+/// electron-store does. A non-object at an intermediate segment is replaced.
+fn pref_set(store: &mut Value, key: &str, value: Value) {
+    if !store.is_object() {
+        *store = json!({});
+    }
+    let parts: Vec<&str> = key.split('.').collect();
+    let mut current = store;
+    for part in &parts[..parts.len() - 1] {
+        let map = current.as_object_mut().expect("object");
+        if !map.get(*part).is_some_and(Value::is_object) {
+            map.insert((*part).to_owned(), json!({}));
+        }
+        current = map.get_mut(*part).expect("object");
+    }
+    current
+        .as_object_mut()
+        .expect("object")
+        .insert(parts[parts.len() - 1].to_owned(), value);
+}
+
+/// Repair a store written by the old `prefs:set`, which merged `{key, value}`
+/// into the file instead of storing `store[key] = value`. Only the last write
+/// is recoverable.
+fn migrate_legacy_prefs(store: &mut Value) {
+    let legacy = store
+        .get("key")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .zip(store.get("value").cloned());
+    let Some((key, value)) = legacy else {
+        return;
+    };
+    if let Some(map) = store.as_object_mut() {
+        map.remove("key");
+        map.remove("value");
+    }
+    pref_set(store, &key, value);
 }
 
 fn read_file(cwd: PathBuf, payload: Value) -> Result<Value, String> {
@@ -2166,6 +2236,39 @@ mod tests {
         let base = json!({ "theme": "dark", "lang": "en" });
         let merged = merge_json(base, json!({ "lang": "zh" }));
         assert_eq!(merged, json!({ "theme": "dark", "lang": "zh" }));
+    }
+
+    #[test]
+    fn pref_set_and_get_follow_dotted_paths() {
+        let mut store = json!({});
+        pref_set(&mut store, "themeName", json!("nord"));
+        pref_set(&mut store, "gui.panelWidth", json!(420));
+        pref_set(&mut store, "displayPreferences.hideThinkingBlock", json!(true));
+        assert_eq!(pref_get(&store, "themeName"), json!("nord"));
+        assert_eq!(pref_get(&store, "gui.panelWidth"), json!(420));
+        assert_eq!(pref_get(&store, "displayPreferences.hideThinkingBlock"), json!(true));
+        assert_eq!(pref_get(&store, "gui.missing"), Value::Null);
+        assert_eq!(store["gui"]["panelWidth"], json!(420));
+    }
+
+    #[test]
+    fn pref_set_keeps_sibling_keys() {
+        let mut store = json!({ "themeName": "nord", "gui": { "panelWidth": 420 } });
+        pref_set(&mut store, "theme", json!("dark"));
+        assert_eq!(pref_get(&store, "themeName"), json!("nord"));
+        assert_eq!(pref_get(&store, "theme"), json!("dark"));
+        assert_eq!(pref_get(&store, "gui.panelWidth"), json!(420));
+    }
+
+    #[test]
+    fn legacy_prefs_pair_is_migrated_to_its_key() {
+        let mut store = json!({
+            "key": "inputHistory",
+            "value": ["hi"],
+            "themeName": "nord"
+        });
+        migrate_legacy_prefs(&mut store);
+        assert_eq!(store, json!({ "inputHistory": ["hi"], "themeName": "nord" }));
     }
 
     #[test]
