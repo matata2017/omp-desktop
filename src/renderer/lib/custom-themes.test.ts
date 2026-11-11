@@ -183,6 +183,42 @@ describe("custom theme ids", () => {
 		const selections = useCustomThemesStore.getState().entries.map(entry => entry.selection);
 		expect(selections).toEqual(["custom:midnight", "custom:b"]);
 		expect(new Set(selections).size).toBe(2);
+		expect(useCustomThemesStore.getState().entries.map(entry => entry.theme?.label)).toEqual(["midnight", "b"]);
+		useCustomThemesStore.getState().reset();
+	});
+});
+
+describe("custom theme id precedence", () => {
+	it("lets a usable theme keep the id a broken file declared first", () => {
+		useCustomThemesStore.getState().reset();
+		loadCustomThemes({
+			dir: "/themes",
+			files: [
+				{ id: "broken", fileName: "broken.json", data: { id: "midnight", extends: "nope" } },
+				{ id: "good", fileName: "good.json", data: { id: "midnight", extends: "nord" } },
+			],
+		});
+		const entries = useCustomThemesStore.getState().entries;
+		expect(entries.find(entry => entry.fileName === "good.json")?.selection).toBe("custom:midnight");
+		expect(entries.find(entry => entry.fileName === "broken.json")?.selection).toBe("custom:broken");
+		useCustomThemesStore.getState().reset();
+	});
+});
+
+describe("custom theme id determinism", () => {
+	it("picks the same winner regardless of directory order", () => {
+		const a = { id: "a", fileName: "a.json", data: { id: "midnight", extends: "nord" } };
+		const b = { id: "b", fileName: "b.json", data: { id: "midnight", extends: "nord" } };
+		for (const files of [
+			[a, b],
+			[b, a],
+		]) {
+			useCustomThemesStore.getState().reset();
+			loadCustomThemes({ dir: "/themes", files });
+			const entries = useCustomThemesStore.getState().entries;
+			expect(entries.find(entry => entry.fileName === "a.json")?.selection).toBe("custom:midnight");
+			expect(entries.find(entry => entry.fileName === "b.json")?.selection).toBe("custom:b");
+		}
 		useCustomThemesStore.getState().reset();
 	});
 });

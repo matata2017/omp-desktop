@@ -33,9 +33,20 @@ export const useCustomThemesStore = create<CustomThemesState>()(set => ({
 }));
 
 export function loadCustomThemes(themes: IpcCustomThemes): void {
+	const parsed = [...themes.files]
+		.sort((left, right) => left.fileName.localeCompare(right.fileName))
+		.map(file => ({ file, entry: parseCustomThemeFile(file) }));
 	const used = new Set<CustomThemeSelection>();
-	const entries = themes.files.map(file => {
-		const entry = parseCustomThemeFile(file);
+	const claimed = new Map<number, CustomThemeEntry>();
+	// A broken file must not shadow a working theme that declares the same id.
+	parsed.forEach(({ entry }, index) => {
+		if (!entry.theme || used.has(entry.selection)) return;
+		used.add(entry.selection);
+		claimed.set(index, entry);
+	});
+	const entries = parsed.map(({ file, entry }, index) => {
+		const owned = claimed.get(index);
+		if (owned) return owned;
 		if (!used.has(entry.selection)) {
 			used.add(entry.selection);
 			return entry;
@@ -46,7 +57,11 @@ export function loadCustomThemes(themes: IpcCustomThemes): void {
 		let suffix = 2;
 		while (used.has(fallback)) fallback = `custom:${file.id}#${suffix++}` as CustomThemeSelection;
 		used.add(fallback);
-		return { ...entry, selection: fallback };
+		const theme =
+			entry.theme && entry.theme.label === entry.selection.slice("custom:".length)
+				? { ...entry.theme, label: file.id }
+				: entry.theme;
+		return { ...entry, selection: fallback, theme };
 	});
 	const usable = new Map<CustomThemeSelection, ThemeDefinition>();
 	for (const entry of entries) {
