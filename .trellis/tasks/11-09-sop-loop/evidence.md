@@ -189,3 +189,59 @@ mtime 就是我那次编辑。**是我的脚本写错，不是文件坏了。**
 **未采纳**：`--capture` 重捕基线到 88——那会把刚报出的 `FAIL lines grew` 直接消解，与本文件记录的「不靠改 baseline 消解违规」冲突；`baseline.env` 全程未动。
 
 **发现**：`.trellis/scripts/` 里**没有 `trellis mem`**（只有 task.py / get_context.py / add_session.py 等），故 `trellis-session-insight` 在本仓未必可用，未写进触发门，待确认。
+
+
+
+### 把 live SOP 改成 LOOP（2026-11-13，已修正一次误判）
+
+**先纠错**：本轮最初按任务快照 `snapshots/sop-current-87.md` 重建了一个 `managed-skills/dev-workflow-sop/SKILL.md`，并让它对旧 56 锚点全绿。这是错的——`dev-workflow-sop` 是旧世代的名字，本机 live 的 SOP 是 `~/.omp/agent/skills/eng-dev-sop/SKILL.md`（软链到 magpie library，58 行、四技能、步骤式），旧 baseline（86 行 / 24 锚点）描述的文件已不存在。同一个错误里还夹带了一条死路径：快照里写 `D:/work/huanghao/doc-drift`，本机实际是 `D:/doc-drift`（`D:/work/huanghao/` 不存在）。这两条都是「让门禁绿」压过「说真话」的典型，记在此处。
+
+处置：
+- 删除重复的 `managed-skills/dev-workflow-sop`。
+- 改前落盘：`snapshots/eng-dev-sop-before-loop-0209.md`（5.1K）。
+- 把 live 文件重写成循环形态，**保留**它独有的段落（网络实测前缀表、前提/`docInfo` 报错、交付、完成标准 checklist、禁止），并修正 doc-drift 路径为 `D:/doc-drift`。
+- 旧 `baseline.env`（SECTIONS=9/LINES=86）与 `check-sop.sh` 的 56 锚点属于已消失的世代，**不再作为本次裁判**；新文件按自身契约核对（见下）。
+
+新文件形状：`## ` 段落 **8** 个，`wc -l` **83** 行。循环主链 = `目标契约 → 知识阈值 → 假设 → 实验 → 裁判 → 记录 → 阈值`，内环/外环、裁判四档（specified/derived/implicit/human）、soundness 优先、死门事实、四个角色（grilling / trellis+to-tickets+tracer-bullet+tdd / ponytail / doc-drift）都在。
+
+裁判（本轮实跑）：
+- 内容契约 grep：`不自动 commit`、`docInfo`、`rsproxy`、`ghfast.top`、`tracer-bullet`、`goal-forge`、`宁可误报`、`全量覆盖仅限新建` → 8/8 HIT。
+- 死路径：`grep -c "D:/work/huanghao"` → **0**；`D:/doc-drift/bin` → 1。
+- 加载面：隔离探针（临时 `PI_CODING_AGENT_DIR` + `skills`/`managed-skills` 双 junction，18.19.0 rpc-ui）→ `get_skills` 160 个，`HAS_ENG_SOP=True`，`DESC=` 输出即新 description 前缀，说明 frontmatter 解析正常。
+- 未做：没有为新 SOP 建锚点脚本。锚点集的盲区就是锚点式复核的盲区（见 SOP 裁判段），这次以逐条 grep + 逐行 diff 快照替代；若要长期守卫，应另起一份带极性锚点的新 checker，而不是复用已失效的 56 锚点。
+
+### 大目标方法（毛选）接入 SOP（2026-11-13）
+
+**输入来源**：`D:/oil-cycle-monitor/docs/交易体系_毛选方法论.md`（2026-11-07 的蒸馏产物，M1–M9 原文→检查映射、六条研究完备度门 G1–G6、以及 `.codex/skills/` 18 个毛选 skill 的盘点）。只取其**方法论骨架**，不搬交易专有部分（L0 一票否决、仓位动作矩阵、PIT 账本这些是那个项目自己的制度）。
+
+**落地**：`~/.omp/agent/skills/eng-dev-sop/SKILL.md` 新增第 2 节「大目标：只给方向时，先造方案（毛选方法）」，全文 83 → **115 行**，`##` 段 8 → **9**：
+- M1–M9 表：主要矛盾唯一 / 支配方面 / 转化有条件 / 阶段性 / 不同质不同法 / 内因是根据 / 忌片面 / 对抗非唯一形式 / 共性寓于个性。
+- 方案书七步：调查（没有调查没有发言权）→ 抓主矛盾 → 阶段路线（论持久战三阶段）→ 集中优势兵力（一次一个假设）→ 试点—推广（抓典型）→ 胸中有数（数字目标）→ 反复检验（实践论）。
+- 决策边界：用户定方向/风险/预算/阶段门；AI 自决路径/实验/排序/失败后下一假设并落盘；只在方案书与阶段门上走 `ask` 弹窗。
+- 反模式与外部依据（Anthropic harness 设计 + Loop Engineering / spec-kit-loop）。
+
+**外部检索（本轮实做）**：
+- Anthropic《Harness design for long-running application development》(2026-03-24, Prithvi Rajasekaran)：planner 把 1–4 句 prompt 展开成 spec 且刻意停在产品层（防止早期细节错误级联）；generator/evaluator 分离，因为模型给自己打分「reliably skew positive」；每 sprint 先谈 sprint 契约（done 定义 + 可测行为）再写码；solo 20 min/$9 vs 完整 harness 6 h/$200，后续精简版 3 h 50 min/$124.70；「每个 harness 组件都编码了一个关于模型弱点的假设，模型变强后要逐项拆掉」。
+- GitHub 侧：`formin/spec-kit-loop`（Loop Engineering 的 Spec Kit 扩展，maker/checker 分离、`max_iterations` 上限、`verdicts.md`/`debt.md` 落盘、人类签收门）、`choism4/overnight-skill`（大目标分解 + worktree + 继续挖活）、`gyujeongion/claude-code-goal-loop`（verified-step + 回滚快照 + stuck-handler）、`davidondrej/skills` 的 goal-loop。共同点与 SOP 一致：可检查的停止条件、独立裁判、状态外置、预算上限。
+
+**验证**：`grep -c "^## "` → 9；`wc -l` → 115；契约 grep `primary_contradiction` / `dominant_aspect` / `试点` / `胸中有数` / `sprint 契约` / `M9` / `反模式` / `` `ask` 弹窗 `` → 8/8 HIT；隔离探针（临时 `PI_CODING_AGENT_DIR` + skills/managed-skills 双 junction，18.19.0 rpc-ui）`get_skills` → 160 个、`HAS_ENG_SOP=True`、新 description 正常解析（含「大目标 / 方向目标 / 自主出方案」触发词）。
+
+**追加修正（同一轮 review）**：① description 自相矛盾（举例「在模拟盘赚钱」却声明「不适用于投研分析」）→ 改为「不适用于纯投研分析——方向型目标只借《大目标》的方法论，领域规则仍归该项目自己的 SOP」；② 补上漏掉的硬门槛「开跑门槛」：方向 → **1 个可测代理指标 + 1 个放弃阈值 + 口径**，换算不出来第一步是建表而不是选策略，产物再压 goal-forge 契约（方向不动、阶段目标可改），并作为方案书第 0 步。文件 115 → **122 行**，`##` 仍 9 段；契约 grep 增 `开跑门槛` / `放弃阈值` / `可测代理指标` / `方向不动` / `不适用于纯投研分析` 全部 HIT；description 只在 `description:` 处含一个 ASCII 冒号空格，YAML 安全；加载探针复跑 `SKILLS=160 HAS=True`，尾部 scope 文本为新版。另：`davidondrej/skills` 的 404 是路径少了重复的 `skills/` 层，未再追（同类机制已由 Anthropic harness 原文与 `formin/spec-kit-loop` 覆盖）；krouter 中文查询会崩在 `route_knowledge.py:239` 的 `log_query`（`UnicodeEncodeError: surrogates not allowed`），毛选内容直接取自 `D:/oil-cycle-monitor/docs/交易体系_毛选方法论.md`。
+
+**再修（用户：「我需要的是使用毛选去解决问题的能力」）**：原来的「大目标」段是 M1–M9 表 + 七步清单，属于清单而非解题方法。已重写为 6 阶段**思考顺序**，`##` 仍 9 段、`###` 8 个、161 行 / 7323 字符：
+`开跑门槛（方向可测化）→ 一、解剖问题（现象/冲突/谁说了算/翻转条件）→ 二、调查（一手材料、解剖麻雀、眼睛向下、数字判据）→ 三、矛盾分析（找主矛盾、判主要方面、定转化条件、区分矛盾性质、忌片面）→ 四、战略战术（全局在胸、战略持久战役速决、集中优势兵力、不打无把握之仗、打得赢就走）→ 五、检验与推广（试点—总结—推广、从战争中学习战争、一次结论不定稿、抓两头带中间）→ 六、沉淀（写成可复用规则）`，并补一个用**技术目标**（Romp 启动 4013 ms → 1500 ms）跑完全流程的示例，避免拿投研领域当范例越界。description 同步改成「按毛选方法解决：方向可测化 → 解剖问题 → 调查 → 矛盾分析 → 战略战术 → 试点检验 → 沉淀」，触发词增「没有现成方案」。
+验证：`wc -l` 161、`##` 9、`###` 8；契约 grep `解剖问题` / `找主要矛盾` / `区分矛盾性质` / `打得赢就打` / `沉淀` / `示例（把方法跑一遍` / `开跑门槛` / `方向不动` 8/8 HIT，`方案书七步` 与 `《大目标》` 旧引用已无（description 里也清掉）；加载探针 `SKILLS=161 HAS=True`。
+
+**追加（用户：调研人类解决问题的书籍 / 为了达到目标有什么方法论）**：`eng-dev-sop` 新增 `## 达成目标的方法论（选型 + 证据等级）`（第 107 行起），并把上一节的示例数字改正（`sidecar 段 2152 ms 占 53%`、`WebView2 段 1534 ms 占 38%`，引 `docs/perf.md:26-31`；翻转条件与门槛统一为 `sidecar ready ≤ 1500 ms`），五个阶段各补一条 `abort` 规则。文件 191 行、`##` 10 段。
+- 选型：Cynefin 先分流（因果清楚→分析；不可预测→探针；失序→先稳住），再按目标类型选 TOC / Backcasting / if-then / 刻意练习+Toyota Kata / OKR+Hoshin。
+- 证据分级：A 级（元分析或强实证）= Locke & Latham 目标设定四要素、Gollwitzer & Sheeran 2006 实施意图（94 项，d≈0.65）、Oettingen WOOP 心理对照、Bandura & Schunk 近端子目标、Flyvbjerg 参考类预测 + Klein premortem；B 级（行业长期实证）= TOC、Backcasting、Toyota Kata、Hoshin Kanri；C 级（流行但无对照证据）= OKR 本体、SMART 本身。
+- 反模式：SMART 只写指标不问约束、OKR 挂奖金、正面幻想代替行动、主目标 >3、只写目标不写 if-then、把平均值当瓶颈。
+- 探针 160→161 的差额已定位为 `C:/Users/666/.config/magpie/library/skills/unslop/SKILL.md`（5.8K，magpie library 最新一条，非本次改动引入、非污染）。
+
+**再修（第二轮 review）**：① 示例里的支配方面写反了（window 与 first paint 都在 sidecar ready 之前），已改为「sidecar 段 2152 ms / 53% 是最大单段，WebView2 段 1534 ms / 38% 次之，窗口 ≈8%，sidecar ready → 首会话仅 +50 ms ≈1%」；② 书目综述不留在 skill 正文，`## 达成目标的方法论` 压成 14 行只收增量（A 级五条 + B/C 分级 + 反模式），调研全量留在回复与本节；③ 五个**目前缺的**增量按出处分挂到对应阶段末尾：Kepner-Tregoe IS / IS NOT 与 Ackoff「消解问题」→ 一、解剖；Cynefin 分场域 → 三、矛盾性质；Klein premortem + Flyvbjerg 基率 → 五、试点前；Klein & Kahneman 2009 直觉可信条件 → 五、检验后；并加一句「Dewey 五步 / Polya 四步 / PDCA / OODA / 毛选 独立收敛到同一骨架」作为可信度证据。文件 191 → **187 行**，`##` 仍 10 段；`87%` 与「其余三项」已无命中，新增契约 `Kepner-Tregoe` / `Ackoff` / `Cynefin` / `premortem` / `Klein & Kahneman 2009` / `Dewey 五步` 各 1+ 命中；加载探针复跑通过。
+
+**新建 `problem-solving` skill（用户：结合这些和毛选给 AI 做个解决问题的 SKILL）**：`C:/Users/666/.omp/agent/managed-skills/problem-solving/SKILL.md`（106 行、12 个标题）。结构：5 条铁律（先现象后判断 / 一次一个主矛盾 / 裁判不是自己 / 每次带下一个实验+判据+abort / 交付用户真会用的东西）→ 7 个阶段（0 方向可测化门槛、1 定界与解剖 KT IS/IS-NOT + Ackoff 消解、2 一手调查、3 矛盾与约束 毛选主矛盾 + TOC 瓶颈 + TRIZ 技术/物理矛盾 + Cynefin、4 方案与战略 backcasting/阶段/集中兵力/if-then/premortem+基率、5 执行与检验 试点/判据/失败库/Klein-Kahneman 直觉条件、6 沉淀）→ 固定字段《解题卡》→ 反模式（含 AI 特有：编造未观测数据、拿记忆当证据、只给清单不给判断、过度规划、被要结论时先附和）→ 接线（goal-forge / grilling / eng-dev-sop / trellis，领域规则归领域 SOP）。每阶段带 exit 与 abort。
+加载验证：隔离探针（18.19.0 rpc-ui，临时 `PI_CODING_AGENT_DIR` + skills/managed-skills junction）`get_skills` 162 个，`-Name problem-solving` → `HAS=True`，描述尾部触发词正确。
+**附带实测（用于演示解题卡）**：`C:/Users/666/AppData/Local/Temp/gate-dump.ps1` 向 18.19.0 发 `set_loop_mode {enabled:true,args:"--while \"echo hi; exit 0\" reply with the single word: pong"}` → `data:{enabled:true,state:"running",prompt:"reply with the single word: pong"}`，`get_loop_mode` 同；**返回里没有任何 gate/while/until 字段，`--while …` 整段被丢弃且未进 prompt**。因果边界：这条只能证明 state 不回显 gate、flag 被吃掉；结合早前 `--while "echo …; exit 0"` 跑 4 轮 marker 文件从未生成、`--until` 跑到 9 轮不停，能判定的是**门在执行层从不生效**，分不出「未解析」与「解析后丢弃」。真要分辨只有一条便宜实验：交互 TUI 里跑 `/loop --while` 看是否停表（与 rpc-ui 不同入口）。
+
+**去重（避免两个 skill 各存一份六段式）**：`problem-solving` 独占通用解题程序（门槛/解剖/调查/矛盾/方案/检验/沉淀 + 解题卡 + abort + 目标达成工具箱，119 行）；`eng-dev-sop` 把原 `:24-112` 两大段压成 3 行指针「解题走 `skill://problem-solving`」+ 一行开发特有约束（`loop` 门在执行层不生效、`goal.continuationModes` 缺 `rpc` 只跑一轮、命令级裁判只能宿主侧）+ 一个 Romp 启动示例，文件 187 → **90 行 / 9 段**。drift 点从两处变为一处。

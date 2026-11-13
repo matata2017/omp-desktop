@@ -24,6 +24,7 @@ import type {
 	RpcVibeModeState,
 } from "../../../shared/rpc-types";
 import { formatDuration, formatTokens } from "../../lib/format";
+import { formatBudgetDraft, parseBudgetDraft } from "../../lib/goal-budget";
 import { goalExists } from "../../lib/goal-state";
 import { useT } from "../../lib/i18n";
 import { loopLimitText, normalizeLoopUpdate, parseLoopLimit } from "../../lib/loop-mode";
@@ -422,12 +423,17 @@ function VibeTab({ rpc }: { rpc: ModeRpc<RpcVibeModeState> }) {
 function GoalEnabledView({ rpc, state }: { rpc: ModeRpc<RpcGoalState>; state: RpcGoalState }) {
 	const t = useT();
 	const [objectiveDraft, setObjectiveDraft] = useState(state.objective ?? "");
+	const [budgetDraft, setBudgetDraft] = useState(formatBudgetDraft(state.tokenBudget));
 
-	// A fresh objective from the sidecar (event re-fetch) replaces the draft.
 	const loadedObjective = state.objective ?? "";
 	useEffect(() => {
 		setObjectiveDraft(loadedObjective);
 	}, [loadedObjective]);
+	// A budget saved by the sidecar (or a second window) replaces the draft too.
+	const loadedBudget = formatBudgetDraft(state.tokenBudget);
+	useEffect(() => {
+		setBudgetDraft(loadedBudget);
+	}, [loadedBudget]);
 
 	const trimmedObjective = objectiveDraft.trim();
 	const objectiveDirty = trimmedObjective !== "" && trimmedObjective !== loadedObjective;
@@ -435,10 +441,15 @@ function GoalEnabledView({ rpc, state }: { rpc: ModeRpc<RpcGoalState>; state: Rp
 	const tokensUsed = state.tokensUsed ?? 0;
 	const timeUsedSeconds = state.timeUsedSeconds ?? 0;
 	const tokenBudget = typeof state.tokenBudget === "number" && state.tokenBudget > 0 ? state.tokenBudget : null;
+	const budget = parseBudgetDraft(budgetDraft);
+	const budgetDirty = !budget.invalid && budget.tokens !== tokenBudget;
 
-	const saveObjective = () => {
-		if (!objectiveDirty) return;
-		void rpc.mutate(client => client.setGoal({ objective: trimmedObjective }));
+	const saveGoal = () => {
+		if (budget.invalid) return;
+		if (!objectiveDirty && !budgetDirty) return;
+		const patch: { objective?: string; tokenBudget: number | null } = { tokenBudget: budget.tokens };
+		if (objectiveDirty) patch.objective = trimmedObjective;
+		void rpc.mutate(client => client.setGoal(patch));
 	};
 
 	const runAction = (action: "pause" | "resume" | "drop") => {
@@ -464,10 +475,20 @@ function GoalEnabledView({ rpc, state }: { rpc: ModeRpc<RpcGoalState>; state: Rp
 					rows={3}
 					value={objectiveDraft}
 				/>
+				<Input
+					disabled={state.status !== "active"}
+					hint={state.status === "active" ? t("modesPanel.goal.budgetHint") : t("modesPanel.goal.budgetPaused")}
+					error={budget.invalid ? t("modesPanel.goal.budgetInvalid") : undefined}
+					inputMode="numeric"
+					label={t("modesPanel.goal.budgetLabel")}
+					onChange={event => setBudgetDraft(event.target.value)}
+					placeholder={t("modesPanel.goal.budgetPlaceholder")}
+					value={budgetDraft}
+				/>
 				<div className="flex justify-end">
 					<Button
-						disabled={!objectiveDirty || rpc.busy || !rpc.ready}
-						onClick={saveObjective}
+						disabled={(!objectiveDirty && !budgetDirty) || budget.invalid || rpc.busy || !rpc.ready}
+						onClick={saveGoal}
 						size="sm"
 						title={!rpc.ready ? t("modesPanel.notConnected") : undefined}
 						variant="secondary"
@@ -622,6 +643,9 @@ function LoopTab({ rpc }: { rpc: ModeRpc<RpcLoopModeState> }) {
 	const toggle = (next: boolean) => {
 		if (!state) return;
 		const args = argsDraft.trim();
+		// The sidecar captures the loop prompt from `args`, so remember them: the
+		// composer resends them with the first message after arming.
+		useSessionStore.setState({ loopArgs: next && args !== "" ? args : null });
 		void rpc.mutate(client => client.setLoopMode(next, args === "" ? undefined : args));
 	};
 

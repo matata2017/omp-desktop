@@ -1287,6 +1287,8 @@ export const en: Record<string, string> = {
 	"modesPanel.goal.budgetLabel": "Token budget (optional)",
 	"modesPanel.goal.budgetPlaceholder": "e.g. 50000",
 	"modesPanel.goal.budgetHint": "Leave empty for an unbudgeted goal.",
+	"modesPanel.goal.budgetInvalid": "Enter a whole number of tokens, or leave it empty.",
+	"modesPanel.goal.budgetPaused": "Resume the goal to change its budget.",
 	"modesPanel.goal.tokensUsed": "Tokens used",
 	"modesPanel.goal.timeUsed": "Time used",
 	"modesPanel.goal.budget": "Budget",

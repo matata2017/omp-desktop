@@ -9,6 +9,7 @@ import type {
 	RpcSessionState,
 	RpcVibeModeState,
 } from "../../shared/rpc-types";
+import { ensureRpcGoalContinuation } from "../lib/goal-continuation";
 import { goalExists } from "../lib/goal-state";
 import { type MessagesStore, mergeFetchedTranscript, useMessagesStore } from "../stores/messages";
 import { useModelStore } from "../stores/model";
@@ -303,6 +304,10 @@ export async function hydrateLegacySession(fallbackName?: string, initialState?:
 		}
 		if (!wire.isStreaming) useMessagesStore.getState().clearStreaming();
 		void activeTabCommand({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL });
+		// The ask tool only becomes a modal after this opt-in; without it the
+		// sidecar renders the questions inline in the transcript. Idempotent.
+		void activeTabCommand({ type: "set_ask_dialog", enabled: true });
+		void ensureRpcGoalContinuation(activeTabCommand);
 	}
 	if (focusUnchanged && messagesResult.status === "fulfilled" && messagesResult.value.success) {
 		const fetched = (messagesResult.value.data as { messages?: AgentMessage[] } | undefined)?.messages ?? [];
@@ -449,6 +454,8 @@ export async function hydrateTabSession(tabId: string, fallbackName?: string): P
 		// background, whose frames would otherwise stay silent on return.
 		// Idempotent server-side.
 		void runtime.command({ type: "set_subagent_subscription", level: SUBAGENT_SUBSCRIPTION_LEVEL });
+		void runtime.command({ type: "set_ask_dialog", enabled: true });
+		void ensureRpcGoalContinuation(runtime.command);
 	}
 
 	if (messagesResult.status === "fulfilled" && messagesResult.value.success) {

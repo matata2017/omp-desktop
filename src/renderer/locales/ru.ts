@@ -1250,6 +1250,8 @@ export const ru: Record<string, string> = {
 	"modesPanel.goal.budgetLabel": "Лимит токенов (необязательно)",
 	"modesPanel.goal.budgetPlaceholder": "например, 50000",
 	"modesPanel.goal.budgetHint": "Пустое поле оставляет цель без лимита.",
+	"modesPanel.goal.budgetInvalid": "Введите целое число токенов или оставьте поле пустым.",
+	"modesPanel.goal.budgetPaused": "Возобновите цель, чтобы изменить лимит.",
 	"modesPanel.goal.tokensUsed": "Использовано токенов",
 	"modesPanel.goal.timeUsed": "Затрачено времени",
 	"modesPanel.goal.budget": "Лимит",

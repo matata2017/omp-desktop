@@ -102,9 +102,13 @@ export function planComposerSubmit(input: {
 	isStreaming: boolean;
 	mode: ComposerSendMode;
 	commands: AvailableCommand[];
-	rpc?: Pick<TabRpc, "compact" | "followUp" | "prompt" | "steer">;
+	/** Armed loop state: the sidecar only captures the loop prompt from
+	 * `set_loop_mode`'s args, never from the next message, so the first message
+	 * after arming has to travel as args instead of as a prompt. */
+	loop?: { args?: string | null; prompt?: string } | null;
+	rpc?: Pick<TabRpc, "compact" | "followUp" | "prompt" | "setLoopMode" | "steer">;
 }): ComposerSubmit {
-	const { message, images, isStreaming, mode, commands, rpc = window.omp.rpc } = input;
+	const { message, images, isStreaming, mode, commands, loop, rpc = window.omp.rpc } = input;
 	const isSlashCommand = message.startsWith("/");
 	if (isSlashCommand && isStreaming) {
 		const commandName = /^\/([a-z-]+)/i.exec(message)?.[1]?.toLowerCase();
@@ -132,6 +136,17 @@ export function planComposerSubmit(input: {
 			kind: "send",
 			request: () => (mode === "followUp" ? rpc.followUp(message, images) : rpc.steer(message, images)),
 		};
+	}
+	// `set_loop_mode` args are parsed as `[count|duration] [--while|--until cmd] [prompt]`:
+	// a bare leading number or flag would be eaten as the limit (probe: "3 files to fix" →
+	// iterations 3, prompt "files to fix"). Only seed the loop when the message cannot be
+	// misread, and never through this path with images — it has no image channel.
+	if (!isSlashCommand && loop && !loop.prompt && images.length === 0) {
+		const args = loop.args?.trim() ?? "";
+		if (args || !/^(\d|--)/.test(message)) {
+			const joined = args ? `${args} ${message}` : message;
+			return { kind: "send", request: () => rpc.setLoopMode(true, joined) };
+		}
 	}
 	return { kind: "send", request: () => rpc.prompt(message, images) };
 }

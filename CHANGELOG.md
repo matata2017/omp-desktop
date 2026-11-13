@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- The agent's `ask` requests now open as a modal dialog by default: the renderer sends `set_ask_dialog { enabled: true }` when a session hydrates and when a tab becomes ready, and the sidecar treats the call as idempotent.
+- The Goal tab edits the token budget: a number is saved with `set_goal`, an empty field clears it, and the field stays read-only unless the goal is active — the sidecar answers "No active goal." to budget changes on paused or finished goals.
+- Goal mode keeps running between turns in Romp: the renderer adds `rpc` to `goal.continuationModes` when a tab becomes ready, because the sidecar's default list holds only `interactive` — a host driving it over rpc-ui otherwise gets one turn and then silence (measured on 18.19.0: 1 turn in 18 s without `rpc`, 4 turns with it). Whatever modes the setting already lists are kept.
+
+### Fixed
+
+- Loop mode no longer sits on "未捕获提示词" (no prompt captured). The sidecar takes the loop prompt from `set_loop_mode`'s `args`, never from the next message: `{enabled:true}` alone stays `waiting`, while `{enabled:true,args:"2 <prompt>"}` starts `running`, counts `limit.remaining` down and switches itself off at zero. The first message sent while a loop is armed and still uncaptured now travels as args; two cases fall back to a normal prompt instead, leaving the loop waiting rather than mis-armed — messages starting with a digit or `--` (the sidecar parses those as the iteration count or a `--while`/`--until` gate) and messages with images (this path has no image channel).
+
 ## [0.9.35] - 2026-11-03
 
 ### Added

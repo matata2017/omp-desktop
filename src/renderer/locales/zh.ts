@@ -1257,6 +1257,8 @@ export const zh: Record<string, string> = {
 	"modesPanel.goal.budgetLabel": "Token 预算（可选）",
 	"modesPanel.goal.budgetPlaceholder": "例如 50000",
 	"modesPanel.goal.budgetHint": "留空表示不设预算。",
+	"modesPanel.goal.budgetInvalid": "请填整数 token 数，或留空。",
+	"modesPanel.goal.budgetPaused": "恢复目标后才能调整预算。",
 	"modesPanel.goal.tokensUsed": "已用 token",
 	"modesPanel.goal.timeUsed": "已用时间",
 	"modesPanel.goal.budget": "预算",

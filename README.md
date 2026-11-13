@@ -26,7 +26,7 @@ resources/    内置 omp sidecar（omp.exe，被 .gitignore 排除）
 
 ## 构建与运行
 
-前置条件：Windows 10/11、Rust 1.90（edition 2024）、[bun](https://bun.sh)、Visual Studio Build Tools（含 VC.Tools 与 Windows 10 SDK）、WebView2 Runtime（Windows 11 自带）。`resources/omp.exe` 需要单独放入，它不入库；重建配方（上游 v0.9.35 portable release 抽出 `app-64.7z`）见 [`docs/handoff.md`](docs/handoff.md) 第 8 节，或直接设 `OMP_SIDECAR` 指向已有的 omp CLI。
+前置条件：Windows 10/11、Rust 1.90（edition 2024）、[bun](https://bun.sh)、Visual Studio Build Tools（含 VC.Tools 与 Windows 10 SDK）、WebView2 Runtime（Windows 11 自带）。`resources/omp.exe` 需要单独放入，它不入库；一条命令升级到上游最新的 fork 版 sidecar：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-sidecar.ps1`（默认解析最新 GUI tag、下载、解包、过探针门、覆盖三处副本；当前为 `omp/18.19.0`）。手工配方、探针门与 `omp update` 为何不可用见 [`docs/handoff.md`](docs/handoff.md) 第 5 节「sidecar 二进制重建」，或直接设 `OMP_SIDECAR` 指向已有的 omp CLI。
 
 ```bash
 bun install

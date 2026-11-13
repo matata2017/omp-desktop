@@ -326,6 +326,12 @@ export function useComposerSubmit({
 				images: payload,
 				isStreaming,
 				mode,
+				loop: (originSession?.getState() ?? useSessionStore.getState()).loopMode?.enabled
+					? {
+							args: (originSession?.getState() ?? useSessionStore.getState()).loopArgs,
+							prompt: (originSession?.getState() ?? useSessionStore.getState()).loopMode?.prompt,
+						}
+					: null,
 				commands,
 				rpc,
 			});

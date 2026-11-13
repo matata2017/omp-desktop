@@ -15,6 +15,7 @@ dist/
 
 # omp sidecar + generated app data
 /resources/*.exe
+/resources/*.exe.prev
 /.trellis/.runtime/
 # Planning-phase probes (scratch artifacts, not source)
 /.probe/

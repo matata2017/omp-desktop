@@ -1,6 +1,6 @@
 # Agent runtime (`omp.exe`)
 
-Last verified: 2026-11-09. Cost/cap rows: 22:00 build; startup and open/close: 00:51 build.
+Last verified: 2026-11-12 (sidecar swap to `omp/18.19.0`). Cost/cap rows: 22:00 build; startup and open/close: 00:51 build — **all measured on `omp/18.15.0`**, before the 2026-11-12 swaps to 18.17.0 and 18.19.0.
 
 ## 1. What it is
 
@@ -8,16 +8,19 @@ Last verified: 2026-11-09. Cost/cap rows: 22:00 build; startup and open/close: 0
 
 | Copy | Size | SHA256 (first 16) |
 |---|---|---|
-| `resources/omp.exe` | 255,728,128 B (243.9 MiB) | `C968104F2A512E43` |
-| `target/release/omp.exe` (bundle copy) | same | `C968104F2A512E43` |
-| `%LOCALAPPDATA%\Romp\omp.exe` (installed) | same | `C968104F2A512E43` |
+| `resources/omp.exe` | 263,930,368 B (251.7 MiB) | `4D8BC97105195358` |
+| `target/release/omp.exe` (bundle copy) | same | `4D8BC97105195358` |
+| `%LOCALAPPDATA%\Romp\omp.exe` (installed) | same | `4D8BC97105195358` |
 | `C:\Program Files\omp\omp.exe` (host CLI; runs the assistant, not Romp) | 202,690,560 B | `2A388D8F5DE07870` |
 
-- `--version` of the bundled copy: `omp/18.15.0`.
-- `resources/omp.exe` is gitignored; rebuild = extract `$PLUGINSDIR/app-64.7z` from the upstream v0.9.35 portable (see `docs/handoff.md` §8).
+- `--version` of the bundled copy: `omp/18.19.0` (full sha256 `4D8BC9710519535817F3D824E774FDABD729B687A3E814C7648EBF048AE20FD1`).
+- `resources/omp.exe` is gitignored; the one-command upgrade is `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-sidecar.ps1` — it resolves the latest GUI tag, downloads the installer, extracts `$PLUGINSDIR/app-64.7z`, gates the candidate and copies `resources/omp.exe` over the three live copies (manual recipe: `docs/handoff.md`, §5 「sidecar 二进制重建」). Provenance of the 18.19.0 copy: `omp-0.9.42-portable.exe` (197,951,830 B) from nornzach/oh-my-pi-gui v0.9.42. Rollbacks on disk: the 18.17.0 copy (261,046,784 B, `0510906A0777DA0E`) at the three `*.prev` siblings, and 18.15.0 (255,728,128 B, `C968104F2A512E43`) at `.resources/app/resources/omp.exe`.
+- Version deltas checked before the swap: ready frame unchanged; `get_settings_schema` / `terminal_list` / `get_available_commands` all succeed; the 109-command list is byte-identical to 18.17.0; settings entries 605 → 615 with **13 added / 3 removed / 1 default change**, not purely additive — added `browser.webkit`, `browser.webkitPath`, `claudeResets.autoRedeem{5h,Fable,Weekly}`, `codexResets.autoRedeem{5h,Weekly}`, `gc.strip`, `gc.stripAfterDays`, `launch.persist`, `systemPromptTemplates`, `task.autoParallel`, `task.steps`; removed `claudeResets.autoRedeem`, `codexResets.autoRedeem`, `task.file`; `spotlight.experiment.holdout` default 0.15 → 0.05. Our settings UI is schema-driven (`settingTranslation(...)?.label ?? entry.label ?? entry.path`), so the removed paths simply stop rendering and their `schema-zh.ts` / `schema-ru.ts` strings go unused.
+- Todo statuses: `set_todos` on 18.19.0 answers `success:true` **and echoes `todoPhases` back with `"status":"blocked"`** (probe `todos-persist.ps1`, isolated root), so upstream 18.19 dropping `blocked` from its TUI did not touch the RPC surface. Residual, unexercised: hydrating a *saved* session that still contains `blocked` (the probe never opened an agent turn, so nothing reached `agent.db`; `grep -a PROBE-BLOCKED` over the temp root found no file).
+- The first, wrongly unisolated 18.19.0 smoke wrote to the live `~/.omp/agent` store. Checked afterwards: `schema_version.version = 6` and 23 tables, identical to the pre-swap copy at `.perf/rpc-caps/agent.db` and to a post-run copy → **no schema migration**, WAL/session bookkeeping writes only.
 - `crates/omp-agent` has no `[[bin]]` (only `examples/probe.rs` has `main`): it is the **host-side** pool/RPC/argv library, not the agent.
 
-## 2. Cost model (Private bytes, installed build)
+## 2. Cost model (Private bytes, installed build, `omp/18.15.0`)
 
 Measured with `scripts/perf/measure.ps1` on the installed exe, isolated `OMP_DATA_DIR`:
 

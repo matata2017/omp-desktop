@@ -78,6 +78,10 @@ export interface SessionStore {
 	/** Live loop-mode state: loop_mode_update frames, hydrated via get_loop_mode
 	 * (not on the get_state wire). null = not yet fetched; chips treat as off. */
 	loopMode: RpcLoopModeState | null;
+	/** Args the Modes window armed the loop with (count/duration/--while/--until).
+	 * The sidecar captures the loop prompt from set_loop_mode's args, not from
+	 * the next message, so the composer must resend them with the first prompt. */
+	loopArgs: string | null;
 	/** Vibe mode emits no event — hydrated via get_vibe_mode and mirrored when
 	 * the Modes window toggles it. */
 	vibeModeEnabled: boolean;
@@ -120,6 +124,7 @@ const initialState = {
 	goal: null,
 	goalState: null,
 	loopMode: null,
+	loopArgs: null,
 	vibeModeEnabled: false,
 	configWarnings: [] as string[],
 	configWarningsDismissed: null as string | null,

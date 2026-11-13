@@ -72,10 +72,15 @@ app:quit                                          → 应用退出、D:\rust-omp
   已绑定会话的 tab 点击另一会话时新开独立 tab/sidecar，避免 resident sidecar 切换中止在途回合，让两个会话可并行运行。跨 workspace、kind 不匹配、流式/草稿/审批/队列未清时也仍新开 tab。
   配套：Rust 补发 `tab:status` 快照（上游 main 本来就发，缺它时 renderer 的 tab store 永远看不到 `ready`）。
 - 终端帧路由：`terminal_opened/output/exit/closed` → `terminal:frame`，payload 用渲染层要求的 `{tabId, frame}`。
+- 循环提示词的捕获点在 **`set_loop_mode` 的 `args`**，不是下一条消息：18.19.0 隔离探针里 `{enabled:true}` 只把状态置为 `waiting` 且永不注入 prompt，`{enabled:true,args:"2 <prompt>"}` 则立刻 `running`，按 `limit.remaining` 递减，归零后 `{enabled:false,state:"off"}`（60 s 内 3 个 turn）。args 的语法是 `[count|duration] [--while|--until <cmd>] [prompt]`，实测：`"3 files to fix"` → `iterations 3` + prompt `files to fix`；`"\"3 files to fix\""` → 引号被原样保留进 prompt；`"2"` → `waiting` 无 prompt；`"10m keep going"` → `duration 10m` + prompt `keep going`；`"--until 'echo hi' reply pong"` → prompt `reply pong`。所以渲染层只在「已开循环、prompt 未捕获、无图片、首字符不是数字或 `--`（或面板 args 已给出上限）」时把首条消息并入 args 发 `set_loop_mode`（`src/renderer/lib/composer-submit.ts` 的 loop arming 分支），其余情况退回普通 prompt，循环保持 `waiting`，避免把消息当成次数/门禁。
+- Ask 弹窗：`{type:"set_ask_dialog",enabled:true}` 在 active hydrate、后台 hydrate、tab ready 三处发（服务端幂等），`ExtensionDialog.tsx` 的 `case "ask"` 负责渲染。18.19.0 探针回 `success:true,data:{enabled:true}`。
+- **目标模式（goal）自带裁判与预算，实测可用**（18.19.0，隔离根）：`set_goal {objective, tokenBudget:800}` → `status:"active"`，自动跑 2 个 turn 后 `tokensUsed:15528`，状态转 `budget-limited` → `complete`，`state.enabled:false`。预算按整轮结算，所以 800 的预算会先冲到 15.5k 再停；`set_goal {tokenBudget}` 只在目标 **active** 时接受，paused/已完成回 `No active goal.`，面板因此按状态禁用预算输入（`src/renderer/lib/goal-budget.ts` 负责解析与校验）。
+- **目标模式要自动续跑，必须让 `goal.continuationModes` 含 `rpc`**：该设置默认只有 `["interactive"]`（本机 `config.yml` 的 globalValue 是 `["interactive","rpc"]`，所以之前看起来"自带循环"只是这台机器的配置）。同一探针把 config 里的 goal 段剥掉后 18 s 只有 1 个 turn，加回 `rpc` 后 18 s 有 4 个 turn。Romp 因此在 tab ready 时调 `ensureRpcGoalContinuation`（`src/renderer/lib/goal-continuation.ts`）：读 `get_settings`，缺 `rpc` 才写回并入的列表，已含则完全不写。
+- **loop 的 `--while/--until '<cmd>'` 在本版 `--mode rpc-ui` 里是死门**：`--while "echo ran >> D:/…/gate-probe.txt; exit 0"` 跑满 4 个 turn 仍未创建该文件（门命令从未执行），`--until 'exit 0'` 45 s 内跑 9 个 turn 不停；只有 count/duration 上限真正停表（`1 --until 'exit 1'` 与 `1 --while 'exit 0'` 都恰好 2 个 turn 后 `state:"off"`）。要做命令级裁判，只能在宿主侧自己实现，别指望 sidecar 的 gate。
 
-最后一条是 Phase 1 的硬门槛：`get_settings_schema` 与 `terminal_list` 在官方 stock 18.15.0 上返回
-`Unknown command`，全 `success:true` 证明 `resources/omp.exe` 是 **fork 版 sidecar**（243.9 MB，
-从 `omp-0.9.35-portable.exe` 的 NSIS 载荷 `$PLUGINSDIR/app-64.7z` 解出）。
+终端帧路由那条是 Phase 1 的硬门槛：`get_settings_schema` 与 `terminal_list` 在官方 stock sidecar 上返回
+`Unknown command`，全 `success:true` 证明 `resources/omp.exe` 是 **fork 版 sidecar**。当前副本
+`omp/18.19.0`（263,930,368 B / 251.7 MiB，`4D8BC97105195358…`，从 `omp-0.9.42-portable.exe` 的 `$PLUGINSDIR/app-64.7z` 解出）；2026-11-12 之前依次是 `omp/18.17.0`（261,046,784 B，三处 `*.prev` 仍在盘上作回滚）与 `omp/18.15.0`（243.9 MB，从 `omp-0.9.35-portable.exe` 解出）。
 
 ---
 
@@ -272,16 +277,21 @@ node scripts/extract-host-tools.mjs
 
 ### sidecar 二进制重建（`resources/omp.exe`，gitignored）
 
+一条命令：
+
 ```bash
-# 1) 下载 fork 版 portable（194,927,027 B）
-curl -L --proxy http://127.0.0.1:7897 -o .resources/omp-portable.exe \
-  https://ghfast.top/https://github.com/nornzach/oh-my-pi-gui/releases/download/v0.9.35/omp-0.9.35-portable.exe
-# 2) NSIS 解包（7-Zip 在 C:/7zip/7z.exe，winget 装不上时用它）
-C:/7zip/7z.exe x -y -o.resources/portable .resources/omp-portable.exe
-C:/7zip/7z.exe x -y -o.resources/app ".resources/portable/\$PLUGINSDIR/app-64.7z"
-# 3) 拷到项目
-cp .resources/app/resources/omp.exe resources/omp.exe
+# 默认：解析最新 GUI tag → 下 omp-<ver>-portable.exe → 解包 → 过门 → 覆盖三处副本
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-sidecar.ps1
+# 用现成安装包（本机 updater 缓存 / 已下载的 portable），省一次下载
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/update-sidecar.ps1 -Installer "$LOCALAPPDATA\@oh-my-piomp-gui-updater\installer.exe"
+# 只解包+过门不落盘：加 -SkipSwap；只解包：再加 -SkipGate
 ```
+
+脚本做的事：`git ls-remote --tags git@github.com:nornzach/oh-my-pi-gui.git` 取最新 `v0.9.*`（HTTPS 直连与 api.github.com 在本机都不可用，SSH 可用）→ `curl -C - --ssl-no-revoke` 走 `127.0.0.1:7897` 代理、写 `<asset>.part`，只有 curl 退出 0 且 `7z t` 通过才 `Move-Item` 成正式文件（已存在但 `7z t` 失败的直接报错，不覆写在用的半截下载；不加 `--ssl-no-revoke` schannel 报 `0x80092013`）→ 7-Zip 解 `$PLUGINSDIR/app-64.7z` → 取 **`resources/omp.exe`**（同一包根的 `omp.exe` 是 Electron GUI，别拿错）→ 过下面的门 → 覆盖 `resources/omp.exe`、`target/release/omp.exe`、`%LOCALAPPDATA%\Romp\omp.exe`（同 hash 跳过，旧文件留 `.prev`）。实测：用 v0.9.38 缓存包跑出 `omp/18.17.0`、`RESULT=OK`，三处已同 hash 时零写入；半截包（`.resources/dl/omp-0.9.42-portable.exe` 只有 63.9 MB 时）会被 `7z t` 拦下并报错。
+
+升级门（脚本内部也会调）：`powershell -NoProfile -ExecutionPolicy Bypass -File scripts/perf/sidecar-check.ps1 -Exe <新 omp.exe>`。它用临时 `PI_CODING_AGENT_DIR` 起 `--mode rpc-ui`，断言 ready 帧，发 `get_settings_schema` / `terminal_list` / `get_available_commands` / `set_todos`，四条的 `success` 全真且 `set_todos` 回显里那条任务的 `status` 仍是 `blocked` 才算通过——`set_todos` 只回 `success:true` 不足以说明状态没被归一化（18.17.0 与 18.19.0 实测都回显 `todo_echo=blocked`）。`get_settings_schema` + `terminal_list` 是唯一的 fork 判据，命令清单落到 `.perf/sidecar-check/<version>/command-names.txt`（两版直接 `diff` 看增删）。MCP 与 fork 判定无关，默认不测：加 `-CheckMcp`（报告各 server 状态，`tinyfish` 是远端 http，可能常年 `connecting`）或 `-RequireMcp krouter`（把某个 server 变成门禁）才纳入。落盘后用安装版冒烟（`docs/perf.md` 的 CDP 用法）确认 `tabs.list()` 出 `status:"ready"`。
+
+**`omp update` 不能用于 Romp 的 sidecar（实证，2026-11-12）**：它自带的更新器认得 `%LOCALAPPDATA%\omp-studio\omp\manager.json`（`{"manager":"omp-studio"}`），直接拒绝：`... is installed and kept up to date by omp-studio; update it from omp-studio`（换个目录用同一二进制也一样，判据不是路径）。把该 marker 暂时挪开后同一二进制报 `New version available: 18.19.0`，并以 41.6 MB 增量补丁（213 s）装进 `%LOCALAPPDATA%\omp-studio\omp\bin\omp.exe`——装出来是 **stock** 18.19.0：ready 帧仍同（只多 `supportsBashExcludeFromContext:true`），但 `get_settings_schema`、`terminal_list`、`get_mcp_servers` 全 `Unknown command`，`get_available_commands` 只有 **67** 条（fork 18.17.0 是 109）。自更新通道发的是上游 stock 版，拿它当 Romp sidecar 会打断设置/终端/MCP 三个面板；fork 版只随 GUI 安装包发布，所以只有上面那条解包路径。
 
 ---
 

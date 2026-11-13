@@ -134,7 +134,7 @@
 | 内置 sidecar 解析：`OMP_BUNDLED_OMP` → `resources/omp(.exe)`，绝不回退系统 omp | must | rust | done：`crates/omp-agent/src/argv.rs::resolve_sidecar` 顺序为 env → `exe_dir/resources/omp.exe` → `exe_dir/omp.exe` → dev 仓库 `resources/omp.exe`，**没有** PATH/系统 omp 回退。NSIS 包内 `omp.exe` 与 `resources/omp.exe` 逐字节相同，正好走 `exe_dir/omp.exe` 这一支。环境变量名与上游不同（`OMP_SIDECAR`），见已知偏差 |
 | sidecar 构建：`compileCodingAgent` 单文件、natives 目标架构暂存、stats/collab 资源生成 | must | rust | todo |
 | 图标与平台元数据：icns/ico/png 集合、NSIS 允许改安装目录、Linux `executableName` | should | rust | wip：`src-tauri/icons/` 有 32/128/128@2x/256 的 png 与 `icon.ico`（脚本生成），`bundle.icon` 已指向它们；NSIS 允许改安装目录与 Linux `executableName` 未验（无 Linux 构建） |
-| 安装包目标与 extraResources：dmg/zip、NSIS/portable、AppImage/deb + `omp://` 协议声明 | should | rust | wip：**NSIS x64 安装包已产出** `target/release/bundle/nsis/Romp_0.1.0_x64-setup.exe`（110.6 MiB）；`7z x` 抽出 `omp.exe` 243.9 MB，`cmp` 与 `resources/omp.exe` **逐字节相同**，`romp-desktop.exe` 18.8 MB 同目录 → `resolve_sidecar` 的 `exe_dir/omp.exe` 分支能命中。dmg/AppImage/deb 与 `omp://` 协议声明未做 |
+| 安装包目标与 extraResources：dmg/zip、NSIS/portable、AppImage/deb + `omp://` 协议声明 | should | rust | wip：**NSIS x64 安装包已产出** `target/release/bundle/nsis/Romp_0.1.0_x64-setup.exe`（110.6 MiB）；该包里 `7z x` 抽出的 `omp.exe` 243.9 MB 与当时的 `resources/omp.exe`（18.15.0）**逐字节相同**，`romp-desktop.exe` 18.8 MB 同目录 → `resolve_sidecar` 的 `exe_dir/omp.exe` 分支能命中。sidecar 已于 2026-11-12 换到 `omp/18.19.0`（263,930,368 B，见 `docs/agent-runtime.md`），安装包**未随之重建**。dmg/AppImage/deb 与 `omp://` 协议声明未做 |
 
 ### panels
 

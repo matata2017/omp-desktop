@@ -28,6 +28,7 @@ import type {
 import type { ExtensionUIRequest, RpcResponse, RpcSessionState } from "../../shared/rpc-types";
 import { hydrateTabSession, notifyBackgroundSettle } from "../hooks/use-rpc-events";
 import { basename } from "../lib/format";
+import { ensureRpcGoalContinuation } from "../lib/goal-continuation";
 import { translate } from "../lib/i18n";
 import { sessionDisplayTitle } from "../lib/session-title";
 import { beginTabRoute, reconcileTabRoute, resetTabRoute, settleTabRoute } from "../lib/tab-routing";
@@ -1035,6 +1036,12 @@ export function useSessionTabs(): void {
 					type: "set_subagent_subscription",
 					level: SUBAGENT_SUBSCRIPTION_LEVEL,
 				});
+				// Without this opt-in the sidecar keeps rendering ask questions
+				// inline in the transcript instead of as a dialog. Idempotent.
+				void ensureTabRuntime(payload.tabId).command({ type: "set_ask_dialog", enabled: true });
+				// Goal mode only auto-continues for the modes in
+				// goal.continuationModes; the sidecar default leaves "rpc" out.
+				void ensureRpcGoalContinuation(ensureTabRuntime(payload.tabId).command);
 			}
 			if (visible) {
 				if (!tab?.pendingSessionPath && previousStatus !== "ready" && previousStatus !== "running") {

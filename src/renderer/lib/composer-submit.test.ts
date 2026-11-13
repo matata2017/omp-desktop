@@ -9,7 +9,7 @@
  */
 
 import { afterEach, describe, expect, it, type Mock, vi } from "vitest";
-import type { AvailableCommand, RpcResponse } from "../../shared/rpc-types";
+import type { AvailableCommand, ImageContent, RpcResponse } from "../../shared/rpc-types";
 import { useSessionStore } from "../stores/session";
 import { useToastStore } from "../stores/toast";
 import { useUiStore } from "../stores/ui";
@@ -35,6 +35,7 @@ interface MockOmp {
 		getTranscript: Mock<() => Promise<RpcResponse>>;
 		getSubagents: Mock<() => Promise<RpcResponse>>;
 		setSubagentSubscription: Mock<(level: string) => Promise<RpcResponse>>;
+		setLoopMode: Mock<(enabled: boolean, args?: string) => Promise<RpcResponse>>;
 	};
 	app: { quit: Mock<() => void> };
 	sessions: { consumePendingOpen: Mock<() => Promise<unknown>> };
@@ -50,6 +51,7 @@ function installMockOmp(): MockOmp {
 			dropSession: vi.fn(async () => success({ cancelled: false })),
 			guidedGoal: vi.fn(async () => success({ started: true })),
 			setAgentsPaused: vi.fn(async enabled => success({ paused: enabled, pausedAt: enabled ? 123 : undefined })),
+			setLoopMode: vi.fn(async enabled => success({ enabled, state: enabled ? "running" : "off" })),
 			tan: vi.fn(async () => success({ jobId: "job-1" })),
 			omfg: vi.fn(async () => success({ state: "saved", savedPath: "/tmp/rule.md" })),
 			collabStart: vi.fn(async () => success({ role: "host", readOnly: false, participants: [] })),
@@ -476,5 +478,68 @@ describe("settleComposerResponse", () => {
 		await settleComposerResponse({ type: "response", command: "prompt", success: false, error: "boom" });
 		await settleComposerResponse(success({}));
 		expect(omp.rpc.getState).not.toHaveBeenCalled();
+	});
+});
+
+describe("loop arming", () => {
+	const base = () => ({ message: "hello", images: [], isStreaming: false, mode: "prompt" as const, commands: [] });
+
+	it("routes the first message through set_loop_mode so the sidecar captures it", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({ ...base(), loop: { args: "2" } });
+		expect(submit.kind).toBe("send");
+		if (submit.kind !== "send") return;
+		await submit.request();
+		expect(omp.rpc.setLoopMode).toHaveBeenCalledWith(true, "2 hello");
+		expect(omp.rpc.prompt).not.toHaveBeenCalled();
+	});
+
+	it("leaves a captured loop alone and prompts normally", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({ ...base(), loop: { args: "2", prompt: "earlier" } });
+		if (submit.kind !== "send") throw new Error(`expected send, got ${submit.kind}`);
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("hello", []);
+		expect(omp.rpc.setLoopMode).not.toHaveBeenCalled();
+	});
+
+	it("keeps slash commands on the prompt path where the sidecar parses them", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({ ...base(), message: "/status", loop: { args: "2" } });
+		if (submit.kind !== "send") throw new Error(`expected send, got ${submit.kind}`);
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("/status", []);
+		expect(omp.rpc.setLoopMode).not.toHaveBeenCalled();
+	});
+});
+
+describe("loop arming guards", () => {
+	const base = () => ({ message: "hello", images: [], isStreaming: false, mode: "prompt" as const, commands: [] });
+
+	it("keeps images on the prompt path instead of silently dropping them", async () => {
+		const omp = installMockOmp();
+		const images: ImageContent[] = [{ type: "image", data: "AAA", mimeType: "image/png" }];
+		const submit = planComposerSubmit({ ...base(), images, loop: { args: "2" } });
+		if (submit.kind !== "send") throw new Error(`expected send, got ${submit.kind}`);
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("hello", images);
+		expect(omp.rpc.setLoopMode).not.toHaveBeenCalled();
+	});
+
+	it("does not let a digit-leading prompt be eaten as the iteration count", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({ ...base(), message: "3 files to fix", loop: { args: "" } });
+		if (submit.kind !== "send") throw new Error(`expected send, got ${submit.kind}`);
+		await submit.request();
+		expect(omp.rpc.prompt).toHaveBeenCalledWith("3 files to fix", []);
+		expect(omp.rpc.setLoopMode).not.toHaveBeenCalled();
+	});
+
+	it("keeps the panel limit first when args carry one", async () => {
+		const omp = installMockOmp();
+		const submit = planComposerSubmit({ ...base(), message: "3 files to fix", loop: { args: "2" } });
+		if (submit.kind !== "send") throw new Error(`expected send, got ${submit.kind}`);
+		await submit.request();
+		expect(omp.rpc.setLoopMode).toHaveBeenCalledWith(true, "2 3 files to fix");
 	});
 });

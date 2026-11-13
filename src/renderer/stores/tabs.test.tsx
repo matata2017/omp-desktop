@@ -1274,6 +1274,15 @@ describe("useSessionTabs hook", () => {
 				{ type: "set_subagent_subscription", level: "progress" },
 				undefined,
 			);
+			// Ask questions only render as a dialog after this per-tab opt-in.
+			expect(commandForTab).toHaveBeenCalledWith("t1", { type: "set_ask_dialog", enabled: true }, undefined);
+			// Goal mode auto-continues only for modes listed in this setting, and
+			// the sidecar default leaves "rpc" out.
+			expect(commandForTab).toHaveBeenCalledWith(
+				"t1",
+				{ type: "get_settings", paths: ["goal.continuationModes"] },
+				undefined,
+			);
 			expect(omp.rpc.setSubagentSubscription).not.toHaveBeenCalled();
 		} finally {
 			delete (omp.rpc as { commandForTab?: unknown }).commandForTab;
